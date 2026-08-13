@@ -1,0 +1,8 @@
+{
+  "appId": "com.laurent.iptvlecteur",
+  "appName": "Lecteur IPTV",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  }
+}

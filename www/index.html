@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c1420" />
+  <title>Lecteur IPTV</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="img/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img class="brand-logo" src="img/icon-192.png" alt="" />
+      <div>
+        <h1>Lecteur IPTV <span id="verChip" class="ver-chip"></span></h1>
+        <p class="sub" id="activePlaylistLabel">Aucune playlist</p>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="accueil">🏠 Accueil</button>
+    <button class="tab" data-tab="direct">📺 En direct</button>
+    <button class="tab" data-tab="films">🎬 Films</button>
+    <button class="tab" data-tab="series">🎞️ Séries</button>
+    <button class="tab" data-tab="favoris">⭐ Favoris</button>
+    <button class="tab" data-tab="playlists">🗂️ Playlists</button>
+    <button class="tab" data-tab="infos">ℹ️ Infos</button>
+  </nav>
+
+  <main>
+    <!-- ================= ACCUEIL ================= -->
+    <section class="panel active" id="tab-accueil">
+      <div id="accueil"></div>
+    </section>
+
+    <!-- ================= EN DIRECT ================= -->
+    <section class="panel" id="tab-direct">
+      <div class="card toolbar">
+        <input type="search" id="rechDirect" placeholder="Rechercher une chaîne…" />
+        <div id="chipsDirect" class="chips"></div>
+      </div>
+      <div id="listeDirect" class="grid-cartes"></div>
+      <div class="row"><button id="plusDirect" class="ghost" style="display:none">Charger plus</button></div>
+    </section>
+
+    <!-- ================= FILMS ================= -->
+    <section class="panel" id="tab-films">
+      <div class="card toolbar">
+        <input type="search" id="rechFilms" placeholder="Rechercher un film…" />
+        <div id="chipsFilms" class="chips"></div>
+      </div>
+      <div id="listeFilms" class="grid-cartes"></div>
+      <div class="row"><button id="plusFilms" class="ghost" style="display:none">Charger plus</button></div>
+    </section>
+
+    <!-- ================= SÉRIES ================= -->
+    <section class="panel" id="tab-series">
+      <div id="seriesRacine">
+        <div class="card toolbar">
+          <input type="search" id="rechSeries" placeholder="Rechercher une série…" />
+          <div id="chipsSeries" class="chips"></div>
+        </div>
+        <div id="listeSeries" class="grid-cartes"></div>
+        <div class="row"><button id="plusSeries" class="ghost" style="display:none">Charger plus</button></div>
+      </div>
+      <div id="serieDetail" style="display:none"></div>
+    </section>
+
+    <!-- ================= FAVORIS ================= -->
+    <section class="panel" id="tab-favoris">
+      <div id="listeFavoris" class="grid-cartes"></div>
+    </section>
+
+    <!-- ================= PLAYLISTS ================= -->
+    <section class="panel" id="tab-playlists">
+      <div class="card">
+        <h2>Mes playlists</h2>
+        <div id="playlists"></div>
+      </div>
+      <div class="card">
+        <h2>Ajouter une playlist</h2>
+        <div class="grid2">
+          <label>Nom
+            <input type="text" id="pl_nom" placeholder="Mon fournisseur IPTV" />
+          </label>
+          <label>Type de source
+            <select id="pl_type">
+              <option value="xtream">Xtream Codes (serveur + identifiants)</option>
+              <option value="m3u">Playlist M3U / M3U8</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="formXtream" class="grid2" style="margin-top:10px">
+          <label>Serveur (URL)
+            <input type="text" id="pl_serveur" placeholder="http://serveur.exemple.com:8080" />
+          </label>
+          <label>Utilisateur
+            <input type="text" id="pl_user" autocomplete="off" />
+          </label>
+          <label>Mot de passe
+            <input type="text" id="pl_pass" autocomplete="off" />
+          </label>
+        </div>
+
+        <div id="formM3u" class="grid2" style="margin-top:10px; display:none">
+          <label>URL de la playlist
+            <input type="text" id="pl_m3uUrl" placeholder="https://…/playlist.m3u8" />
+          </label>
+          <label>Ou importer un fichier
+            <input type="file" id="pl_m3uFile" accept=".m3u,.m3u8,.txt" />
+          </label>
+          <label>URL EPG (XMLTV, optionnel)
+            <input type="text" id="pl_epgUrl" placeholder="https://…/epg.xml" />
+          </label>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <button id="btnTester" class="ghost">🔌 Tester la connexion</button>
+          <button id="btnAjouterPlaylist" class="primary">➕ Ajouter</button>
+        </div>
+        <div id="testResult" class="hint"></div>
+      </div>
+    </section>
+
+    <!-- ================= INFOS ================= -->
+    <section class="panel" id="tab-infos">
+      <div class="card warn">
+        <h2>⚠️ Ce que cette app fait — et ne fait pas</h2>
+        <p>C'est un <strong>lecteur</strong> : il affiche et joue les flux d'une playlist M3U ou d'un compte Xtream Codes que <em>toi</em> tu fournis. L'app ne fournit, ne vend ni n'héberge aucune chaîne, film ou série.</p>
+        <p class="hint">Limites connues : les flux <code>.ts</code> bruts (mpeg-ts en direct, hors HLS) ne sont pas lisibles par le navigateur — préfère la variante <code>.m3u8</code> quand ton fournisseur la propose. L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Certains serveurs bloquent les requêtes venant d'un navigateur (CORS) : dans ce cas la playlist ne se charge pas depuis l'app.</p>
+      </div>
+      <div class="card">
+        <h2>Confidentialité</h2>
+        <p class="hint">Tes playlists, identifiants et favoris restent uniquement sur cet appareil (stockage local). Rien n'est envoyé ailleurs qu'au serveur IPTV que tu as toi-même renseigné.</p>
+      </div>
+      <div class="card">
+        <h2>À propos</h2>
+        <p class="hint">Lecteur IPTV — version <span id="verText"></span>. Lecture HLS assurée par <a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a> (licence Apache-2.0).</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    window.APP_VERSION = '1.0';
+    window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
+  </script>
+  <script src="vendor/hls.min.js"></script>
+  <script src="store.js"></script>
+  <script src="m3u.js"></script>
+  <script src="xtream.js"></script>
+  <script src="epg.js"></script>
+  <script src="player.js"></script>
+  <script src="app.js"></script>
+  <script src="update-check.js"></script>
+</body>
+</html>
