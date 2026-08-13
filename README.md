@@ -20,6 +20,21 @@ qu'elle affiche vient de la source que tu as configurée.
 | 🗂️ **Playlists** | Ajoute, teste et supprime des sources M3U ou Xtream Codes ; plusieurs playlists peuvent être enregistrées et basculées à la volée. |
 | ℹ️ **Infos** | Limites connues et confidentialité. |
 
+## Diffusion vers une TV
+
+Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
+
+- **Chromecast** : sur l'APK Android (lecteur natif, bouton *MediaRouteButton*
+  géré par Media3 `CastPlayer` + Google Play Services) et dans le lecteur
+  web (bouton `<google-cast-launcher>` du Cast Sender SDK de Google, chargé
+  à la demande) — fonctionne dans n'importe quel navigateur Chrome/Chromium.
+- **AirPlay** : dans le lecteur web sur Safari (iPhone/Mac) — bouton dédié
+  qui ouvre le sélecteur AirPlay natif (`webkitShowPlaybackTargetPicker`).
+  Comme l'app n'a pas de version iOS installable, c'est la seule façon
+  d'utiliser le lecteur sur iPhone (la PWA fonctionne dans Safari).
+- Aucun compte ni inscription requis (récepteur Cast « par défaut » de
+  Google, pas d'application Cast dédiée à enregistrer).
+
 ## Sources prises en charge
 
 - **Xtream Codes** : serveur + utilisateur + mot de passe. L'app interroge
@@ -114,8 +129,9 @@ www/
 
 ci/patch_native_player.py  injecte (à chaque build) dans android/ :
   NativePlayerPlugin.java     plugin Capacitor, ouvre l'écran natif
-  NativePlayerActivity.java   lecteur plein écran (Media3 ExoPlayer + FFmpeg)
-  activity_native_player.xml  mise en page (PlayerView + titre + fermer)
+  NativePlayerActivity.java   lecteur plein écran (Media3 ExoPlayer + FFmpeg + Cast)
+  CastOptionsProvider.java    config. Google Cast (récepteur par défaut)
+  activity_native_player.xml  mise en page (PlayerView + titre + cast + fermer)
 
 native/decoder-ffmpeg/  module Gradle vendorisé (voir NOTICE.md) :
   décodeur audio FFmpeg pour AC3/E-AC3/DTS/TrueHD, relié au projet

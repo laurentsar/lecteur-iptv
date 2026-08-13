@@ -1,7 +1,8 @@
 /* player.js — overlay de lecture vidéo : hls.js pour les flux .m3u8,
  * mpegts.js pour les flux .ts bruts (mpeg-ts en direct, très courants chez
  * les fournisseurs IPTV — le navigateur ne les décode pas nativement),
- * lecture native pour le reste (mp4, mkv...). Si la lecture échoue (codec
+ * lecture native pour le reste (mp4, mkv...), HLS natif Safari s'il n'y a
+ * ni hls.js ni mpegts.js utilisable (iPhone). Si la lecture échoue (codec
  * non supporté par le navigateur/WebView — HEVC, audio AC3/DTS, fréquents
  * sur des rips IPTV), deux replis dans l'ordre :
  *   1. le lecteur vidéo natif Android (NativePlayerPlugin, Media3
@@ -9,7 +10,11 @@
  *      là où le navigateur ne l'est pas ;
  *   2. si le plugin natif n'est pas disponible (PWA), retente la même URL
  *      avec l'extension .m3u8 : certains panels Xtream Codes transcodent
- *      alors à la volée en HLS H264/AAC, lisible partout. */
+ *      alors à la volée en HLS H264/AAC, lisible partout.
+ *
+ * Diffusion vers une TV : AirPlay (Safari, natif au <video> — bouton
+ * explicite ajouté ici) et Chromecast (Cast Sender SDK de Google, chargé à
+ * la demande). Les deux sont indépendants du moteur de lecture local. */
 (function (global) {
   'use strict';
 
@@ -19,7 +24,8 @@
   var currentUrl = '', currentTitle = '';
   var originalUrl = '', originalTitle = '';
   var triedNativeFallback = false, triedM3u8Fallback = false;
-  var overlay, video, titleEl, statusEl, closeBtn;
+  var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, castLauncher;
+  var castSdkRequested = false;
 
   function ensureDom() {
     if (overlay) return;
@@ -29,6 +35,8 @@
     overlay.innerHTML =
       '<div class="player-top">' +
       '  <span id="playerTitle" class="player-title"></span>' +
+      '  <google-cast-launcher id="castLauncher" class="player-cast" style="display:none"></google-cast-launcher>' +
+      '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
       '  <button id="playerClose" class="player-close" aria-label="Fermer">✕</button>' +
       '</div>' +
       '<video id="playerVideo" playsinline controls autoplay></video>' +
@@ -38,11 +46,80 @@
     titleEl = overlay.querySelector('#playerTitle');
     statusEl = overlay.querySelector('#playerStatus');
     closeBtn = overlay.querySelector('#playerClose');
+    airplayBtn = overlay.querySelector('#playerAirplay');
+    castLauncher = overlay.querySelector('#castLauncher');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
       attemptFallbackOrFail('Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error));
     });
     video.addEventListener('playing', function () { setStatus(''); });
+    setupAirplay();
+    setupChromecast();
+  }
+
+  // ---------- AirPlay (Safari / iPhone) ----------
+  function setupAirplay() {
+    if (typeof video.webkitShowPlaybackTargetPicker !== 'function') return; // pas Safari/WebKit
+    if (global.WebKitPlaybackTargetAvailabilityEvent) {
+      video.addEventListener('webkitplaybacktargetavailabilitychanged', function (e) {
+        airplayBtn.style.display = e.availability === 'available' ? '' : 'none';
+      });
+    } else {
+      airplayBtn.style.display = ''; // pas d'évènement de disponibilité : afficher quand même
+    }
+    airplayBtn.addEventListener('click', function () { video.webkitShowPlaybackTargetPicker(); });
+  }
+
+  // ---------- Chromecast (Cast Sender SDK Google) ----------
+  function setupChromecast() {
+    if (castSdkRequested) return;
+    castSdkRequested = true;
+    global['__onGCastApiAvailable'] = function (isAvailable) {
+      if (!isAvailable || !global.cast || !global.chrome || !global.chrome.cast) return;
+      cast.framework.CastContext.getInstance().setOptions({
+        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+      });
+      cast.framework.CastContext.getInstance().addEventListener(
+        cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+        function (e) {
+          if (e.sessionState === cast.framework.SessionState.SESSION_STARTED ||
+            e.sessionState === cast.framework.SessionState.SESSION_RESUMED) {
+            castCurrentMedia();
+          }
+        }
+      );
+    };
+    var s = document.createElement('script');
+    s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+    document.head.appendChild(s);
+  }
+
+  function isCasting() {
+    return !!(global.cast && cast.framework && cast.framework.CastContext.getInstance().getCurrentSession());
+  }
+
+  function castMimeType(url) {
+    if (isM3u8(url)) return 'application/x-mpegurl';
+    if (/\.mkv(\?|#|$)/i.test(url)) return 'video/x-matroska';
+    if (isDirectFile(url)) return 'video/mp4';
+    return 'video/mp2t'; // mpeg-ts brut : support variable selon le récepteur Cast
+  }
+
+  function castCurrentMedia() {
+    var session = cast.framework.CastContext.getInstance().getCurrentSession();
+    if (!session || !currentUrl) return;
+    destroyPlayers();
+    video.pause();
+    var mediaInfo = new chrome.cast.media.MediaInfo(currentUrl, castMimeType(currentUrl));
+    mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
+    mediaInfo.metadata.title = currentTitle || '';
+    var request = new chrome.cast.media.LoadRequest(mediaInfo);
+    setStatus('Connexion à ' + (session.getCastDevice() ? session.getCastDevice().friendlyName : 'la TV') + '…');
+    session.loadMedia(request).then(
+      function () { setStatus('▶ Diffusion sur ' + (session.getCastDevice() ? session.getCastDevice().friendlyName : 'la TV')); },
+      function (err) { setStatus('Diffusion impossible : ' + (err && err.description ? err.description : err)); }
+    );
   }
 
   function setStatus(msg) { if (statusEl) statusEl.textContent = msg || ''; }
@@ -116,6 +193,9 @@
     currentUrl = url;
     currentTitle = title || '';
     titleEl.textContent = currentTitle;
+
+    if (isCasting()) { castCurrentMedia(); return; }
+
     destroyPlayers();
     video.removeAttribute('src');
     video.load();
@@ -131,7 +211,14 @@
       hls.loadSource(url);
       hls.attachMedia(video);
       video.play().catch(function () {});
-    } else if (!isDirectFile(url) && global.mpegts && global.mpegts.isSupported()) {
+    } else if (isM3u8(url) && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari (iPhone/Mac) décode le HLS nativement — pas besoin de hls.js,
+      // et ça permet à AirPlay de fonctionner directement sur ce <video>.
+      currentEngine = 'HLS natif (Safari)';
+      setStatus('Connexion au flux (HLS)…');
+      video.src = url;
+      video.play().catch(function () {});
+    } else if (!isDirectFile(url) && !isM3u8(url) && global.mpegts && global.mpegts.isSupported()) {
       currentEngine = 'mpeg-ts';
       setStatus('Connexion au flux (mpeg-ts)…');
       mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: url });

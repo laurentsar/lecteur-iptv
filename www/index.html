@@ -134,6 +134,10 @@
         <p class="hint">Limites connues : les films/séries dont le fichier utilise un codec que le navigateur ne décode pas (HEVC, audio AC3/E-AC3/DTS/TrueHD, courants sur des rips IPTV) peuvent échouer dans le lecteur web — sur l'<strong>APK Android</strong>, l'app retente alors automatiquement avec le lecteur vidéo natif de l'appareil (Media3 ExoPlayer, hors WebView), qui embarque en plus un décodeur audio FFmpeg pour l'AC3/E-AC3/DTS/TrueHD ; sur la <strong>PWA</strong>, il n'y a pas de repli natif possible. Les flux <code>.ts</code> bruts (mpeg-ts en direct) sont lus via une librairie de démuxage dédiée (mpegts.js). L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Sur l'APK Android, le chargement des playlists, de l'API Xtream et des flux HLS (manifeste + segments) passe par le réseau natif pour éviter les blocages CORS des serveurs IPTV ; sur la PWA, un serveur qui bloque les requêtes navigateur (CORS) peut empêcher la playlist ou la vidéo de se charger. Les flux mpeg-ts bruts (en continu, non découpés en segments) et l'EPG restent soumis au CORS du serveur dans les deux cas.</p>
       </div>
       <div class="card">
+        <h2>📺 Diffusion vers une TV</h2>
+        <p class="hint">Le bouton dans le lecteur envoie le flux en cours sur une TV : <strong>Chromecast</strong> (Android, APK et navigateur Chrome) ou <strong>AirPlay</strong> (iPhone/Mac, Safari). Aucun compte requis. Sur iPhone, comme l'app n'existe pas en version installable, c'est le lecteur web (Safari) qui sert de lecteur.</p>
+      </div>
+      <div class="card">
         <h2>Confidentialité</h2>
         <p class="hint">Tes playlists, identifiants et favoris restent uniquement sur cet appareil (stockage local). Rien n'est envoyé ailleurs qu'au serveur IPTV que tu as toi-même renseigné.</p>
       </div>
@@ -147,7 +151,7 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    window.APP_VERSION = '1.8';
+    window.APP_VERSION = '1.9';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

@@ -15,6 +15,11 @@ MediaCodec sur la plupart des appareils) est pris en charge via l'extension
 FFmpeg vendorisée dans native/decoder-ffmpeg/ (voir NOTICE.md dans ce
 dossier) : ce script relie ce module au projet Android (settings.gradle +
 dépendance app) et configure le lecteur pour la préférer quand disponible.
+
+Diffuse aussi vers une TV (Chromecast) via Media3 CastPlayer + Google Play
+Services Cast Framework : un bouton dans l'écran natif bascule la lecture
+entre l'ExoPlayer local et la session Cast, sans code de lecture dupliqué
+(les deux implémentent la même interface Player).
 """
 import os
 import re
@@ -56,22 +61,46 @@ import android.view.View;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.mediarouter.app.MediaRouteButton;
+import androidx.media3.cast.CastPlayer;
+import androidx.media3.cast.SessionAvailabilityListener;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
+import com.google.android.gms.cast.framework.CastButtonFactory;
+import com.google.android.gms.cast.framework.CastContext;
 
 public class NativePlayerActivity extends AppCompatActivity {
-    private ExoPlayer player;
+    private ExoPlayer localPlayer;
+    private CastPlayer castPlayer;
+    private PlayerView playerView;
+    private TextView statusView;
+    private String mediaUrl;
+
+    private final Player.Listener playerListener = new Player.Listener() {
+        @Override
+        public void onPlayerError(PlaybackException error) {
+            statusView.setText("Lecture impossible : " + error.getErrorCodeName());
+            statusView.setVisibility(View.VISIBLE);
+        }
+
+        @Override
+        public void onPlaybackStateChanged(int state) {
+            if (state == Player.STATE_READY) {
+                statusView.setVisibility(View.GONE);
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_native_player);
 
-        String url = getIntent().getStringExtra("url");
+        mediaUrl = getIntent().getStringExtra("url");
         String title = getIntent().getStringExtra("title");
 
         TextView titleView = findViewById(R.id.playerTitle);
@@ -85,36 +114,65 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         });
 
-        final TextView statusView = findViewById(R.id.playerStatusText);
-        PlayerView playerView = findViewById(R.id.playerView);
+        statusView = findViewById(R.id.playerStatusText);
+        playerView = findViewById(R.id.playerView);
+
         // PREFER : utilise l'extension FFmpeg (native/decoder-ffmpeg) pour
         // l'audio AC3/E-AC3/DTS/TrueHD quand le décodeur de l'appareil ne
         // sait pas le faire ; sans effet sur les formats qu'elle ne couvre
         // pas (elle ne déclare le support que pour ces codecs précis).
         DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(this)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER);
-        player = new ExoPlayer.Builder(this, renderersFactory).build();
-        playerView.setPlayer(player);
+        localPlayer = new ExoPlayer.Builder(this, renderersFactory).build();
 
-        player.addListener(new Player.Listener() {
-            @Override
-            public void onPlayerError(PlaybackException error) {
-                statusView.setText("Lecture impossible : " + error.getErrorCodeName());
-                statusView.setVisibility(View.VISIBLE);
-            }
-
-            @Override
-            public void onPlaybackStateChanged(int state) {
-                if (state == Player.STATE_READY) {
-                    statusView.setVisibility(View.GONE);
+        // Diffusion Chromecast : CastPlayer implémente la même interface
+        // Player qu'ExoPlayer, donc PlayerView continue de fonctionner à
+        // l'identique quel que soit celui des deux qui est actif.
+        MediaRouteButton castBtn = findViewById(R.id.playerCastBtn);
+        try {
+            CastContext castContext = CastContext.getSharedInstance(this);
+            CastButtonFactory.setUpMediaRouteButton(getApplicationContext(), castBtn);
+            castPlayer = new CastPlayer(castContext);
+            castPlayer.setSessionAvailabilityListener(new SessionAvailabilityListener() {
+                @Override
+                public void onCastSessionAvailable() {
+                    switchPlayer(castPlayer);
                 }
-            }
-        });
 
-        if (url != null && !url.isEmpty()) {
-            player.setMediaItem(MediaItem.fromUri(url));
-            player.prepare();
-            player.setPlayWhenReady(true);
+                @Override
+                public void onCastSessionUnavailable() {
+                    switchPlayer(localPlayer);
+                }
+            });
+        } catch (Exception e) {
+            // Google Play Services / Cast indisponible (appareil non
+            // compatible, émulateur sans Play Services...) : lecture locale
+            // uniquement, le bouton de diffusion disparaît.
+            castBtn.setVisibility(View.GONE);
+        }
+
+        switchPlayer(castPlayer != null && castPlayer.isCastSessionAvailable() ? castPlayer : localPlayer);
+    }
+
+    private void switchPlayer(Player newPlayer) {
+        Player current = playerView.getPlayer();
+        if (current == newPlayer) {
+            return;
+        }
+        long position = current != null ? current.getCurrentPosition() : 0;
+        boolean playWhenReady = current == null || current.getPlayWhenReady();
+        if (current != null) {
+            current.pause();
+            current.removeListener(playerListener);
+        }
+
+        playerView.setPlayer(newPlayer);
+        newPlayer.addListener(playerListener);
+
+        if (mediaUrl != null && !mediaUrl.isEmpty()) {
+            newPlayer.setMediaItem(MediaItem.fromUri(mediaUrl), position);
+            newPlayer.prepare();
+            newPlayer.setPlayWhenReady(playWhenReady);
         } else {
             statusView.setText("Lecture impossible : URL manquante.");
             statusView.setVisibility(View.VISIBLE);
@@ -123,11 +181,42 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        if (player != null) {
-            player.release();
-            player = null;
+        if (castPlayer != null) {
+            castPlayer.setSessionAvailabilityListener(null);
+            castPlayer.release();
+            castPlayer = null;
+        }
+        if (localPlayer != null) {
+            localPlayer.release();
+            localPlayer = null;
         }
         super.onDestroy();
+    }
+}
+"""
+
+CAST_OPTIONS_PROVIDER_JAVA = """package com.laurent.iptvlecteur;
+
+import android.content.Context;
+import com.google.android.gms.cast.CastMediaControlIntent;
+import com.google.android.gms.cast.framework.CastOptions;
+import com.google.android.gms.cast.framework.OptionsProvider;
+import com.google.android.gms.cast.framework.SessionProvider;
+import java.util.List;
+
+/** Récepteur Cast générique (Default Media Receiver de Google) — pas
+ * besoin d'enregistrer une application Cast dédiée pour un usage perso. */
+public class CastOptionsProvider implements OptionsProvider {
+    @Override
+    public CastOptions getCastOptions(Context context) {
+        return new CastOptions.Builder()
+                .setReceiverApplicationId(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID)
+                .build();
+    }
+
+    @Override
+    public List<SessionProvider> getAdditionalSessionProviders(Context context) {
+        return null;
     }
 }
 """
@@ -162,6 +251,13 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
             android:maxLines="1"
             android:ellipsize="end" />
 
+        <androidx.mediarouter.app.MediaRouteButton
+            android:id="@+id/playerCastBtn"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="4dp"
+            android:contentDescription="Diffuser sur une TV" />
+
         <ImageButton
             android:id="@+id/playerCloseBtn"
             android:layout_width="40dp"
@@ -189,7 +285,9 @@ DEPENDENCY_LINES = (
     '    implementation "androidx.media3:media3-exoplayer:%s"\n'
     '    implementation "androidx.media3:media3-exoplayer-hls:%s"\n'
     '    implementation "androidx.media3:media3-ui:%s"\n'
-) % (MEDIA3_VERSION, MEDIA3_VERSION, MEDIA3_VERSION)
+    '    implementation "androidx.media3:media3-cast:%s"\n'
+    '    implementation "com.google.android.gms:play-services-cast-framework:21.4.0"\n'
+) % (MEDIA3_VERSION, MEDIA3_VERSION, MEDIA3_VERSION, MEDIA3_VERSION)
 
 
 def write_if_changed(path, content):
@@ -242,11 +340,14 @@ def patch_manifest():
         '            android:theme="@style/AppTheme.NoActionBar"\n'
         '            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"\n'
         '            android:exported="false" />\n\n'
+        '        <meta-data\n'
+        '            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"\n'
+        '            android:value="com.laurent.iptvlecteur.CastOptionsProvider" />\n\n'
         '        <provider\n'
     )
     s = re.sub(r"[ \t]*<provider\n", activity, s, count=1)
     open(p, "w").write(s)
-    print("AndroidManifest.xml : NativePlayerActivity déclarée")
+    print("AndroidManifest.xml : NativePlayerActivity + CastOptionsProvider déclarées")
 
 
 def patch_main_activity():
@@ -271,6 +372,7 @@ def patch_main_activity():
 
 write_if_changed(PKG_DIR + "/NativePlayerPlugin.java", PLUGIN_JAVA)
 write_if_changed(PKG_DIR + "/NativePlayerActivity.java", ACTIVITY_JAVA)
+write_if_changed(PKG_DIR + "/CastOptionsProvider.java", CAST_OPTIONS_PROVIDER_JAVA)
 write_if_changed(RES_DIR + "/layout/activity_native_player.xml", LAYOUT_XML)
 patch_settings_gradle()
 patch_build_gradle()
