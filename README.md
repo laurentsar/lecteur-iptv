@@ -15,7 +15,7 @@ qu'elle affiche vient de la source que tu as configurée.
 | 🏠 **Accueil** | Playlist active (et sélecteur si tu en as plusieurs), accès rapide aux 3 catégories, nombre de favoris. |
 | 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). Bouton **Picture-in-Picture** dans le lecteur pour continuer à regarder en mini-fenêtre. |
 | 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. |
-| 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. |
+| 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture. |
 | 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
 | ⭐ **Favoris** | Chaînes, films et séries marqués d'un ☆, tous fournisseurs confondus. |
 | 🗂️ **Playlists** | Ajoute, teste et supprime des sources M3U ou Xtream Codes ; plusieurs playlists peuvent être enregistrées et basculées à la volée. |
@@ -56,11 +56,17 @@ pas de contrôles lecture/pause utiles depuis une mini-fenêtre pour de la VOD).
   `player_api.php` (catégories et flux en direct/VOD/séries) et construit les
   URL de lecture (`.../live/…/….m3u8`, `.../movie/…`, `.../series/…`). Le
   guide EPG est chargé automatiquement via l'export XMLTV standard du panel
-  (`xmltv.php`), sans configuration supplémentaire.
+  (`xmltv.php`), sans configuration supplémentaire. La fiche d'un film
+  (affiche, âge, note, durée, genre, descriptif) vient de `get_vod_info` —
+  disponibilité variable selon la qualité du catalogue renseigné par le
+  fournisseur (le champ « âge » en particulier n'est pas systématiquement
+  fourni par tous les panels).
 - **M3U / M3U8** : par URL ou par fichier importé. Les attributs `tvg-id`,
   `tvg-logo`, `group-title` sont lus s'ils sont présents. Le guide EPG
   (XMLTV) est chargé automatiquement si la playlist déclare `url-tvg` /
   `x-tvg-url`, ou peut être renseigné manuellement à l'ajout de la playlist.
+  Une playlist M3U ne transportant ni âge ni descriptif, la fiche d'un film
+  n'y affiche que l'affiche (logo), le titre et la catégorie.
 
 ## Limites connues
 

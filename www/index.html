@@ -67,12 +67,15 @@
 
     <!-- ================= FILMS ================= -->
     <section class="panel" id="tab-films">
-      <div class="card toolbar">
-        <input type="search" id="rechFilms" placeholder="Rechercher un film…" />
-        <div id="chipsFilms" class="chips"></div>
+      <div id="filmsRacine">
+        <div class="card toolbar">
+          <input type="search" id="rechFilms" placeholder="Rechercher un film…" />
+          <div id="chipsFilms" class="chips"></div>
+        </div>
+        <div id="listeFilms" class="grid-cartes"></div>
+        <div class="row"><button id="plusFilms" class="ghost" style="display:none">Charger plus</button></div>
       </div>
-      <div id="listeFilms" class="grid-cartes"></div>
-      <div class="row"><button id="plusFilms" class="ghost" style="display:none">Charger plus</button></div>
+      <div id="filmDetail" style="display:none"></div>
     </section>
 
     <!-- ================= SÉRIES ================= -->
@@ -165,6 +168,10 @@
         <p class="hint">Pour le <strong>direct</strong> uniquement, un bouton ⧉ réduit la chaîne en mini-fenêtre pour continuer à regarder en utilisant le reste de l'app ou une autre appli. Sur l'APK Android, si le lecteur natif de secours est utilisé (codec non décodable par le navigateur), appuyer sur le bouton Accueil réduit aussi automatiquement en PiP.</p>
       </div>
       <div class="card">
+        <h2>🎬 Fiches films</h2>
+        <p class="hint">Toucher un film ouvre sa fiche (affiche, âge, note, durée, genre, descriptif) avant de lancer la lecture. Ces informations viennent du catalogue du fournisseur (comptes Xtream Codes uniquement, via <code>get_vod_info</code>) — leur disponibilité, et en particulier l'âge, dépend de ce que le fournisseur a renseigné. Une playlist M3U n'affiche que l'affiche, le titre et la catégorie, faute de ces métadonnées dans le format.</p>
+      </div>
+      <div class="card">
         <h2>Confidentialité</h2>
         <p class="hint">Tes playlists, identifiants et favoris restent uniquement sur cet appareil (stockage local). Rien n'est envoyé ailleurs qu'au serveur IPTV que tu as toi-même renseigné.</p>
       </div>
@@ -178,7 +185,7 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    window.APP_VERSION = '1.13';
+    window.APP_VERSION = '1.14';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

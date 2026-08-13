@@ -47,7 +47,7 @@
     document.querySelectorAll('.panel').forEach(function (p) { p.classList.toggle('active', p.id === 'tab-' + name); });
     if (name === 'accueil') renderAccueil();
     else if (name === 'direct') renderKind('direct');
-    else if (name === 'films') renderKind('films');
+    else if (name === 'films') { $id('filmDetail').style.display = 'none'; $id('filmsRacine').style.display = ''; renderKind('films'); }
     else if (name === 'series') { $id('serieDetail').style.display = 'none'; $id('seriesRacine').style.display = ''; renderKind('series'); }
     else if (name === 'guide') renderGuide(true);
     else if (name === 'favoris') renderFavoris();
@@ -163,7 +163,8 @@
         }
         if (kindKey === 'films') {
           return { key: 'xt:vod:' + pl.id + ':' + s.stream_id, kind: 'films', name: s.name,
-            logo: s.stream_icon, group: catLabel[s.category_id] || '', url: Xtream.streamUrl(cfg, 'vod', s.stream_id, s.container_extension || 'mp4') };
+            logo: s.stream_icon, group: catLabel[s.category_id] || '', url: Xtream.streamUrl(cfg, 'vod', s.stream_id, s.container_extension || 'mp4'),
+            streamId: s.stream_id };
         }
         return { key: 'xt:series:' + pl.id + ':' + s.series_id, kind: 'series', name: s.name,
           logo: s.cover, group: catLabel[s.category_id] || '', seriesId: s.series_id };
@@ -229,7 +230,7 @@
       star.setAttribute('aria-label', 'Favori');
       star.addEventListener('click', function (e) {
         e.stopPropagation();
-        var justAdded = Store.toggleFavori({ key: item.key, kind: item.kind, name: item.name, logo: item.logo, group: item.group, url: item.url });
+        var justAdded = Store.toggleFavori({ key: item.key, kind: item.kind, name: item.name, logo: item.logo, group: item.group, url: item.url, streamId: item.streamId });
         star.textContent = justAdded ? '★' : '☆';
         if (isTabActive('favoris')) renderFavoris();
       });
@@ -296,11 +297,11 @@
         } else {
           var items = pool.filter(function (it) { return (!cat || it.groupTitle === cat) && matchesSearch(it, q); })
             .map(function (it) {
-              var withKey = Object.assign({}, it, { epgKey: it.tvgId || null });
+              var withKey = Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle });
               withKey._badge = epgBadge(withKey);
               return withKey;
             });
-          renderList(container, moreBtn, items, kindKey, { epgBadgeFn: null });
+          renderList(container, moreBtn, items, kindKey, { onOpen: kindKey === 'films' ? openFilm : null });
           // (le badge EPG est déjà calculé par item ; on l'injecte après coup)
           Array.prototype.forEach.call(container.children, function (node, i) {
             var corps = items[i] && items[i]._badge && node.querySelector('.carte-corps');
@@ -324,7 +325,7 @@
         var q = search.value.trim().toLowerCase();
         var filtered = items.filter(function (it) { return matchesSearch(it, q); });
         if (kindKey === 'direct') filtered = filtered.map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
-        renderList(container, moreBtn, filtered, kindKey, { onOpen: kindKey === 'series' ? openSerieXtream : null });
+        renderList(container, moreBtn, filtered, kindKey, { onOpen: kindKey === 'series' ? openSerieXtream : kindKey === 'films' ? openFilm : null });
         if (kindKey === 'direct') {
           Array.prototype.forEach.call(container.children, function (node, i) {
             var corps = filtered[i] && filtered[i]._badge && node.querySelector('.carte-corps');
@@ -563,13 +564,96 @@
     fill(body);
   }
 
+  // ---------- détail d'un film ----------
+  function showFilmShell(fill) {
+    $id('filmsRacine').style.display = 'none';
+    var det = $id('filmDetail');
+    det.style.display = '';
+    det.innerHTML = '';
+    var back = el('button', 'ghost', '← Films');
+    back.style.marginBottom = '10px';
+    back.addEventListener('click', function () { det.style.display = 'none'; $id('filmsRacine').style.display = ''; });
+    det.appendChild(back);
+    fill(det);
+  }
+
+  // Affiche, descriptif et âge : uniquement disponibles pour les comptes
+  // Xtream Codes (get_vod_info) — une playlist M3U ne transporte aucune de
+  // ces métadonnées, seulement logo/nom/groupe.
+  function renderFilmDetails(container, item, info) {
+    var wrap = el('div', 'film-detail');
+    var poster = info.cover_big || info.movie_image || item.logo;
+    if (poster) {
+      var img = document.createElement('img');
+      img.className = 'film-poster';
+      img.loading = 'lazy';
+      img.src = poster;
+      img.alt = '';
+      img.onerror = function () { img.remove(); };
+      wrap.appendChild(img);
+    }
+
+    var col = el('div', 'film-info');
+    col.appendChild(el('h2', 'film-titre', item.name));
+
+    var badges = el('div', 'film-badges');
+    var age = info.age || info.mpaa_rating;
+    if (age) badges.appendChild(el('span', 'film-badge film-badge-age', '🔞 ' + age));
+    var rating = parseFloat(info.rating);
+    if (rating > 0) badges.appendChild(el('span', 'film-badge', '★ ' + rating.toFixed(1)));
+    if (info.duration) badges.appendChild(el('span', 'film-badge', '⏱ ' + info.duration));
+    var year = String(info.releasedate || info.release_date || '').slice(0, 4);
+    if (/^\d{4}$/.test(year)) badges.appendChild(el('span', 'film-badge', year));
+    if (info.genre) badges.appendChild(el('span', 'film-badge', info.genre));
+    if (badges.children.length) col.appendChild(badges);
+
+    var plot = info.plot || info.description;
+    col.appendChild(el('p', 'film-plot', plot || 'Aucun descriptif fourni par le fournisseur pour ce contenu.'));
+
+    var playBtn = el('button', 'primary', '▶ Regarder');
+    playBtn.addEventListener('click', function () { Player.open(item.url, item.name); });
+    col.appendChild(playBtn);
+
+    wrap.appendChild(col);
+    container.appendChild(wrap);
+  }
+
+  function openFilmXtream(item) {
+    var pl = state.playlist, cfg = xtreamCfg(pl);
+    showFilmShell(function (det) {
+      var loading = el('div', 'hint', 'Chargement…');
+      det.appendChild(loading);
+      Xtream.vodInfo(cfg, item.streamId).then(function (data) {
+        loading.remove();
+        renderFilmDetails(det, item, (data && data.info) || {});
+      }).catch(function () {
+        loading.remove();
+        renderFilmDetails(det, item, {});
+      });
+    });
+  }
+
+  function openFilmSimple(item) {
+    // Une playlist M3U ne transporte pas de genre à proprement parler ;
+    // groupTitle (catégorie de la playlist) est la meilleure approximation.
+    showFilmShell(function (det) { renderFilmDetails(det, item, { genre: item.groupTitle || item.group }); });
+  }
+
+  function openFilm(item) {
+    goTab('films');
+    if (item.streamId != null) openFilmXtream(item); else openFilmSimple(item);
+  }
+
   // ---------- favoris ----------
   function renderFavoris() {
     var container = $id('listeFavoris');
     var favs = Store.getFavoris();
     container.innerHTML = '';
     if (!favs.length) { container.appendChild(el('div', 'hint', 'Aucun favori pour le moment — touche ☆ sur une chaîne, un film ou un épisode.')); return; }
-    favs.forEach(function (item) { container.appendChild(card(item)); });
+    favs.forEach(function (item) {
+      var isFilm = item.kind === 'films' || item.kind === 'vod';
+      container.appendChild(card(item, isFilm ? { onOpen: openFilm } : {}));
+    });
   }
 
   // ---------- accueil ----------

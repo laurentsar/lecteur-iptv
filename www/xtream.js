@@ -34,6 +34,9 @@
   function seriesInfo(cfg, seriesId) {
     return api(cfg, 'get_series_info', '&series_id=' + encodeURIComponent(seriesId));
   }
+  function vodInfo(cfg, vodId) {
+    return api(cfg, 'get_vod_info', '&vod_id=' + encodeURIComponent(vodId));
+  }
   function shortEpg(cfg, streamId, limit) {
     return api(cfg, 'get_short_epg', '&stream_id=' + encodeURIComponent(streamId) + '&limit=' + (limit || 2));
   }
@@ -59,7 +62,7 @@
     auth: auth,
     liveCategories: liveCategories, liveStreams: liveStreams,
     vodCategories: vodCategories, vodStreams: vodStreams,
-    seriesCategories: seriesCategories, seriesList: seriesList, seriesInfo: seriesInfo,
+    seriesCategories: seriesCategories, seriesList: seriesList, seriesInfo: seriesInfo, vodInfo: vodInfo,
     shortEpg: shortEpg, streamUrl: streamUrl, xmltvUrl: xmltvUrl, baseUrl: baseUrl, b64decode: b64decode
   };
 })(window);

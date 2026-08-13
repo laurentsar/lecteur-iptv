@@ -180,6 +180,22 @@ button.ghost { background: var(--card2); color: var(--text); }
 }
 .ep-play { color: var(--accent); flex: none; }
 
+/* ---------- détail d'un film (affiche, descriptif, âge) ---------- */
+.film-detail { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.film-poster {
+  width: 140px; max-width: 42vw; aspect-ratio: 2/3; border-radius: 12px; flex: none;
+  background: var(--card2); object-fit: cover; border: 1px solid var(--line);
+}
+.film-info { flex: 1 1 200px; min-width: 200px; display: flex; flex-direction: column; gap: 10px; }
+.film-titre { margin: 0; font-size: 18px; line-height: 1.3; }
+.film-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.film-badge {
+  background: var(--card2); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 20px; padding: 4px 11px; font-size: 11.5px; font-weight: 700;
+}
+.film-badge-age { background: var(--bad); border-color: var(--bad); color: #fff; }
+.film-plot { color: var(--text); font-size: 13.5px; line-height: 1.5; margin: 0; }
+
 /* ---------- accueil ---------- */
 .projets-home { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .projet-home {
