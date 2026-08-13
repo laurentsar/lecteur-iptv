@@ -37,9 +37,13 @@ qu'elle affiche vient de la source que tu as configurée.
   fournisseur quand elle existe.
 - L'**EPG compressé** (`.gz`) n'est pas décompressé : il faut un lien XMLTV
   non compressé.
-- Certains serveurs bloquent les requêtes venant d'un navigateur (**CORS**) :
-  dans ce cas, la playlist ou l'API ne répond pas depuis l'app alors qu'elle
-  fonctionnerait dans un lecteur natif (VLC, etc.).
+- **CORS** : beaucoup de serveurs IPTV bloquent les requêtes venant d'un
+  navigateur (ils sont pensés pour des lecteurs natifs comme VLC). Sur
+  l'**APK Android**, le chargement des playlists M3U et de l'API Xtream
+  passe par le réseau natif de Capacitor (`www/net.js`) pour contourner ce
+  blocage. Sur la **PWA**, il n'y a pas de contournement possible (aucun
+  pont natif) : un serveur qui bloque le CORS y empêchera la playlist de se
+  charger. Le guide EPG (XMLTV) reste soumis au CORS dans les deux cas.
 - La lecture nécessite une connexion réseau vers ton fournisseur : seule
   l'interface de l'app fonctionne hors ligne.
 
@@ -79,6 +83,7 @@ dépôt — un choix inhabituel, expliqué avec ses implications dans
 ```
 www/
   index.html     7 onglets
+  net.js         requêtes réseau (contourne les CORS via Capacitor sur Android)
   store.js       persistance locale (playlists, favoris, cache)
   m3u.js         analyse des playlists M3U/M3U8, détection des séries
   xtream.js      client de l'API Xtream Codes

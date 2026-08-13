@@ -79,7 +79,7 @@
       if (cached && !force) { state.m3uData = cached; kickEpg(); return cached; }
       var textPromise = pl.m3uUpload
         ? Store.rawGet(pl.id).then(function (t) { if (!t) throw new Error('Fichier introuvable — réimporte la playlist.'); return t; })
-        : fetch(pl.m3uUrl).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
+        : Net.fetchText(pl.m3uUrl);
       return textPromise.then(function (text) {
         var parsed = M3U.parse(text);
         var data = { epgUrl: parsed.epgUrl || pl.epgUrl || null, items: parsed.items, fetchedAt: Date.now() };
@@ -487,7 +487,7 @@
         out.textContent = '✅ Fichier lu — ' + parsed.items.length + ' entrée(s) trouvée(s).';
       }).catch(function (err) { out.textContent = '❌ Fichier illisible : ' + err.message; });
     } else {
-      fetch(res.draft.m3uUrl).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      Net.fetchText(res.draft.m3uUrl)
         .then(function (text) { var parsed = M3U.parse(text); out.textContent = '✅ Playlist lue — ' + parsed.items.length + ' entrée(s) trouvée(s).'; })
         .catch(function (err) { out.textContent = '❌ Impossible de charger la playlist : ' + err.message + ' (le serveur bloque peut-être les requêtes navigateur — CORS).'; });
     }

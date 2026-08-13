@@ -1,10 +1,10 @@
 /* sw.js — cache uniquement le shell de l'application (pages/scripts/styles).
  * Les flux vidéo, les appels API (Xtream, GitHub) et l'EPG ne sont jamais mis
  * en cache : ils viennent toujours du réseau, en direct. */
-const CACHE = 'iptv-lecteur-v1.0';
+const CACHE = 'iptv-lecteur-v1.1';
 const SHELL = [
   'index.html', 'styles.css',
-  'store.js', 'm3u.js', 'xtream.js', 'epg.js', 'player.js', 'app.js', 'update-check.js',
+  'net.js', 'store.js', 'm3u.js', 'xtream.js', 'epg.js', 'player.js', 'app.js', 'update-check.js',
   'vendor/hls.min.js',
   'manifest.webmanifest', 'img/icon-192.png', 'img/icon-512.png'
 ];

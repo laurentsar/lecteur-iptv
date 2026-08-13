@@ -14,10 +14,7 @@
       '&password=' + encodeURIComponent(cfg.motDePasse) +
       (action ? '&action=' + action : '') +
       (extra || '');
-    return fetch(url).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    });
+    return global.Net.fetchJson(url);
   }
 
   function auth(cfg) { return api(cfg, ''); }
