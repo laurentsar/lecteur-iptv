@@ -1,18 +1,24 @@
 /* player.js — overlay de lecture vidéo : hls.js pour les flux .m3u8,
  * mpegts.js pour les flux .ts bruts (mpeg-ts en direct, très courants chez
  * les fournisseurs IPTV — le navigateur ne les décode pas nativement),
- * lecture native pour le reste (mp4, mkv...). Si la lecture native échoue
- * (codec non supporté par l'appareil, fréquent sur des rips en HEVC ou
- * audio AC3/DTS), on retente une fois en demandant la même URL avec
- * l'extension .m3u8 : beaucoup de panels Xtream Codes transcodent alors le
- * flux à la volée en HLS H264/AAC, lisible partout. */
+ * lecture native pour le reste (mp4, mkv...). Si la lecture échoue (codec
+ * non supporté par le navigateur/WebView — HEVC, audio AC3/DTS, fréquents
+ * sur des rips IPTV), deux replis dans l'ordre :
+ *   1. le lecteur vidéo natif Android (NativePlayerPlugin, Media3
+ *      ExoPlayer) — décode via MediaCodec, hors WebView, souvent capable
+ *      là où le navigateur ne l'est pas ;
+ *   2. si le plugin natif n'est pas disponible (PWA), retente la même URL
+ *      avec l'extension .m3u8 : certains panels Xtream Codes transcodent
+ *      alors à la volée en HLS H264/AAC, lisible partout. */
 (function (global) {
   'use strict';
 
   var hls = null;
   var mpegtsPlayer = null;
   var currentEngine = '';
-  var currentUrl = '', currentTitle = '', triedM3u8Fallback = false;
+  var currentUrl = '', currentTitle = '';
+  var originalUrl = '', originalTitle = '';
+  var triedNativeFallback = false, triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn;
 
   function ensureDom() {
@@ -76,6 +82,10 @@
   }
 
   function attemptFallbackOrFail(reasonMsg) {
+    if (!triedNativeFallback) {
+      triedNativeFallback = true;
+      if (tryNativePlayer(originalUrl, originalTitle)) return;
+    }
     if (!triedM3u8Fallback && !isM3u8(currentUrl)) {
       triedM3u8Fallback = true;
       setStatus('Échec — nouvelle tentative en HLS transcodé…');
@@ -83,6 +93,23 @@
     } else {
       setStatus(reasonMsg);
     }
+  }
+
+  // Dernier recours avant d'abandonner : le lecteur vidéo natif Android
+  // (Media3 ExoPlayer, hors WebView). Décode souvent des flux que le
+  // navigateur refuse (codec, CORS). Renvoie false si indisponible (PWA,
+  // ou plugin absent) pour laisser la suite de la chaîne de repli agir.
+  function tryNativePlayer(url, title) {
+    var nativePlayer = global.Capacitor && global.Capacitor.isNativePlatform && global.Capacitor.isNativePlatform() &&
+      global.Capacitor.Plugins && global.Capacitor.Plugins.NativePlayer;
+    if (!nativePlayer) return false;
+    setStatus('Échec — nouvelle tentative avec le lecteur vidéo natif de l’appareil…');
+    nativePlayer.open({ url: url, title: title || '' }).then(function () {
+      close();
+    }).catch(function () {
+      setStatus('Lecture impossible, y compris avec le lecteur vidéo natif de l’appareil.');
+    });
+    return true;
   }
 
   function startPlayback(url, title) {
@@ -123,9 +150,12 @@
   }
 
   function open(url, title) {
+    originalUrl = url;
+    originalTitle = title || '';
+    triedNativeFallback = false;
+    triedM3u8Fallback = false;
     ensureDom();
     overlay.classList.add('show');
-    triedM3u8Fallback = false;
     startPlayback(url, title);
   }
 

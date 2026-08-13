@@ -50,6 +50,9 @@ jobs:
       - name: Allow local HTTP (serveurs IPTV en http://)
         run: python3 ci/patch_manifest.py
 
+      - name: Add native video player (ExoPlayer)
+        run: python3 ci/patch_native_player.py
+
       - name: Sync versionName from www/version.json
         run: python3 ci/set_version.py
 

@@ -33,11 +33,16 @@ qu'elle affiche vient de la source que tu as configurée.
 ## Limites connues
 
 - **Codecs non supportés** (HEVC, audio AC3/DTS, courants sur des rips
-  IPTV) : le navigateur ne les décode pas nativement. Quand la lecture
-  directe d'un film/épisode échoue, l'app retente automatiquement en
-  demandant la même URL avec l'extension `.m3u8` — beaucoup de panels
-  Xtream Codes transcodent alors à la volée en HLS H264/AAC, lisible
-  partout ; ça ne fonctionne pas sur tous les panels.
+  IPTV) : le navigateur ne les décode pas toujours. Quand la lecture web
+  échoue, l'app retente dans l'ordre : (1) sur l'**APK Android**, le
+  **lecteur vidéo natif** de l'appareil (`NativePlayerPlugin`, Media3
+  ExoPlayer — hors WebView, décode via MediaCodec, souvent plus large que
+  le navigateur, en particulier pour HEVC) ; (2) si indisponible (PWA) ou
+  en échec, redemande la même URL avec l'extension `.m3u8` — certains
+  panels Xtream Codes transcodent alors à la volée en HLS H264/AAC. Aucun
+  des deux ne garantit la lecture de tout (l'audio AC3/DTS, en particulier,
+  n'est pas décodé par ExoPlayer standard sans extension FFmpeg — hors de
+  portée ici, elle nécessite un build NDK dédié).
 - Les flux **`.ts` bruts** (mpeg-ts en direct, hors HLS) sont lus via
   [mpegts.js](https://github.com/xqq/mpegts.js) (Apache-2.0).
 - L'**EPG compressé** (`.gz`) n'est pas décompressé : il faut un lien XMLTV
@@ -81,8 +86,10 @@ python3 tools_gen_icon.py # régénère les icônes (aucune dépendance)
 
 `android/` n'est pas versionné : le workflow le régénère à chaque build, puis
 applique la signature (`ci/patch_signing.py`), la version (`ci/set_version.py`),
-les icônes (`ci/set_icons.py`) et l'autorisation HTTP en clair pour les
-serveurs IPTV en `http://` (`ci/patch_manifest.py`).
+les icônes (`ci/set_icons.py`), l'autorisation HTTP en clair pour les
+serveurs IPTV en `http://` (`ci/patch_manifest.py`) et le lecteur vidéo natif
+(`ci/patch_native_player.py` — injecte `NativePlayerPlugin` / Media3
+ExoPlayer, voir plus bas).
 
 La clé de signature (`signing/release.keystore`) **est** versionnée dans ce
 dépôt — un choix inhabituel, expliqué avec ses implications dans
@@ -103,4 +110,9 @@ www/
   app.js         interface, onglets, playlists, grilles
   vendor/hls.min.js     lecture HLS (Apache-2.0, video-dev/hls.js)
   vendor/mpegts.min.js  lecture mpeg-ts brut (Apache-2.0, xqq/mpegts.js)
+
+ci/patch_native_player.py  injecte (à chaque build) dans android/ :
+  NativePlayerPlugin.java     plugin Capacitor, ouvre l'écran natif
+  NativePlayerActivity.java   lecteur plein écran (Media3 ExoPlayer)
+  activity_native_player.xml  mise en page (PlayerView + titre + fermer)
 ```
