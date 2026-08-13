@@ -1,10 +1,12 @@
-/* player.js — overlay de lecture vidéo : hls.js pour les flux .m3u8, lecture
- * native pour le reste (mp4, mkv...). Les flux .ts bruts (mpeg-ts en direct,
- * hors HLS) ne sont pas décodables par le navigateur : voir README/Infos. */
+/* player.js — overlay de lecture vidéo : hls.js pour les flux .m3u8,
+ * mpegts.js pour les flux .ts bruts (mpeg-ts en direct, très courants chez
+ * les fournisseurs IPTV — le navigateur ne les décode pas nativement),
+ * lecture native pour le reste (mp4, mkv...). */
 (function (global) {
   'use strict';
 
   var hls = null;
+  var mpegtsPlayer = null;
   var overlay, video, titleEl, statusEl, closeBtn;
 
   function ensureDom() {
@@ -31,18 +33,20 @@
 
   function setStatus(msg) { if (statusEl) statusEl.textContent = msg || ''; }
 
-  function destroyHls() {
+  function destroyPlayers() {
     if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
+    if (mpegtsPlayer) { try { mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
   }
 
   function isM3u8(url) { return /\.m3u8(\?|#|$)/i.test(url); }
+  function isMpegts(url) { return /\.ts(\?|#|$)/i.test(url); }
 
   function open(url, title) {
     ensureDom();
     overlay.classList.add('show');
     titleEl.textContent = title || '';
     setStatus('Connexion au flux…');
-    destroyHls();
+    destroyPlayers();
     video.removeAttribute('src');
     video.load();
 
@@ -54,6 +58,14 @@
       hls.loadSource(url);
       hls.attachMedia(video);
       video.play().catch(function () {});
+    } else if (isMpegts(url) && global.mpegts && global.mpegts.isSupported()) {
+      mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: url });
+      mpegtsPlayer.on(global.mpegts.Events.ERROR, function () {
+        setStatus('Flux interrompu — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
+      });
+      mpegtsPlayer.attachMediaElement(video);
+      mpegtsPlayer.load();
+      mpegtsPlayer.play().catch(function () {});
     } else {
       video.src = url;
       video.play().catch(function () {});
@@ -61,7 +73,7 @@
   }
 
   function close() {
-    destroyHls();
+    destroyPlayers();
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
     if (overlay) overlay.classList.remove('show');
   }

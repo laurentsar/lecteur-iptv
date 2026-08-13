@@ -32,9 +32,8 @@ qu'elle affiche vient de la source que tu as configurée.
 
 ## Limites connues
 
-- Les flux **`.ts` bruts** (mpeg-ts en direct, hors HLS) ne sont pas
-  décodables par un navigateur — utilise la variante `.m3u8` de ton
-  fournisseur quand elle existe.
+- Les flux **`.ts` bruts** (mpeg-ts en direct, hors HLS) sont lus via
+  [mpegts.js](https://github.com/xqq/mpegts.js) (Apache-2.0).
 - L'**EPG compressé** (`.gz`) n'est pas décompressé : il faut un lien XMLTV
   non compressé.
 - **CORS** : beaucoup de serveurs IPTV bloquent les requêtes venant d'un
@@ -43,7 +42,11 @@ qu'elle affiche vient de la source que tu as configurée.
   passe par le réseau natif de Capacitor (`www/net.js`) pour contourner ce
   blocage. Sur la **PWA**, il n'y a pas de contournement possible (aucun
   pont natif) : un serveur qui bloque le CORS y empêchera la playlist de se
-  charger. Le guide EPG (XMLTV) reste soumis au CORS dans les deux cas.
+  charger. La **lecture vidéo** (HLS et mpeg-ts) et l'**EPG** restent
+  soumises au CORS du serveur de streaming dans les deux cas (Android et
+  PWA) : `net.js` ne couvre que la playlist/l'API, pas les flux vidéo eux-
+  mêmes, qui doivent rester lisibles en flux continu (impossible à
+  contourner par le même mécanisme).
 - La lecture nécessite une connexion réseau vers ton fournisseur : seule
   l'interface de l'app fonctionne hors ligne.
 
@@ -88,7 +91,8 @@ www/
   m3u.js         analyse des playlists M3U/M3U8, détection des séries
   xtream.js      client de l'API Xtream Codes
   epg.js         guide XMLTV (now/next)
-  player.js      lecteur vidéo (hls.js pour le HLS, natif sinon)
+  player.js      lecteur vidéo (hls.js pour le HLS, mpegts.js pour le .ts brut, natif sinon)
   app.js         interface, onglets, playlists, grilles
-  vendor/hls.min.js  lecture HLS dans le navigateur (Apache-2.0, video-dev/hls.js)
+  vendor/hls.min.js     lecture HLS (Apache-2.0, video-dev/hls.js)
+  vendor/mpegts.min.js  lecture mpeg-ts brut (Apache-2.0, xqq/mpegts.js)
 ```

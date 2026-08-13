@@ -131,7 +131,7 @@
       <div class="card warn">
         <h2>⚠️ Ce que cette app fait — et ne fait pas</h2>
         <p>C'est un <strong>lecteur</strong> : il affiche et joue les flux d'une playlist M3U ou d'un compte Xtream Codes que <em>toi</em> tu fournis. L'app ne fournit, ne vend ni n'héberge aucune chaîne, film ou série.</p>
-        <p class="hint">Limites connues : les flux <code>.ts</code> bruts (mpeg-ts en direct, hors HLS) ne sont pas lisibles par le navigateur — préfère la variante <code>.m3u8</code> quand ton fournisseur la propose. L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Sur l'APK Android, le chargement des playlists et de l'API Xtream passe par le réseau natif pour éviter les blocages CORS des serveurs IPTV ; sur la version PWA (navigateur), ce contournement n'existe pas et un serveur qui bloque les requêtes navigateur (CORS) peut empêcher la playlist de se charger, et l'EPG y reste soumis dans les deux cas.</p>
+        <p class="hint">Limites connues : les flux <code>.ts</code> bruts (mpeg-ts en direct) sont lus via une librairie de démuxage dédiée (mpegts.js) — si le serveur qui héberge la vidéo elle-même bloque aussi les requêtes navigateur (CORS), la lecture peut échouer même quand la playlist se charge bien. L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Sur l'APK Android, le chargement des playlists et de l'API Xtream passe par le réseau natif pour éviter les blocages CORS des serveurs IPTV ; sur la version PWA (navigateur), ce contournement n'existe pas et un serveur qui bloque les requêtes navigateur (CORS) peut empêcher la playlist de se charger. La lecture vidéo (HLS et mpeg-ts) et l'EPG restent soumis au CORS du serveur de streaming dans les deux cas (Android et PWA).</p>
       </div>
       <div class="card">
         <h2>Confidentialité</h2>
@@ -147,10 +147,11 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    window.APP_VERSION = '1.1';
+    window.APP_VERSION = '1.2';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
+  <script src="vendor/mpegts.min.js"></script>
   <script src="net.js"></script>
   <script src="store.js"></script>
   <script src="m3u.js"></script>
