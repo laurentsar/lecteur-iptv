@@ -31,3 +31,23 @@ if "networkSecurityConfig" not in s:
     print("cleartext local autorisé")
 else:
     print("networkSecurityConfig déjà présent")
+
+# Picture-in-Picture pour le direct : le bouton PiP du lecteur web
+# (player.js, video.requestPictureInPicture()) ne fonctionne dans la WebView
+# Android que si l'activité hôte se déclare capable de PiP dans le manifeste
+# — sinon la promesse est simplement rejetée par le système, sans erreur
+# claire. Aucun code Java supplémentaire n'est nécessaire pour ce cas (le
+# déclenchement reste un geste utilisateur explicite, comme l'exige l'API) ;
+# c'est WebView qui gère la fenêtre PiP elle-même.
+s = open(mf).read()
+if "supportsPictureInPicture" not in s:
+    def _add_pip(m):
+        return m.group(0).replace("<activity", '<activity\n            android:supportsPictureInPicture="true"', 1)
+    s2, n = re.subn(r'<activity\b[^>]*android:name="\.MainActivity"[^>]*>', _add_pip, s, count=1)
+    if n:
+        open(mf, "w").write(s2)
+        print("MainActivity : Picture-in-Picture activé")
+    else:
+        print("MainActivity introuvable dans le manifeste — PiP non ajouté")
+else:
+    print("supportsPictureInPicture déjà présent")

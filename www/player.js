@@ -23,8 +23,9 @@
   var currentEngine = '';
   var currentUrl = '', currentTitle = '';
   var originalUrl = '', originalTitle = '';
+  var currentIsLive = false; // PiP proposé uniquement pour le direct
   var triedNativeFallback = false, triedM3u8Fallback = false;
-  var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, castLauncher;
+  var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, castLauncher;
   var castSdkRequested = false;
   var loadTimeoutId = null;
   var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
@@ -41,6 +42,7 @@
       '  <span id="playerTitle" class="player-title"></span>' +
       '  <google-cast-launcher id="castLauncher" class="player-cast" style="display:none"></google-cast-launcher>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
+      '  <button id="playerPip" class="player-cast" aria-label="Picture-in-Picture" style="display:none">⧉</button>' +
       '  <button id="playerClose" class="player-close" aria-label="Fermer">✕</button>' +
       '</div>' +
       '<video id="playerVideo" playsinline controls autoplay></video>' +
@@ -51,6 +53,7 @@
     statusEl = overlay.querySelector('#playerStatus');
     closeBtn = overlay.querySelector('#playerClose');
     airplayBtn = overlay.querySelector('#playerAirplay');
+    pipBtn = overlay.querySelector('#playerPip');
     castLauncher = overlay.querySelector('#castLauncher');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
@@ -60,6 +63,37 @@
     video.addEventListener('playing', function () { clearLoadTimeout(); setStatus(''); });
     setupAirplay();
     setupChromecast();
+    setupPip();
+  }
+
+  // ---------- Picture-in-Picture (chaînes en direct uniquement) ----------
+  // Continuer à regarder le direct en mini-fenêtre pendant qu'on utilise le
+  // reste de l'app ou une autre appli. Standard (Chrome/Android WebView) ou
+  // webkit (Safari) selon ce que le moteur expose.
+  function pipSupported() {
+    return !!(document.pictureInPictureEnabled ||
+      (typeof video.webkitSupportsPresentationMode === 'function' && video.webkitSupportsPresentationMode('picture-in-picture')));
+  }
+
+  function updatePipVisibility() {
+    pipBtn.style.display = (currentIsLive && pipSupported() && !isCasting()) ? '' : 'none';
+  }
+
+  function setupPip() {
+    pipBtn.addEventListener('click', function () {
+      if (document.pictureInPictureElement) { document.exitPictureInPicture().catch(function () {}); return; }
+      if (video.webkitPresentationMode === 'picture-in-picture') { video.webkitSetPresentationMode('inline'); return; }
+      if (document.pictureInPictureEnabled && typeof video.requestPictureInPicture === 'function') {
+        video.requestPictureInPicture().catch(function () { setStatus('Picture-in-Picture indisponible.'); });
+      } else if (typeof video.webkitSetPresentationMode === 'function') {
+        video.webkitSetPresentationMode('picture-in-picture');
+      }
+    });
+    video.addEventListener('enterpictureinpicture', function () { pipBtn.classList.add('active'); });
+    video.addEventListener('leavepictureinpicture', function () { pipBtn.classList.remove('active'); });
+    video.addEventListener('webkitpresentationmodechanged', function () {
+      pipBtn.classList.toggle('active', video.webkitPresentationMode === 'picture-in-picture');
+    });
   }
 
   // ---------- AirPlay (Safari / iPhone) ----------
@@ -92,6 +126,7 @@
             e.sessionState === cast.framework.SessionState.SESSION_RESUMED) {
             castCurrentMedia();
           }
+          if (pipBtn) updatePipVisibility();
         }
       );
     };
@@ -198,7 +233,7 @@
       global.Capacitor.Plugins && global.Capacitor.Plugins.NativePlayer;
     if (!nativePlayer) return false;
     setStatus('Échec — nouvelle tentative avec le lecteur vidéo natif de l’appareil…');
-    nativePlayer.open({ url: url, title: title || '' }).then(function () {
+    nativePlayer.open({ url: url, title: title || '', live: currentIsLive }).then(function () {
       close();
     }).catch(function () {
       setStatus('Lecture impossible, y compris avec le lecteur vidéo natif de l’appareil.');
@@ -254,18 +289,21 @@
     }
   }
 
-  function open(url, title) {
+  function open(url, title, opts) {
     originalUrl = url;
     originalTitle = title || '';
+    currentIsLive = !!(opts && opts.live);
     triedNativeFallback = false;
     triedM3u8Fallback = false;
     ensureDom();
     overlay.classList.add('show');
+    updatePipVisibility();
     startPlayback(url, title);
   }
 
   function close() {
     clearLoadTimeout();
+    if (document.pictureInPictureElement === video) { document.exitPictureInPicture().catch(function () {}); }
     destroyPlayers();
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
     if (overlay) overlay.classList.remove('show');

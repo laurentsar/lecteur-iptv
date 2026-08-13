@@ -13,7 +13,7 @@ qu'elle affiche vient de la source que tu as configurée.
 | Onglet | Contenu |
 |---|---|
 | 🏠 **Accueil** | Playlist active (et sélecteur si tu en as plusieurs), accès rapide aux 3 catégories, nombre de favoris. |
-| 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). |
+| 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). Bouton **Picture-in-Picture** dans le lecteur pour continuer à regarder en mini-fenêtre. |
 | 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. |
 | 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. |
 | 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
@@ -35,6 +35,20 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
   d'utiliser le lecteur sur iPhone (la PWA fonctionne dans Safari).
 - Aucun compte ni inscription requis (récepteur Cast « par défaut » de
   Google, pas d'application Cast dédiée à enregistrer).
+
+## Picture-in-Picture (direct uniquement)
+
+Un bouton ⧉ dans le lecteur réduit la chaîne en cours en mini-fenêtre pour
+continuer à la regarder pendant qu'on utilise le reste de l'app ou une
+autre appli — proposé uniquement pour le **direct** (pas les films/séries,
+pas de contrôles lecture/pause utiles depuis une mini-fenêtre pour de la VOD).
+
+- **Lecteur web** (PWA et APK) : Picture-in-Picture standard du navigateur/
+  WebView (`requestPictureInPicture`), ou mode présentation de Safari sur
+  iPhone/Mac.
+- **APK Android**, lecteur natif de secours (HEVC/audio non décodables par
+  le navigateur) : PiP système Android (Media3 ExoPlayer), avec réduction
+  automatique en appuyant sur le bouton Accueil pendant une lecture en direct.
 
 ## Sources prises en charge
 

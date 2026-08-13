@@ -41,6 +41,7 @@ public class NativePlayerPlugin extends Plugin {
     public void open(PluginCall call) {
         String url = call.getString("url");
         String title = call.getString("title", "");
+        boolean live = call.getBoolean("live", false);
         if (url == null || url.isEmpty()) {
             call.reject("url manquante");
             return;
@@ -48,6 +49,7 @@ public class NativePlayerPlugin extends Plugin {
         Intent intent = new Intent(getContext(), NativePlayerActivity.class);
         intent.putExtra("url", url);
         intent.putExtra("title", title);
+        intent.putExtra("live", live);
         getActivity().startActivity(intent);
         call.resolve();
     }
@@ -56,9 +58,14 @@ public class NativePlayerPlugin extends Plugin {
 
 ACTIVITY_JAVA = """package com.laurent.iptvlecteur;
 
+import android.app.PictureInPictureParams;
+import android.content.res.Configuration;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Rational;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.TextView;
@@ -84,7 +91,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     private CastPlayer castPlayer;
     private PlayerView playerView;
     private TextView statusView;
+    private View topBar;
     private String mediaUrl;
+    private boolean isLive; // Picture-in-Picture : proposé et auto-activé au
+    // bouton Accueil uniquement pour le direct (pas d'intérêt pour la VOD,
+    // pas de contrôles lecture/pause depuis la mini-fenêtre système).
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private final Runnable timeoutRunnable = new Runnable() {
         @Override
@@ -118,9 +129,12 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         mediaUrl = getIntent().getStringExtra("url");
         String title = getIntent().getStringExtra("title");
+        isLive = getIntent().getBooleanExtra("live", false);
 
         TextView titleView = findViewById(R.id.playerTitle);
         titleView.setText(title == null ? "" : title);
+
+        topBar = findViewById(R.id.playerTopBar);
 
         ImageButton closeBtn = findViewById(R.id.playerCloseBtn);
         closeBtn.setOnClickListener(new View.OnClickListener() {
@@ -129,6 +143,19 @@ public class NativePlayerActivity extends AppCompatActivity {
                 finish();
             }
         });
+
+        ImageButton pipBtn = findViewById(R.id.playerPipBtn);
+        if (isLive && pipAvailable()) {
+            pipBtn.setVisibility(View.VISIBLE);
+            pipBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    enterPip();
+                }
+            });
+        } else {
+            pipBtn.setVisibility(View.GONE);
+        }
 
         statusView = findViewById(R.id.playerStatusText);
         playerView = findViewById(R.id.playerView);
@@ -197,6 +224,39 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    private boolean pipAvailable() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                && getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
+    }
+
+    private void enterPip() {
+        if (!pipAvailable()) {
+            return;
+        }
+        PictureInPictureParams params = new PictureInPictureParams.Builder()
+                .setAspectRatio(new Rational(16, 9))
+                .build();
+        enterPictureInPictureMode(params);
+    }
+
+    @Override
+    public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        // Quitter l'appli (bouton Accueil) pendant une chaîne en direct
+        // réduit automatiquement le lecteur en PiP au lieu d'interrompre la
+        // diffusion — comportement standard attendu pour du direct.
+        if (isLive) {
+            enterPip();
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        topBar.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
+        playerView.setUseController(!isInPictureInPictureMode);
+    }
+
     @Override
     protected void onDestroy() {
         timeoutHandler.removeCallbacks(timeoutRunnable);
@@ -252,6 +312,7 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:layout_height="match_parent" />
 
     <LinearLayout
+        android:id="@+id/playerTopBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -278,6 +339,16 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
             android:contentDescription="Diffuser sur une TV" />
 
         <ImageButton
+            android:id="@+id/playerPipBtn"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_pip"
+            android:contentDescription="Picture-in-Picture"
+            android:visibility="gone" />
+
+        <ImageButton
             android:id="@+id/playerCloseBtn"
             android:layout_width="40dp"
             android:layout_height="40dp"
@@ -297,6 +368,20 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:visibility="gone" />
 
 </RelativeLayout>
+"""
+
+# Icône « picture_in_picture » — Google Material Icons (Apache License 2.0).
+IC_PIP_XML = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M19,7h-8v6h8V7zM23,3H1v18h22V3zM21,19H3V5h18V19z" />
+</vector>
 """
 
 MEDIA3_VERSION = "1.4.1"
@@ -357,6 +442,7 @@ def patch_manifest():
         '        <activity\n'
         '            android:name=".NativePlayerActivity"\n'
         '            android:theme="@style/AppTheme.NoActionBar"\n'
+        '            android:supportsPictureInPicture="true"\n'
         '            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"\n'
         '            android:exported="false" />\n\n'
         '        <meta-data\n'
@@ -393,6 +479,7 @@ write_if_changed(PKG_DIR + "/NativePlayerPlugin.java", PLUGIN_JAVA)
 write_if_changed(PKG_DIR + "/NativePlayerActivity.java", ACTIVITY_JAVA)
 write_if_changed(PKG_DIR + "/CastOptionsProvider.java", CAST_OPTIONS_PROVIDER_JAVA)
 write_if_changed(RES_DIR + "/layout/activity_native_player.xml", LAYOUT_XML)
+write_if_changed(RES_DIR + "/drawable/ic_pip.xml", IC_PIP_XML)
 patch_settings_gradle()
 patch_build_gradle()
 patch_manifest()

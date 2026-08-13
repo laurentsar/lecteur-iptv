@@ -236,7 +236,9 @@
       card.appendChild(star);
     }
 
-    card.addEventListener('click', function () { opts.onOpen ? opts.onOpen(item) : Player.open(item.url, item.name); });
+    // item.kind vaut 'direct' (Xtream) ou 'live' (M3U, voir m3u.js
+    // classifyGroup) selon la source — les deux désignent une chaîne en direct.
+    card.addEventListener('click', function () { opts.onOpen ? opts.onOpen(item) : Player.open(item.url, item.name, { live: item.kind === 'direct' || item.kind === 'live' }); });
     return card;
   }
 
@@ -430,7 +432,7 @@
           chan.appendChild(img);
         }
         chan.appendChild(el('span', null, item.name));
-        chan.addEventListener('click', function () { Player.open(item.url, item.name); });
+        chan.addEventListener('click', function () { Player.open(item.url, item.name, { live: true }); });
         grid.appendChild(chan);
 
         var timeline = el('div', 'guide-timeline');
@@ -446,7 +448,7 @@
             block.style.left = ((s - dayStart) / 60000 * PX_PER_MIN) + 'px';
             block.style.width = Math.max(28, (e - s) / 60000 * PX_PER_MIN) + 'px';
             block.title = p.titre || '';
-            block.addEventListener('click', function () { Player.open(item.url, item.name); });
+            block.addEventListener('click', function () { Player.open(item.url, item.name, { live: true }); });
             timeline.appendChild(block);
           });
         }
