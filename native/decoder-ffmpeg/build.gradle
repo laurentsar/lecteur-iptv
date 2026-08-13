@@ -1,0 +1,24 @@
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'androidx.media3.decoder.ffmpeg'
+    compileSdk 34
+    ndkVersion "25.1.8937393"
+    defaultConfig {
+        minSdkVersion 21
+    }
+    externalNativeBuild {
+        cmake {
+            path 'src/main/jni/CMakeLists.txt'
+            version '3.22.1+'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.media3:media3-common:1.4.1'
+    implementation 'androidx.media3:media3-decoder:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.annotation:annotation:1.7.1'
+    compileOnly 'org.checkerframework:checker-qual:3.42.0'
+}

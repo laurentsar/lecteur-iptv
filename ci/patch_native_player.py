@@ -10,9 +10,11 @@ WebView) le peut souvent. Le plugin Capacitor « NativePlayer » ouvre un
 écran natif plein écran pour ces cas — pas de contournement CORS nécessaire
 non plus, ExoPlayer utilisant le réseau natif comme CapacitorHttp.
 
-Limite assumée : ExoPlayer standard ne décode pas l'audio AC3/DTS sans
-l'extension FFmpeg (nécessite un build NDK, hors de portée ici) — seul le
-codec vidéo (HEVC notamment) est couvert par ce correctif.
+L'audio AC3/E-AC3/DTS/TrueHD (courant sur des rips IPTV, non décodé par
+MediaCodec sur la plupart des appareils) est pris en charge via l'extension
+FFmpeg vendorisée dans native/decoder-ffmpeg/ (voir NOTICE.md dans ce
+dossier) : ce script relie ce module au projet Android (settings.gradle +
+dépendance app) et configure le lecteur pour la préférer quand disponible.
 """
 import os
 import re
@@ -57,6 +59,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
 
@@ -84,7 +87,13 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         final TextView statusView = findViewById(R.id.playerStatusText);
         PlayerView playerView = findViewById(R.id.playerView);
-        player = new ExoPlayer.Builder(this).build();
+        // PREFER : utilise l'extension FFmpeg (native/decoder-ffmpeg) pour
+        // l'audio AC3/E-AC3/DTS/TrueHD quand le décodeur de l'appareil ne
+        // sait pas le faire ; sans effet sur les formats qu'elle ne couvre
+        // pas (elle ne déclare le support que pour ces codecs précis).
+        DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(this)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER);
+        player = new ExoPlayer.Builder(this, renderersFactory).build();
         playerView.setPlayer(player);
 
         player.addListener(new Player.Listener() {
@@ -195,12 +204,30 @@ def write_if_changed(path, content):
 def patch_build_gradle():
     p = "android/app/build.gradle"
     s = open(p).read()
-    if "media3-exoplayer" in s:
-        print("build.gradle : dépendances media3 déjà présentes")
+    lines = DEPENDENCY_LINES
+    if "decoder-ffmpeg" not in s:
+        lines += '    implementation project(":decoder-ffmpeg")\n'
+    if "media3-exoplayer" in s and "decoder-ffmpeg" in s:
+        print("build.gradle : dépendances media3/decoder-ffmpeg déjà présentes")
         return
-    s = s.replace("dependencies {\n", "dependencies {\n" + DEPENDENCY_LINES, 1)
+    s = s.replace("dependencies {\n", "dependencies {\n" + lines, 1)
     open(p, "w").write(s)
-    print("build.gradle : dépendances media3 ajoutées")
+    print("build.gradle : dépendances media3/decoder-ffmpeg ajoutées")
+
+
+def patch_settings_gradle():
+    p = "android/settings.gradle"
+    s = open(p).read()
+    if "decoder-ffmpeg" in s:
+        print("settings.gradle : module decoder-ffmpeg déjà inclus")
+        return
+    s += (
+        "\n"
+        "include ':decoder-ffmpeg'\n"
+        "project(':decoder-ffmpeg').projectDir = new File(rootDir, '../native/decoder-ffmpeg')\n"
+    )
+    open(p, "w").write(s)
+    print("settings.gradle : module decoder-ffmpeg inclus")
 
 
 def patch_manifest():
@@ -245,6 +272,7 @@ def patch_main_activity():
 write_if_changed(PKG_DIR + "/NativePlayerPlugin.java", PLUGIN_JAVA)
 write_if_changed(PKG_DIR + "/NativePlayerActivity.java", ACTIVITY_JAVA)
 write_if_changed(RES_DIR + "/layout/activity_native_player.xml", LAYOUT_XML)
+patch_settings_gradle()
 patch_build_gradle()
 patch_manifest()
 patch_main_activity()

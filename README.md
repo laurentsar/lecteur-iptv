@@ -32,17 +32,18 @@ qu'elle affiche vient de la source que tu as configurée.
 
 ## Limites connues
 
-- **Codecs non supportés** (HEVC, audio AC3/DTS, courants sur des rips
-  IPTV) : le navigateur ne les décode pas toujours. Quand la lecture web
-  échoue, l'app retente dans l'ordre : (1) sur l'**APK Android**, le
-  **lecteur vidéo natif** de l'appareil (`NativePlayerPlugin`, Media3
-  ExoPlayer — hors WebView, décode via MediaCodec, souvent plus large que
-  le navigateur, en particulier pour HEVC) ; (2) si indisponible (PWA) ou
-  en échec, redemande la même URL avec l'extension `.m3u8` — certains
-  panels Xtream Codes transcodent alors à la volée en HLS H264/AAC. Aucun
-  des deux ne garantit la lecture de tout (l'audio AC3/DTS, en particulier,
-  n'est pas décodé par ExoPlayer standard sans extension FFmpeg — hors de
-  portée ici, elle nécessite un build NDK dédié).
+- **Codecs non supportés** (HEVC, audio AC3/E-AC3/DTS/TrueHD, courants sur
+  des rips IPTV) : le navigateur ne les décode pas toujours. Quand la
+  lecture web échoue, l'app retente dans l'ordre : (1) sur l'**APK
+  Android**, le **lecteur vidéo natif** de l'appareil (`NativePlayerPlugin`,
+  Media3 ExoPlayer — hors WebView, décode via MediaCodec pour la vidéo
+  (HEVC…) et embarque en plus un décodeur **FFmpeg** vendorisé pour
+  l'audio AC3/E-AC3/DTS/TrueHD, voir [`native/decoder-ffmpeg/NOTICE.md`]
+  (native/decoder-ffmpeg/NOTICE.md)) ; (2) si indisponible (PWA) ou en
+  échec, redemande la même URL avec l'extension `.m3u8` — certains panels
+  Xtream Codes transcodent alors à la volée en HLS H264/AAC. Aucun des deux
+  ne garantit la lecture de tout (codecs vidéo exotiques, flux
+  réellement hors service, etc.).
 - Les flux **`.ts` bruts** (mpeg-ts en direct, hors HLS) sont lus via
   [mpegts.js](https://github.com/xqq/mpegts.js) (Apache-2.0).
 - L'**EPG compressé** (`.gz`) n'est pas décompressé : il faut un lien XMLTV
@@ -113,6 +114,11 @@ www/
 
 ci/patch_native_player.py  injecte (à chaque build) dans android/ :
   NativePlayerPlugin.java     plugin Capacitor, ouvre l'écran natif
-  NativePlayerActivity.java   lecteur plein écran (Media3 ExoPlayer)
+  NativePlayerActivity.java   lecteur plein écran (Media3 ExoPlayer + FFmpeg)
   activity_native_player.xml  mise en page (PlayerView + titre + fermer)
+
+native/decoder-ffmpeg/  module Gradle vendorisé (voir NOTICE.md) :
+  décodeur audio FFmpeg pour AC3/E-AC3/DTS/TrueHD, relié au projet
+  Android par ci/patch_native_player.py (pas régénéré, contrairement à
+  android/ — ce dossier contient du code source, pas des artefacts de build)
 ```
