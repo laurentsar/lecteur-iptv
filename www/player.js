@@ -29,12 +29,26 @@
     closeBtn = overlay.querySelector('#playerClose');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
-      setStatus('Lecture impossible (' + currentEngine + ') — flux hors service, serveur injoignable, ou format/CORS non pris en charge par cet appareil.');
+      setStatus('Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error));
     });
     video.addEventListener('playing', function () { setStatus(''); });
   }
 
   function setStatus(msg) { if (statusEl) statusEl.textContent = msg || ''; }
+
+  // Le navigateur donne un code d'erreur précis sur l'élément <video> :
+  // s'appuyer dessus plutôt que sur un message générique qui ne distingue
+  // pas « serveur injoignable » de « codec non pris en charge ».
+  function describeMediaError(err) {
+    if (!err) return 'cause inconnue.';
+    switch (err.code) {
+      case 1: return 'lecture interrompue.';
+      case 2: return 'flux injoignable (erreur réseau) — vérifie l’URL, l’abonnement, ou si le serveur est en ligne.';
+      case 3: return 'flux corrompu ou codec non décodable par cet appareil.';
+      case 4: return 'format ou codec non pris en charge par cet appareil (HEVC, AC3/DTS et certains conteneurs sont courants sur des rips IPTV et pas toujours décodables sur mobile).';
+      default: return 'cause inconnue (code ' + err.code + ').';
+    }
+  }
 
   function destroyPlayers() {
     if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
