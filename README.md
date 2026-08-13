@@ -44,15 +44,16 @@ qu'elle affiche vient de la source que tu as configurée.
   non compressé.
 - **CORS** : beaucoup de serveurs IPTV bloquent les requêtes venant d'un
   navigateur (ils sont pensés pour des lecteurs natifs comme VLC). Sur
-  l'**APK Android**, le chargement des playlists M3U et de l'API Xtream
-  passe par le réseau natif de Capacitor (`www/net.js`) pour contourner ce
-  blocage. Sur la **PWA**, il n'y a pas de contournement possible (aucun
-  pont natif) : un serveur qui bloque le CORS y empêchera la playlist de se
-  charger. La **lecture vidéo** (HLS et mpeg-ts) et l'**EPG** restent
-  soumises au CORS du serveur de streaming dans les deux cas (Android et
-  PWA) : `net.js` ne couvre que la playlist/l'API, pas les flux vidéo eux-
-  mêmes, qui doivent rester lisibles en flux continu (impossible à
-  contourner par le même mécanisme).
+  l'**APK Android**, le chargement des playlists M3U, de l'API Xtream et
+  des flux **HLS** (manifeste + segments, via un loader hls.js dédié —
+  `www/hls-native-loader.js`) passe par le réseau natif de Capacitor
+  (`www/net.js`) pour contourner ce blocage. Sur la **PWA**, il n'y a pas
+  de contournement possible (aucun pont natif) : un serveur qui bloque le
+  CORS y empêchera la playlist ou la vidéo de se charger. Les flux
+  **mpeg-ts bruts** (en direct, en continu — pas découpés en fichiers
+  finis comme le HLS, donc impossible à charger via ce mécanisme) et
+  l'**EPG** restent soumis au CORS du serveur dans les deux cas (Android
+  et PWA).
 - La lecture nécessite une connexion réseau vers ton fournisseur : seule
   l'interface de l'app fonctionne hors ligne.
 
@@ -92,7 +93,8 @@ dépôt — un choix inhabituel, expliqué avec ses implications dans
 ```
 www/
   index.html     7 onglets
-  net.js         requêtes réseau (contourne les CORS via Capacitor sur Android)
+  net.js         requêtes réseau playlist/API (contourne les CORS via Capacitor sur Android)
+  hls-native-loader.js  chargeur hls.js natif (contourne les CORS sur les flux HLS, Android)
   store.js       persistance locale (playlists, favoris, cache)
   m3u.js         analyse des playlists M3U/M3U8, détection des séries
   xtream.js      client de l'API Xtream Codes

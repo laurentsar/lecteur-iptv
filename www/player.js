@@ -94,11 +94,12 @@
     video.load();
 
     if (isM3u8(url) && global.Hls && global.Hls.isSupported()) {
-      currentEngine = 'HLS';
+      var useNativeLoader = global.Net && global.Net.isNative() && global.CapacitorHttpLoader;
+      currentEngine = 'HLS' + (useNativeLoader ? ' natif' : '');
       setStatus('Connexion au flux (HLS)…');
-      hls = new global.Hls({ enableWorker: true });
+      hls = new global.Hls(useNativeLoader ? { enableWorker: true, loader: global.CapacitorHttpLoader } : { enableWorker: true });
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
-        if (data && data.fatal) attemptFallbackOrFail('Flux HLS interrompu (' + data.type + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
+        if (data && data.fatal) attemptFallbackOrFail('Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
       hls.loadSource(url);
       hls.attachMedia(video);
