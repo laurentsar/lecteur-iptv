@@ -38,6 +38,11 @@
     return api(cfg, 'get_short_epg', '&stream_id=' + encodeURIComponent(streamId) + '&limit=' + (limit || 2));
   }
 
+  function xmltvUrl(cfg) {
+    return baseUrl(cfg.serveur) + '/xmltv.php?username=' + encodeURIComponent(cfg.utilisateur) +
+      '&password=' + encodeURIComponent(cfg.motDePasse);
+  }
+
   function streamUrl(cfg, kind, streamId, ext) {
     var b = baseUrl(cfg.serveur);
     var u = encodeURIComponent(cfg.utilisateur), p = encodeURIComponent(cfg.motDePasse);
@@ -55,6 +60,6 @@
     liveCategories: liveCategories, liveStreams: liveStreams,
     vodCategories: vodCategories, vodStreams: vodStreams,
     seriesCategories: seriesCategories, seriesList: seriesList, seriesInfo: seriesInfo,
-    shortEpg: shortEpg, streamUrl: streamUrl, baseUrl: baseUrl, b64decode: b64decode
+    shortEpg: shortEpg, streamUrl: streamUrl, xmltvUrl: xmltvUrl, baseUrl: baseUrl, b64decode: b64decode
   };
 })(window);

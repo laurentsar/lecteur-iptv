@@ -13,7 +13,8 @@ qu'elle affiche vient de la source que tu as configurée.
 | Onglet | Contenu |
 |---|---|
 | 🏠 **Accueil** | Playlist active (et sélecteur si tu en as plusieurs), accès rapide aux 3 catégories, nombre de favoris. |
-| 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. |
+| 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). |
+| 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. |
 | 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. |
 | 🎞️ **Séries** | Liste des séries, puis saisons et épisodes. Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
 | ⭐ **Favoris** | Chaînes, films et séries marqués d'un ☆, tous fournisseurs confondus. |
@@ -39,7 +40,9 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
 
 - **Xtream Codes** : serveur + utilisateur + mot de passe. L'app interroge
   `player_api.php` (catégories et flux en direct/VOD/séries) et construit les
-  URL de lecture (`.../live/…/….m3u8`, `.../movie/…`, `.../series/…`).
+  URL de lecture (`.../live/…/….m3u8`, `.../movie/…`, `.../series/…`). Le
+  guide EPG est chargé automatiquement via l'export XMLTV standard du panel
+  (`xmltv.php`), sans configuration supplémentaire.
 - **M3U / M3U8** : par URL ou par fichier importé. Les attributs `tvg-id`,
   `tvg-logo`, `group-title` sont lus s'ils sont présents. Le guide EPG
   (XMLTV) est chargé automatiquement si la playlist déclare `url-tvg` /

@@ -5,15 +5,22 @@
   'use strict';
 
   var PAGE_SIZE = 60;
+  var GUIDE_PAGE = 25;
+  var PX_PER_MIN = 2; // échelle de l'agenda : 1h = 120px, 24h = 2880px
+  var DAY_MS = 86400000;
 
   var state = {
     playlist: null,
     m3uData: null,        // { epgUrl, items }
     epgMap: null,          // XMLTV : { channelId: [{start,stop,titre}] }
+    epgLoading: false,
     xtreamCats: { direct: null, films: null, series: null }, // [{id,label}]
     activeCategory: { direct: '', films: '', series: '' },
-    shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE },
-    xtreamItems: { direct: null, films: null, series: null } // chargés à la demande par catégorie
+    shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE },
+    xtreamItems: { direct: null, films: null, series: null }, // chargés à la demande par catégorie
+    directView: 'liste',   // 'liste' | 'mosaique'
+    guideChannelsCache: null, // toutes les chaînes direct (Xtream), indépendant du filtre par catégorie
+    guideDayOffset: 0
   };
 
   // ---------- utilitaires ----------
@@ -42,6 +49,7 @@
     else if (name === 'direct') renderKind('direct');
     else if (name === 'films') renderKind('films');
     else if (name === 'series') { $id('serieDetail').style.display = 'none'; $id('seriesRacine').style.display = ''; renderKind('series'); }
+    else if (name === 'guide') renderGuide(true);
     else if (name === 'favoris') renderFavoris();
     else if (name === 'playlists') renderPlaylists();
   }
@@ -56,11 +64,12 @@
   function setActivePlaylist(id) {
     Store.setActivePlaylistId(id);
     state.playlist = Store.getPlaylists().find(function (p) { return p.id === id; }) || null;
-    state.m3uData = null; state.epgMap = null;
+    state.m3uData = null; state.epgMap = null; state.epgLoading = false;
     state.xtreamCats = { direct: null, films: null, series: null };
     state.xtreamItems = { direct: null, films: null, series: null };
     state.activeCategory = { direct: '', films: '', series: '' };
-    state.shown = { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE };
+    state.shown = { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE };
+    state.guideChannelsCache = null; state.guideDayOffset = 0;
     updateHeader();
   }
 
@@ -91,12 +100,34 @@
     });
   }
 
+  // Source EPG : XMLTV déclaré par la playlist M3U (url-tvg), ou export
+  // XMLTV standard des panels Xtream Codes (xmltv.php) — une seule requête
+  // couvrant toutes les chaînes, indexée par id de chaîne (= stream_id pour
+  // Xtream, selon la convention standard de ces panels).
   function kickEpg() {
     var pl = state.playlist;
-    var url = (state.m3uData && state.m3uData.epgUrl) || (pl && pl.epgUrl);
-    if (!url || state.epgMap) return;
-    Epg.fetchXmltv(url).then(function (map) { state.epgMap = map; if (isTabActive('direct')) renderKind('direct'); })
-      .catch(function (err) { console.warn('EPG', err.message); });
+    if (!pl || state.epgMap || state.epgLoading) return;
+    var url = pl.type === 'm3u'
+      ? ((state.m3uData && state.m3uData.epgUrl) || pl.epgUrl)
+      : Xtream.xmltvUrl(xtreamCfg(pl));
+    if (!url) return;
+    state.epgLoading = true;
+    Epg.fetchXmltv(url).then(function (map) {
+      state.epgMap = map; state.epgLoading = false;
+      if (isTabActive('direct')) renderKind('direct');
+      if (isTabActive('guide')) renderGuide(false);
+    }).catch(function (err) { state.epgLoading = false; console.warn('EPG', err.message); });
+  }
+
+  function nowNextFor(item) {
+    if (!item.epgKey || !state.epgMap) return null;
+    return Epg.nowNext(state.epgMap, item.epgKey);
+  }
+
+  function epgBadge(item) {
+    var info = nowNextFor(item);
+    if (!info || !info.now) return null;
+    return el('div', 'carte-epg', '▶ ' + info.now.titre + (info.next ? ' · ensuite : ' + info.next.titre : ''));
   }
 
   function isTabActive(name) { var p = $id('tab-' + name); return p && p.classList.contains('active'); }
@@ -128,7 +159,7 @@
         if (kindKey === 'direct') {
           return { key: 'xt:live:' + pl.id + ':' + s.stream_id, kind: 'direct', name: s.name,
             logo: s.stream_icon, group: catLabel[s.category_id] || '', url: Xtream.streamUrl(cfg, 'live', s.stream_id, 'm3u8'),
-            streamId: s.stream_id };
+            streamId: s.stream_id, epgKey: String(s.stream_id) };
         }
         if (kindKey === 'films') {
           return { key: 'xt:vod:' + pl.id + ':' + s.stream_id, kind: 'films', name: s.name,
@@ -240,6 +271,7 @@
     var chipsId = kindKey === 'direct' ? 'chipsDirect' : kindKey === 'films' ? 'chipsFilms' : 'chipsSeries';
     var searchId = kindKey === 'direct' ? 'rechDirect' : kindKey === 'films' ? 'rechFilms' : 'rechSeries';
     var container = $id(listId), moreBtn = $id(moreId), chips = $id(chipsId), search = $id(searchId);
+    if (kindKey === 'direct') { container.classList.toggle('mosaique', state.directView === 'mosaique'); kickEpg(); }
 
     if (!pl) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.')); moreBtn.style.display = 'none'; chips.innerHTML = ''; return; }
 
@@ -262,10 +294,9 @@
         } else {
           var items = pool.filter(function (it) { return (!cat || it.groupTitle === cat) && matchesSearch(it, q); })
             .map(function (it) {
-              var epg = state.epgMap && it.tvgId ? Epg.nowNext(state.epgMap, it.tvgId) : null;
-              var badge = null;
-              if (epg && epg.now) { badge = el('div', 'carte-epg', '▶ ' + epg.now.titre + (epg.next ? ' · ensuite : ' + epg.next.titre : '')); }
-              return Object.assign({}, it, { _badge: badge });
+              var withKey = Object.assign({}, it, { epgKey: it.tvgId || null });
+              withKey._badge = epgBadge(withKey);
+              return withKey;
             });
           renderList(container, moreBtn, items, kindKey, { epgBadgeFn: null });
           // (le badge EPG est déjà calculé par item ; on l'injecte après coup)
@@ -290,7 +321,14 @@
         state.xtreamItems[kindKey] = items;
         var q = search.value.trim().toLowerCase();
         var filtered = items.filter(function (it) { return matchesSearch(it, q); });
+        if (kindKey === 'direct') filtered = filtered.map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
         renderList(container, moreBtn, filtered, kindKey, { onOpen: kindKey === 'series' ? openSerieXtream : null });
+        if (kindKey === 'direct') {
+          Array.prototype.forEach.call(container.children, function (node, i) {
+            var corps = filtered[i] && filtered[i]._badge && node.querySelector('.carte-corps');
+            if (corps) corps.appendChild(filtered[i]._badge);
+          });
+        }
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
     }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
   }
@@ -306,6 +344,143 @@
   $id('plusDirect').addEventListener('click', function () { state.shown.direct += PAGE_SIZE; renderKind('direct'); });
   $id('plusFilms').addEventListener('click', function () { state.shown.films += PAGE_SIZE; renderKind('films'); });
   $id('plusSeries').addEventListener('click', function () { state.shown.series += PAGE_SIZE; renderKind('series'); });
+
+  $id('directViewToggle').addEventListener('click', function (e) {
+    var b = e.target.closest('.view-btn');
+    if (!b || b.classList.contains('active')) return;
+    state.directView = b.dataset.view;
+    Array.prototype.forEach.call(document.querySelectorAll('#directViewToggle .view-btn'), function (x) { x.classList.toggle('active', x === b); });
+    renderKind('direct');
+  });
+
+  // ---------- Guide TV (agenda heure par heure) ----------
+  // Toutes les chaînes « en direct » de la playlist active, indépendamment
+  // du filtre par catégorie utilisé dans l'onglet En direct. Les entrées
+  // décoratives (séparateurs de catégorie) sont exclues.
+  function directChannels() {
+    var pl = state.playlist;
+    if (!pl) return Promise.resolve([]);
+    if (pl.type === 'm3u') {
+      return ensureM3uLoaded().then(function (data) {
+        return data.items
+          .filter(function (it) { return it.kind === 'live' && it.url && !looksLikeSeparator(it.name); })
+          .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null }); });
+      });
+    }
+    if (state.guideChannelsCache) return Promise.resolve(state.guideChannelsCache);
+    return ensureXtreamItems('direct', '').then(function (items) {
+      state.guideChannelsCache = items;
+      return items;
+    });
+  }
+
+  function renderGuide(resetScroll) {
+    var pl = state.playlist;
+    var wrap = $id('guideWrap'), moreBtn = $id('plusGuide'), search = $id('rechGuide'), dayLabel = $id('guideDayLabel');
+
+    if (!pl) {
+      wrap.innerHTML = '';
+      wrap.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.'));
+      moreBtn.style.display = 'none';
+      return;
+    }
+
+    kickEpg();
+
+    var dayStartDate = new Date();
+    dayStartDate.setHours(0, 0, 0, 0);
+    var dayStart = dayStartDate.getTime() + state.guideDayOffset * DAY_MS;
+    var dayEnd = dayStart + DAY_MS;
+    dayLabel.textContent = state.guideDayOffset === 0
+      ? 'Aujourd’hui · ' + new Date(dayStart).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+      : new Date(dayStart).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+
+    directChannels().then(function (all) {
+      var q = search.value.trim().toLowerCase();
+      var list = all.filter(function (it) { return matchesSearch(it, q); });
+      wrap.innerHTML = '';
+      if (!list.length) {
+        wrap.appendChild(el('div', 'hint', state.epgLoading ? 'Chargement du guide…' : 'Aucun résultat.'));
+        moreBtn.style.display = 'none';
+        return;
+      }
+
+      var shown = state.shown.guide;
+      var now = Date.now();
+      var grid = el('div', 'guide-grid');
+
+      var corner = el('div', 'guide-corner');
+      grid.appendChild(corner);
+
+      var hoursHeader = el('div', 'guide-hours');
+      for (var h = 0; h < 24; h++) {
+        var tick = el('div', 'guide-hour-tick', (h < 10 ? '0' + h : h) + 'h');
+        tick.style.left = (h * 60 * PX_PER_MIN) + 'px';
+        tick.style.width = (60 * PX_PER_MIN) + 'px';
+        hoursHeader.appendChild(tick);
+      }
+      grid.appendChild(hoursHeader);
+
+      list.slice(0, shown).forEach(function (item) {
+        var chan = el('div', 'guide-chan');
+        if (item.logo) {
+          var img = document.createElement('img');
+          img.loading = 'lazy'; img.src = item.logo; img.alt = '';
+          img.onerror = function () { img.remove(); };
+          chan.appendChild(img);
+        }
+        chan.appendChild(el('span', null, item.name));
+        chan.addEventListener('click', function () { Player.open(item.url, item.name); });
+        grid.appendChild(chan);
+
+        var timeline = el('div', 'guide-timeline');
+        var progs = (item.epgKey && state.epgMap && state.epgMap[item.epgKey]) || [];
+        var visible = progs.filter(function (p) { return p.start != null && p.stop != null && p.stop > dayStart && p.start < dayEnd; });
+        if (!visible.length) {
+          timeline.appendChild(el('div', 'guide-empty', 'Pas de programme disponible'));
+        } else {
+          visible.forEach(function (p) {
+            var s = Math.max(p.start, dayStart), e = Math.min(p.stop, dayEnd);
+            var isNow = now >= p.start && now < p.stop;
+            var block = el('div', 'guide-prog' + (isNow ? ' now' : ''), p.titre || '(sans titre)');
+            block.style.left = ((s - dayStart) / 60000 * PX_PER_MIN) + 'px';
+            block.style.width = Math.max(28, (e - s) / 60000 * PX_PER_MIN) + 'px';
+            block.title = p.titre || '';
+            block.addEventListener('click', function () { Player.open(item.url, item.name); });
+            timeline.appendChild(block);
+          });
+        }
+        grid.appendChild(timeline);
+      });
+
+      if (now >= dayStart && now < dayEnd) {
+        var nowLine = el('div', 'guide-nowline');
+        nowLine.style.left = (120 + (now - dayStart) / 60000 * PX_PER_MIN) + 'px';
+        grid.appendChild(nowLine);
+      }
+
+      wrap.appendChild(grid);
+      moreBtn.style.display = list.length > shown ? '' : 'none';
+
+      if (resetScroll) {
+        wrap.scrollLeft = state.guideDayOffset === 0 ? Math.max(0, (now - dayStart) / 60000 * PX_PER_MIN - 80) : 0;
+        wrap.scrollTop = 0;
+      }
+    }).catch(function (err) {
+      wrap.innerHTML = '';
+      wrap.appendChild(el('div', 'hint', 'Impossible de charger les chaînes : ' + err.message));
+      moreBtn.style.display = 'none';
+    });
+  }
+
+  $id('rechGuide').addEventListener('input', function () { state.shown.guide = GUIDE_PAGE; renderGuide(false); });
+  $id('plusGuide').addEventListener('click', function () { state.shown.guide += GUIDE_PAGE; renderGuide(false); });
+  $id('guidePrevDay').addEventListener('click', function () { state.guideDayOffset--; state.shown.guide = GUIDE_PAGE; renderGuide(true); });
+  $id('guideNextDay').addEventListener('click', function () { state.guideDayOffset++; state.shown.guide = GUIDE_PAGE; renderGuide(true); });
+  $id('guideDayLabel').addEventListener('click', function () {
+    if (state.guideDayOffset === 0) return;
+    state.guideDayOffset = 0; state.shown.guide = GUIDE_PAGE; renderGuide(true);
+  });
 
   // ---------- détail d'une série ----------
   function openSerieM3u(serie) {

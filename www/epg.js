@@ -24,31 +24,42 @@
     return b[0] === 0x1f && b[1] === 0x8b;
   }
 
+  function parseXmltvText(text) {
+    var xml = new DOMParser().parseFromString(text, 'text/xml');
+    if (xml.querySelector('parsererror')) throw new Error('XMLTV invalide (ou EPG compressé .gz non pris en charge)');
+    var byChannel = {};
+    xml.querySelectorAll('programme').forEach(function (p) {
+      var ch = p.getAttribute('channel');
+      if (!ch) return;
+      var titleEl = p.querySelector('title');
+      var entry = {
+        start: parseXmltvDate(p.getAttribute('start')),
+        stop: parseXmltvDate(p.getAttribute('stop')),
+        titre: titleEl ? titleEl.textContent : ''
+      };
+      (byChannel[ch] = byChannel[ch] || []).push(entry);
+    });
+    Object.keys(byChannel).forEach(function (ch) {
+      byChannel[ch].sort(function (a, b) { return (a.start || 0) - (b.start || 0); });
+    });
+    return byChannel;
+  }
+
+  // Sur l'APK Android, on passe par le réseau natif (Net.fetchText) pour
+  // éviter les blocages CORS des panels IPTV — comme pour les playlists et
+  // l'API Xtream. La détection de fichier .gz (magic bytes) nécessite les
+  // octets bruts, donc uniquement possible sur le chemin fetch() navigateur.
   function fetchXmltv(url) {
+    if (global.Net && global.Net.isNative()) {
+      return global.Net.fetchText(url).then(parseXmltvText);
+    }
     return fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.arrayBuffer();
     }).then(function (buf) {
       if (looksGzip(buf)) throw new Error('EPG compressé (.gz) non pris en charge — utilise un lien XMLTV non compressé.');
       var text = new TextDecoder('utf-8').decode(buf);
-      var xml = new DOMParser().parseFromString(text, 'text/xml');
-      if (xml.querySelector('parsererror')) throw new Error('XMLTV invalide');
-      var byChannel = {};
-      xml.querySelectorAll('programme').forEach(function (p) {
-        var ch = p.getAttribute('channel');
-        if (!ch) return;
-        var titleEl = p.querySelector('title');
-        var entry = {
-          start: parseXmltvDate(p.getAttribute('start')),
-          stop: parseXmltvDate(p.getAttribute('stop')),
-          titre: titleEl ? titleEl.textContent : ''
-        };
-        (byChannel[ch] = byChannel[ch] || []).push(entry);
-      });
-      Object.keys(byChannel).forEach(function (ch) {
-        byChannel[ch].sort(function (a, b) { return (a.start || 0) - (b.start || 0); });
-      });
-      return byChannel;
+      return parseXmltvText(text);
     });
   }
 

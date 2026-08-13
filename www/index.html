@@ -23,6 +23,7 @@
   <nav class="tabs" id="tabs">
     <button class="tab active" data-tab="accueil">🏠 Accueil</button>
     <button class="tab" data-tab="direct">📺 En direct</button>
+    <button class="tab" data-tab="guide">🗓️ Guide</button>
     <button class="tab" data-tab="films">🎬 Films</button>
     <button class="tab" data-tab="series">🎞️ Séries</button>
     <button class="tab" data-tab="favoris">⭐ Favoris</button>
@@ -40,10 +41,28 @@
     <section class="panel" id="tab-direct">
       <div class="card toolbar">
         <input type="search" id="rechDirect" placeholder="Rechercher une chaîne…" />
+        <div class="view-toggle" id="directViewToggle">
+          <button class="view-btn active" data-view="liste">🔳 Liste</button>
+          <button class="view-btn" data-view="mosaique">🔲 Mosaïque</button>
+        </div>
         <div id="chipsDirect" class="chips"></div>
       </div>
       <div id="listeDirect" class="grid-cartes"></div>
       <div class="row"><button id="plusDirect" class="ghost" style="display:none">Charger plus</button></div>
+    </section>
+
+    <!-- ================= GUIDE TV ================= -->
+    <section class="panel" id="tab-guide">
+      <div class="card toolbar">
+        <input type="search" id="rechGuide" placeholder="Rechercher une chaîne…" />
+        <div class="guide-daynav">
+          <button id="guidePrevDay" class="daynav-btn">◀</button>
+          <span class="guide-daylabel" id="guideDayLabel"></span>
+          <button id="guideNextDay" class="daynav-btn">▶</button>
+        </div>
+      </div>
+      <div id="guideWrap" class="guide-wrap"></div>
+      <div class="row"><button id="plusGuide" class="ghost" style="display:none">Charger plus</button></div>
     </section>
 
     <!-- ================= FILMS ================= -->
@@ -134,6 +153,10 @@
         <p class="hint">Limites connues : les films/séries dont le fichier utilise un codec que le navigateur ne décode pas (HEVC, audio AC3/E-AC3/DTS/TrueHD, courants sur des rips IPTV) peuvent échouer dans le lecteur web — sur l'<strong>APK Android</strong>, l'app retente alors automatiquement avec le lecteur vidéo natif de l'appareil (Media3 ExoPlayer, hors WebView), qui embarque en plus un décodeur audio FFmpeg pour l'AC3/E-AC3/DTS/TrueHD ; sur la <strong>PWA</strong>, il n'y a pas de repli natif possible. Les flux <code>.ts</code> bruts (mpeg-ts en direct) sont lus via une librairie de démuxage dédiée (mpegts.js). L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Sur l'APK Android, le chargement des playlists, de l'API Xtream et des flux HLS (manifeste + segments) passe par le réseau natif pour éviter les blocages CORS des serveurs IPTV ; sur la PWA, un serveur qui bloque les requêtes navigateur (CORS) peut empêcher la playlist ou la vidéo de se charger. Les flux mpeg-ts bruts (en continu, non découpés en segments) et l'EPG restent soumis au CORS du serveur dans les deux cas. Certaines playlists utilisent une entrée factice comme séparateur visuel de catégorie (ex. <code>||--- FR ---||</code>) : l'app la détecte et l'affiche comme un titre de section, pas comme une chaîne cliquable. Si un flux ne démarre ni n'échoue en 20 secondes (chaîne hors service), un message s'affiche au lieu de rester bloqué.</p>
       </div>
       <div class="card">
+        <h2>🔲 Mosaïque &amp; 🗓️ Guide TV</h2>
+        <p class="hint">Dans <strong>En direct</strong>, un bouton bascule entre la liste habituelle et une <strong>mosaïque</strong> compacte (logos + programme en cours). L'onglet <strong>Guide</strong> affiche un agenda heure par heure de toutes les chaînes en direct (une ligne par chaîne, défilement horizontal dans le temps, ligne rouge = maintenant, navigation jour précédent/suivant). Nécessite un EPG XMLTV (playlist M3U avec url-tvg, ou export xmltv.php automatique pour les comptes Xtream Codes) — sans EPG disponible, les chaînes s'affichent sans programme.</p>
+      </div>
+      <div class="card">
         <h2>📺 Diffusion vers une TV</h2>
         <p class="hint">Le bouton dans le lecteur envoie le flux en cours sur une TV : <strong>Chromecast</strong> (Android, APK et navigateur Chrome) ou <strong>AirPlay</strong> (iPhone/Mac, Safari). Aucun compte requis. Sur iPhone, comme l'app n'existe pas en version installable, c'est le lecteur web (Safari) qui sert de lecteur.</p>
       </div>
@@ -151,7 +174,7 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    window.APP_VERSION = '1.10';
+    window.APP_VERSION = '1.11';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
