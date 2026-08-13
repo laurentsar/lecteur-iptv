@@ -10,6 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # Le mot de passe du keystore n'a pas de valeur de confidentialité propre
+    # ici : la clé privée elle-même est déjà versionnée en clair dans
+    # signing/release.keystore (voir signing/README.md). Il n'y a donc rien
+    # à protéger de plus en le gardant dans un secret GitHub.
+    env:
+      SIGNING_PASSWORD: 7aacb228133ae3fb38becdb695d2391a
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,20 +64,20 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
+      # La clé de signature est versionnée dans signing/release.keystore (voir
+      # signing/README.md pour l'explication du choix). Elle assure une
+      # identité de signature stable d'une release à l'autre, ce qui permet
+      # à la bannière de mise à jour de l'app d'installer par-dessus
+      # l'existant sans désinstallation manuelle.
       - name: Restore signing keystore
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
         run: |
-          if [ -z "$KEYSTORE_B64" ]; then
-            echo "::error::secret ANDROID_KEYSTORE_B64 absent"; exit 1
-          fi
           mkdir -p android/app
-          printf '%s' "$KEYSTORE_B64" | base64 -d > android/app/signing.p12
+          cp signing/release.keystore android/app/signing.p12
 
       - name: Build release APK (signed)
         working-directory: android
         env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ env.SIGNING_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Read app version

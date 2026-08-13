@@ -70,10 +70,9 @@ applique la signature (`ci/patch_signing.py`), la version (`ci/set_version.py`),
 les icônes (`ci/set_icons.py`) et l'autorisation HTTP en clair pour les
 serveurs IPTV en `http://` (`ci/patch_manifest.py`).
 
-La clé de signature n'est **pas** versionnée : le build release attend les
-secrets GitHub `ANDROID_KEYSTORE_B64` (le fichier `.p12` encodé en base64) et
-`ANDROID_KEYSTORE_PASSWORD` dans **Settings → Secrets and variables →
-Actions** de ce dépôt.
+La clé de signature (`signing/release.keystore`) **est** versionnée dans ce
+dépôt — un choix inhabituel, expliqué avec ses implications dans
+[`signing/README.md`](signing/README.md).
 
 ## Structure
 

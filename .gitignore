@@ -5,3 +5,6 @@ android/
 *.keystore
 *.apk
 .gradle/
+
+# Signature applicative versionnée volontairement (voir signing/README.md).
+!signing/release.keystore
