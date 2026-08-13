@@ -7,6 +7,7 @@
 
   var hls = null;
   var mpegtsPlayer = null;
+  var currentEngine = '';
   var overlay, video, titleEl, statusEl, closeBtn;
 
   function ensureDom() {
@@ -27,7 +28,9 @@
     statusEl = overlay.querySelector('#playerStatus');
     closeBtn = overlay.querySelector('#playerClose');
     closeBtn.addEventListener('click', close);
-    video.addEventListener('error', function () { setStatus('Lecture impossible — flux hors service, format non pris en charge, ou serveur injoignable.'); });
+    video.addEventListener('error', function () {
+      setStatus('Lecture impossible (' + currentEngine + ') — flux hors service, serveur injoignable, ou format/CORS non pris en charge par cet appareil.');
+    });
     video.addEventListener('playing', function () { setStatus(''); });
   }
 
@@ -39,34 +42,43 @@
   }
 
   function isM3u8(url) { return /\.m3u8(\?|#|$)/i.test(url); }
-  function isMpegts(url) { return /\.ts(\?|#|$)/i.test(url); }
+  // Les flux "live" IPTV qui ne sont pas du HLS sont presque toujours du
+  // mpeg-ts brut, avec ou sans extension .ts explicite dans l'URL (beaucoup
+  // de panels Xtream Codes n'en mettent pas). On ne traite comme "fichier
+  // direct" (mp4/mkv...) que les extensions de VOD reconnues.
+  function isDirectFile(url) { return /\.(mp4|mkv|webm|mov|m4v|avi)(\?|#|$)/i.test(url); }
 
   function open(url, title) {
     ensureDom();
     overlay.classList.add('show');
     titleEl.textContent = title || '';
-    setStatus('Connexion au flux…');
     destroyPlayers();
     video.removeAttribute('src');
     video.load();
 
     if (isM3u8(url) && global.Hls && global.Hls.isSupported()) {
+      currentEngine = 'HLS';
+      setStatus('Connexion au flux (HLS)…');
       hls = new global.Hls({ enableWorker: true });
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
-        if (data && data.fatal) setStatus('Flux interrompu (' + data.type + ').');
+        if (data && data.fatal) setStatus('Flux HLS interrompu (' + data.type + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
       hls.loadSource(url);
       hls.attachMedia(video);
       video.play().catch(function () {});
-    } else if (isMpegts(url) && global.mpegts && global.mpegts.isSupported()) {
+    } else if (!isDirectFile(url) && global.mpegts && global.mpegts.isSupported()) {
+      currentEngine = 'mpeg-ts';
+      setStatus('Connexion au flux (mpeg-ts)…');
       mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: url });
       mpegtsPlayer.on(global.mpegts.Events.ERROR, function () {
-        setStatus('Flux interrompu — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
+        setStatus('Flux mpeg-ts interrompu — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
       });
       mpegtsPlayer.attachMediaElement(video);
       mpegtsPlayer.load();
       mpegtsPlayer.play().catch(function () {});
     } else {
+      currentEngine = !isDirectFile(url) && global.mpegts && !global.mpegts.isSupported() ? 'direct — mpeg-ts non supporté par cet appareil' : 'direct';
+      setStatus('Connexion au flux (' + currentEngine + ')…');
       video.src = url;
       video.play().catch(function () {});
     }
