@@ -240,6 +240,21 @@ button.ghost { background: var(--card2); color: var(--text); }
 #playerVideo { flex: 1; width: 100%; background: #000; }
 .player-status { color: #ffb454; font-size: 12.5px; text-align: center; padding: 8px; min-height: 14px; }
 
+/* ---------- menu langue / sous-titres ---------- */
+.tracks-menu {
+  position: absolute; top: calc(48px + env(safe-area-inset-top)); right: 10px; z-index: 30;
+  background: #16273a; border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px; width: 220px; max-width: 70vw; max-height: 60vh; overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+.tracks-title { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 700; padding: 6px 6px 4px; }
+.tracks-item {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  color: var(--text); font-size: 13px; padding: 8px 6px; border-radius: 8px; cursor: pointer; font-family: inherit;
+}
+.tracks-item:active { background: var(--card2); }
+.tracks-item.active { color: var(--accent); font-weight: 700; }
+
 /* ---------- guide TV (agenda heure par heure) ---------- */
 .guide-daynav { display: flex; align-items: center; gap: 6px; }
 .daynav-btn {

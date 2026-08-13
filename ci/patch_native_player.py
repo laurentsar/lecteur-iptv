@@ -58,7 +58,9 @@ public class NativePlayerPlugin extends Plugin {
 
 ACTIVITY_JAVA = """package com.laurent.iptvlecteur;
 
+import android.app.AlertDialog;
 import android.app.PictureInPictureParams;
+import android.content.DialogInterface;
 import android.content.res.Configuration;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -73,14 +75,21 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.mediarouter.app.MediaRouteButton;
 import androidx.media3.cast.CastPlayer;
 import androidx.media3.cast.SessionAvailabilityListener;
+import androidx.media3.common.C;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.TrackGroup;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
 import com.google.android.gms.cast.framework.CastButtonFactory;
 import com.google.android.gms.cast.framework.CastContext;
+import java.util.ArrayList;
+import java.util.List;
 
 public class NativePlayerActivity extends AppCompatActivity {
     private static final long LOAD_TIMEOUT_MS = 20000; // certaines entrées de
@@ -92,6 +101,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private PlayerView playerView;
     private TextView statusView;
     private View topBar;
+    private ImageButton tracksBtn;
     private String mediaUrl;
     private boolean isLive; // Picture-in-Picture : proposé et auto-activé au
     // bouton Accueil uniquement pour le direct (pas d'intérêt pour la VOD,
@@ -157,6 +167,14 @@ public class NativePlayerActivity extends AppCompatActivity {
             pipBtn.setVisibility(View.GONE);
         }
 
+        tracksBtn = findViewById(R.id.playerTracksBtn);
+        tracksBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showTrackPicker();
+            }
+        });
+
         statusView = findViewById(R.id.playerStatusText);
         playerView = findViewById(R.id.playerView);
 
@@ -211,6 +229,10 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         playerView.setPlayer(newPlayer);
         newPlayer.addListener(playerListener);
+        // Le choix de langue/sous-titres ne s'applique qu'à la lecture locale
+        // (ExoPlayer) : CastPlayer ne partage pas la même API de sélection de
+        // pistes, on masque donc le bouton pendant une diffusion Chromecast.
+        tracksBtn.setVisibility(newPlayer == localPlayer ? View.VISIBLE : View.GONE);
 
         timeoutHandler.removeCallbacks(timeoutRunnable);
         if (mediaUrl != null && !mediaUrl.isEmpty()) {
@@ -255,6 +277,95 @@ public class NativePlayerActivity extends AppCompatActivity {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         topBar.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         playerView.setUseController(!isInPictureInPictureMode);
+    }
+
+    // Liste à plat (audio puis sous-titres) plutôt qu'un dialogue à onglets :
+    // ExoPlayer expose les pistes disponibles pour n'importe quel conteneur
+    // (HLS, mp4, mkv...) via la même API, contrairement au web où seul hls.js
+    // sait le faire — c'est justement pour ces cas (VOD HEVC/mkv multi-pistes)
+    // que ce lecteur natif de secours est utilisé.
+    private void showTrackPicker() {
+        if (localPlayer == null) {
+            return;
+        }
+        Tracks tracks = localPlayer.getCurrentTracks();
+        final List<String> labels = new ArrayList<>();
+        final List<Runnable> actions = new ArrayList<>();
+
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_AUDIO) {
+                continue;
+            }
+            for (int i = 0; i < group.length; i++) {
+                if (!group.isTrackSupported(i)) {
+                    continue;
+                }
+                Format format = group.getTrackFormat(i);
+                String name = format.label != null ? format.label : (format.language != null ? format.language : "Piste " + (i + 1));
+                boolean selected = group.isTrackSelected(i);
+                labels.add("🔊 Audio : " + name + (selected ? " ✓" : ""));
+                final TrackGroup mediaTrackGroup = group.getMediaTrackGroup();
+                final int trackIndex = i;
+                actions.add(new Runnable() {
+                    @Override
+                    public void run() {
+                        localPlayer.setTrackSelectionParameters(
+                                localPlayer.getTrackSelectionParameters().buildUpon()
+                                        .setOverrideForType(new TrackSelectionOverride(mediaTrackGroup, trackIndex))
+                                        .build());
+                    }
+                });
+            }
+        }
+
+        boolean subtitlesDisabled = localPlayer.getTrackSelectionParameters().disabledTrackTypes.contains(C.TRACK_TYPE_TEXT);
+        labels.add("💬 Sous-titres : désactivés" + (subtitlesDisabled ? " ✓" : ""));
+        actions.add(new Runnable() {
+            @Override
+            public void run() {
+                localPlayer.setTrackSelectionParameters(
+                        localPlayer.getTrackSelectionParameters().buildUpon()
+                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                                .build());
+            }
+        });
+
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_TEXT) {
+                continue;
+            }
+            for (int i = 0; i < group.length; i++) {
+                if (!group.isTrackSupported(i)) {
+                    continue;
+                }
+                Format format = group.getTrackFormat(i);
+                String name = format.label != null ? format.label : (format.language != null ? format.language : "Piste " + (i + 1));
+                boolean selected = !subtitlesDisabled && group.isTrackSelected(i);
+                labels.add("💬 Sous-titres : " + name + (selected ? " ✓" : ""));
+                final TrackGroup mediaTrackGroup = group.getMediaTrackGroup();
+                final int trackIndex = i;
+                actions.add(new Runnable() {
+                    @Override
+                    public void run() {
+                        localPlayer.setTrackSelectionParameters(
+                                localPlayer.getTrackSelectionParameters().buildUpon()
+                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                        .setOverrideForType(new TrackSelectionOverride(mediaTrackGroup, trackIndex))
+                                        .build());
+                    }
+                });
+            }
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Langue et sous-titres")
+                .setItems(labels.toArray(new String[0]), new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        actions.get(which).run();
+                    }
+                })
+                .show();
     }
 
     @Override
@@ -349,6 +460,15 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
             android:visibility="gone" />
 
         <ImageButton
+            android:id="@+id/playerTracksBtn"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_tracks"
+            android:contentDescription="Langue et sous-titres" />
+
+        <ImageButton
             android:id="@+id/playerCloseBtn"
             android:layout_width="40dp"
             android:layout_height="40dp"
@@ -381,6 +501,20 @@ IC_PIP_XML = """<?xml version="1.0" encoding="utf-8"?>
     <path
         android:fillColor="#FF000000"
         android:pathData="M19,7h-8v6h8V7zM23,3H1v18h22V3zM21,19H3V5h18V19z" />
+</vector>
+"""
+
+# Icône « language » (globe) — Google Material Icons (Apache License 2.0).
+IC_TRACKS_XML = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM11,19.93c-3.95,-0.49 -7,-3.85 -7,-7.93c0,-0.62 0.08,-1.21 0.21,-1.79L9,15v1c0,1.1 0.9,2 2,2v1.93zM17.9,17.39c-0.26,-0.81 -1,-1.39 -1.9,-1.39h-1v-3c0,-0.55 -0.45,-1 -1,-1H8v-2h2c0.55,0 1,-0.45 1,-1V7h2c1.1,0 2,-0.9 2,-2v-0.41c2.93,1.19 5,4.06 5,7.41c0,2.08 -0.8,3.97 -2.1,5.39z" />
 </vector>
 """
 
@@ -480,6 +614,7 @@ write_if_changed(PKG_DIR + "/NativePlayerActivity.java", ACTIVITY_JAVA)
 write_if_changed(PKG_DIR + "/CastOptionsProvider.java", CAST_OPTIONS_PROVIDER_JAVA)
 write_if_changed(RES_DIR + "/layout/activity_native_player.xml", LAYOUT_XML)
 write_if_changed(RES_DIR + "/drawable/ic_pip.xml", IC_PIP_XML)
+write_if_changed(RES_DIR + "/drawable/ic_tracks.xml", IC_TRACKS_XML)
 patch_settings_gradle()
 patch_build_gradle()
 patch_manifest()

@@ -25,7 +25,7 @@
   var originalUrl = '', originalTitle = '';
   var currentIsLive = false; // PiP proposé uniquement pour le direct
   var triedNativeFallback = false, triedM3u8Fallback = false;
-  var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, castLauncher;
+  var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, tracksBtn, tracksMenu, castLauncher;
   var castSdkRequested = false;
   var loadTimeoutId = null;
   var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
@@ -43,7 +43,14 @@
       '  <google-cast-launcher id="castLauncher" class="player-cast" style="display:none"></google-cast-launcher>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
       '  <button id="playerPip" class="player-cast" aria-label="Picture-in-Picture" style="display:none">⧉</button>' +
+      '  <button id="playerTracks" class="player-cast" aria-label="Langue et sous-titres" style="display:none">🌐</button>' +
       '  <button id="playerClose" class="player-close" aria-label="Fermer">✕</button>' +
+      '</div>' +
+      '<div id="playerTracksMenu" class="tracks-menu" style="display:none">' +
+      '  <div class="tracks-title">Audio</div>' +
+      '  <div id="tracksAudioList"></div>' +
+      '  <div class="tracks-title">Sous-titres</div>' +
+      '  <div id="tracksSubList"></div>' +
       '</div>' +
       '<video id="playerVideo" playsinline controls autoplay></video>' +
       '<div id="playerStatus" class="player-status"></div>';
@@ -54,6 +61,8 @@
     closeBtn = overlay.querySelector('#playerClose');
     airplayBtn = overlay.querySelector('#playerAirplay');
     pipBtn = overlay.querySelector('#playerPip');
+    tracksBtn = overlay.querySelector('#playerTracks');
+    tracksMenu = overlay.querySelector('#playerTracksMenu');
     castLauncher = overlay.querySelector('#castLauncher');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
@@ -64,6 +73,7 @@
     setupAirplay();
     setupChromecast();
     setupPip();
+    setupTracks();
   }
 
   // ---------- Picture-in-Picture (chaînes en direct uniquement) ----------
@@ -94,6 +104,116 @@
     video.addEventListener('webkitpresentationmodechanged', function () {
       pipBtn.classList.toggle('active', video.webkitPresentationMode === 'picture-in-picture');
     });
+  }
+
+  // ---------- Langue audio / sous-titres ----------
+  // hls.js expose les pistes alternatives déclarées par le manifeste HLS
+  // (#EXT-X-MEDIA) ; Safari fait de même nativement via video.audioTracks /
+  // video.textTracks pour son moteur HLS interne. Pas de support pour les
+  // flux mpeg-ts bruts (mpegts.js) ni la lecture directe (mp4/mkv) : ces
+  // moteurs n'exposent pas de pistes alternatives navigables côté web — le
+  // lecteur natif Android (ExoPlayer) prend le relais pour ces cas.
+  function getAudioTracks() {
+    if (hls) return hls.audioTracks.map(function (t, i) { return { id: i, label: t.name || t.lang || ('Piste ' + (i + 1)) }; });
+    if (video.audioTracks && video.audioTracks.length > 1) {
+      return Array.prototype.map.call(video.audioTracks, function (t, i) { return { id: i, label: t.label || t.language || ('Piste ' + (i + 1)) }; });
+    }
+    return [];
+  }
+
+  function getCurrentAudioTrack() {
+    if (hls) return hls.audioTrack;
+    if (video.audioTracks) {
+      for (var i = 0; i < video.audioTracks.length; i++) if (video.audioTracks[i].enabled) return i;
+    }
+    return -1;
+  }
+
+  function setAudioTrack(id) {
+    if (hls) { hls.audioTrack = id; renderTracksMenu(); return; }
+    if (video.audioTracks) {
+      for (var i = 0; i < video.audioTracks.length; i++) video.audioTracks[i].enabled = (i === id);
+      renderTracksMenu();
+    }
+  }
+
+  function getSubtitleTracks() {
+    if (hls) return hls.subtitleTracks.map(function (t, i) { return { id: i, label: t.name || t.lang || ('Piste ' + (i + 1)) }; });
+    if (video.textTracks && video.textTracks.length) {
+      return Array.prototype.filter.call(video.textTracks, function (t) { return t.kind === 'subtitles' || t.kind === 'captions'; })
+        .map(function (t, i) { return { id: i, label: t.label || t.language || ('Piste ' + (i + 1)) }; });
+    }
+    return [];
+  }
+
+  function getCurrentSubtitleTrack() {
+    if (hls) return hls.subtitleDisplay ? hls.subtitleTrack : -1;
+    if (video.textTracks) {
+      for (var i = 0; i < video.textTracks.length; i++) if (video.textTracks[i].mode === 'showing') return i;
+    }
+    return -1;
+  }
+
+  function setSubtitleTrack(id) {
+    if (hls) {
+      if (id === -1) { hls.subtitleDisplay = false; } else { hls.subtitleTrack = id; hls.subtitleDisplay = true; }
+      renderTracksMenu();
+      return;
+    }
+    if (video.textTracks) {
+      for (var i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = (i === id) ? 'showing' : 'disabled';
+      renderTracksMenu();
+    }
+  }
+
+  function updateTracksVisibility() {
+    var hasChoice = getAudioTracks().length > 1 || getSubtitleTracks().length > 0;
+    tracksBtn.style.display = hasChoice ? '' : 'none';
+    if (!hasChoice) tracksMenu.style.display = 'none';
+  }
+
+  function tracksMenuList(container, tracks, current, onOff, onPick) {
+    container.innerHTML = '';
+    if (onOff) {
+      var off = document.createElement('button');
+      off.className = 'tracks-item' + (current === -1 ? ' active' : '');
+      off.textContent = (current === -1 ? '✓ ' : '') + 'Désactivés';
+      off.addEventListener('click', function () { onPick(-1); });
+      container.appendChild(off);
+    }
+    if (!tracks.length) {
+      container.appendChild(el('div', 'hint', onOff ? 'Aucune piste disponible.' : 'Une seule piste.'));
+      return;
+    }
+    tracks.forEach(function (t) {
+      var b = document.createElement('button');
+      b.className = 'tracks-item' + (t.id === current ? ' active' : '');
+      b.textContent = (t.id === current ? '✓ ' : '') + t.label;
+      b.addEventListener('click', function () { onPick(t.id); });
+      container.appendChild(b);
+    });
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function renderTracksMenu() {
+    tracksMenuList(overlay.querySelector('#tracksAudioList'), getAudioTracks(), getCurrentAudioTrack(), false, setAudioTrack);
+    tracksMenuList(overlay.querySelector('#tracksSubList'), getSubtitleTracks(), getCurrentSubtitleTrack(), true, setSubtitleTrack);
+  }
+
+  function setupTracks() {
+    tracksBtn.addEventListener('click', function () {
+      var showing = tracksMenu.style.display !== 'none';
+      if (showing) { tracksMenu.style.display = 'none'; return; }
+      renderTracksMenu();
+      tracksMenu.style.display = '';
+    });
+    video.addEventListener('loadedmetadata', updateTracksVisibility);
   }
 
   // ---------- AirPlay (Safari / iPhone) ----------
@@ -250,6 +370,8 @@
 
     armLoadTimeout();
     destroyPlayers();
+    tracksBtn.style.display = 'none';
+    tracksMenu.style.display = 'none';
     video.removeAttribute('src');
     video.load();
 
@@ -261,6 +383,8 @@
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
         if (data && data.fatal) attemptFallbackOrFail('Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
+      hls.on(global.Hls.Events.AUDIO_TRACKS_UPDATED, updateTracksVisibility);
+      hls.on(global.Hls.Events.SUBTITLE_TRACKS_UPDATED, updateTracksVisibility);
       hls.loadSource(url);
       hls.attachMedia(video);
       video.play().catch(function () {});
@@ -306,6 +430,7 @@
     if (document.pictureInPictureElement === video) { document.exitPictureInPicture().catch(function () {}); }
     destroyPlayers();
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
+    if (tracksMenu) tracksMenu.style.display = 'none';
     if (overlay) overlay.classList.remove('show');
   }
 

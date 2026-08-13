@@ -50,6 +50,21 @@ pas de contrôles lecture/pause utiles depuis une mini-fenêtre pour de la VOD).
   le navigateur) : PiP système Android (Media3 ExoPlayer), avec réduction
   automatique en appuyant sur le bouton Accueil pendant une lecture en direct.
 
+## Langue audio et sous-titres
+
+Un bouton 🌐 dans le lecteur ouvre la liste des pistes audio et sous-titres
+disponibles pour le flux en cours, quand il y en a plusieurs.
+
+- **Lecteur web** (PWA et APK) : pistes alternatives déclarées par le
+  manifeste **HLS** (`#EXT-X-MEDIA`), lues par hls.js ou nativement par
+  Safari. Pas de sélection possible pour les flux mpeg-ts bruts ni la
+  lecture directe (mp4/mkv) — ces moteurs n'exposent pas de pistes
+  alternatives navigables côté web.
+- **APK Android**, lecteur natif de secours : sélection de piste via
+  Media3 ExoPlayer, qui l'expose de la même façon quel que soit le
+  conteneur (HLS, mp4, mkv…) — c'est justement le cas d'usage type de ce
+  lecteur de secours (VOD HEVC/mkv multi-pistes).
+
 ## Sources prises en charge
 
 - **Xtream Codes** : serveur + utilisateur + mot de passe. L'app interroge
