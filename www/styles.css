@@ -155,6 +155,22 @@ button.ghost { background: var(--card2); color: var(--text); }
   color: #ffd75e; font-size: 16px; border-radius: 8px; padding: 3px 6px; cursor: pointer; line-height: 1;
 }
 
+/* ---------- saisons (accordéon, replié par défaut) ---------- */
+.saison {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card2);
+  margin-bottom: 8px; overflow: hidden;
+}
+.saison-titre {
+  list-style: none; cursor: pointer; padding: 11px 12px;
+  font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--accent-dim); font-weight: 700;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.saison-titre::-webkit-details-marker { display: none; }
+.saison-titre::after { content: '▾'; font-size: 11px; color: var(--muted); flex: none; transition: transform .15s; transform: rotate(-90deg); }
+.saison[open] > .saison-titre::after { transform: rotate(0deg); }
+.saison .episodes { padding: 0 10px 10px; margin: 0; }
+
 /* ---------- épisodes ---------- */
 .episodes { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
 .episode-row {

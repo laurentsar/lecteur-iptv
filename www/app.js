@@ -483,17 +483,31 @@
   });
 
   // ---------- détail d'une série ----------
+  // Chaque saison est un <details> replié par défaut : évite d'afficher
+  // d'un coup la liste complète des épisodes de toutes les saisons.
+  function seasonSection(label) {
+    var det = document.createElement('details');
+    det.className = 'saison';
+    var sum = document.createElement('summary');
+    sum.className = 'saison-titre';
+    sum.textContent = label;
+    det.appendChild(sum);
+    var wrap = el('div', 'episodes');
+    det.appendChild(wrap);
+    return { det: det, wrap: wrap };
+  }
+
   function openSerieM3u(serie) {
     showSerieShell(serie.name, serie.logo, function (body) {
       Object.keys(serie.saisons).sort(function (a, b) { return a - b; }).forEach(function (n) {
-        body.appendChild(el('div', 'cat-title', 'Saison ' + n));
-        var wrap = el('div', 'episodes');
-        serie.saisons[n].sort(function (a, b) { return a.episode - b.episode; }).forEach(function (ep) {
-          wrap.appendChild(episodeRow('Épisode ' + ep.episode + (ep.name && ep.name !== serie.name ? ' — ' + ep.name : ''), function () {
+        var episodes = serie.saisons[n].sort(function (a, b) { return a.episode - b.episode; });
+        var sec = seasonSection('Saison ' + n + ' · ' + episodes.length + ' épisode' + (episodes.length > 1 ? 's' : ''));
+        episodes.forEach(function (ep) {
+          sec.wrap.appendChild(episodeRow('Épisode ' + ep.episode + (ep.name && ep.name !== serie.name ? ' — ' + ep.name : ''), function () {
             Player.open(ep.url, serie.name + ' · S' + n + 'E' + ep.episode);
           }));
         });
-        body.appendChild(wrap);
+        body.appendChild(sec.det);
       });
     });
   }
@@ -508,15 +522,15 @@
         var seasons = Object.keys(episodes).sort(function (a, b) { return a - b; });
         if (!seasons.length) { body.appendChild(el('div', 'hint', 'Aucun épisode disponible.')); return; }
         seasons.forEach(function (n) {
-          body.appendChild(el('div', 'cat-title', 'Saison ' + n));
-          var wrap = el('div', 'episodes');
-          episodes[n].forEach(function (ep) {
+          var eps = episodes[n];
+          var sec = seasonSection('Saison ' + n + ' · ' + eps.length + ' épisode' + (eps.length > 1 ? 's' : ''));
+          eps.forEach(function (ep) {
             var url = Xtream.streamUrl(cfg, 'series', ep.id, ep.container_extension || 'mp4');
-            wrap.appendChild(episodeRow('Épisode ' + (ep.episode_num || '?') + (ep.title ? ' — ' + ep.title : ''), function () {
+            sec.wrap.appendChild(episodeRow('Épisode ' + (ep.episode_num || '?') + (ep.title ? ' — ' + ep.title : ''), function () {
               Player.open(url, serie.name + ' · S' + n + 'E' + (ep.episode_num || '?'));
             }));
           });
-          body.appendChild(wrap);
+          body.appendChild(sec.det);
         });
       }).catch(function (err) { body.innerHTML = ''; body.appendChild(el('div', 'hint', 'Erreur : ' + err.message)); });
     });

@@ -16,7 +16,7 @@ qu'elle affiche vient de la source que tu as configurée.
 | 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). |
 | 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. |
 | 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. |
-| 🎞️ **Séries** | Liste des séries, puis saisons et épisodes. Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
+| 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
 | ⭐ **Favoris** | Chaînes, films et séries marqués d'un ☆, tous fournisseurs confondus. |
 | 🗂️ **Playlists** | Ajoute, teste et supprime des sources M3U ou Xtream Codes ; plusieurs playlists peuvent être enregistrées et basculées à la volée. |
 | ℹ️ **Infos** | Limites connues et confidentialité. |
