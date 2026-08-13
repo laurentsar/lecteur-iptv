@@ -32,6 +32,12 @@ qu'elle affiche vient de la source que tu as configurée.
 
 ## Limites connues
 
+- **Codecs non supportés** (HEVC, audio AC3/DTS, courants sur des rips
+  IPTV) : le navigateur ne les décode pas nativement. Quand la lecture
+  directe d'un film/épisode échoue, l'app retente automatiquement en
+  demandant la même URL avec l'extension `.m3u8` — beaucoup de panels
+  Xtream Codes transcodent alors à la volée en HLS H264/AAC, lisible
+  partout ; ça ne fonctionne pas sur tous les panels.
 - Les flux **`.ts` bruts** (mpeg-ts en direct, hors HLS) sont lus via
   [mpegts.js](https://github.com/xqq/mpegts.js) (Apache-2.0).
 - L'**EPG compressé** (`.gz`) n'est pas décompressé : il faut un lien XMLTV

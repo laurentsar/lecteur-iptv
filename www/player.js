@@ -1,13 +1,18 @@
 /* player.js — overlay de lecture vidéo : hls.js pour les flux .m3u8,
  * mpegts.js pour les flux .ts bruts (mpeg-ts en direct, très courants chez
  * les fournisseurs IPTV — le navigateur ne les décode pas nativement),
- * lecture native pour le reste (mp4, mkv...). */
+ * lecture native pour le reste (mp4, mkv...). Si la lecture native échoue
+ * (codec non supporté par l'appareil, fréquent sur des rips en HEVC ou
+ * audio AC3/DTS), on retente une fois en demandant la même URL avec
+ * l'extension .m3u8 : beaucoup de panels Xtream Codes transcodent alors le
+ * flux à la volée en HLS H264/AAC, lisible partout. */
 (function (global) {
   'use strict';
 
   var hls = null;
   var mpegtsPlayer = null;
   var currentEngine = '';
+  var currentUrl = '', currentTitle = '', triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn;
 
   function ensureDom() {
@@ -29,7 +34,7 @@
     closeBtn = overlay.querySelector('#playerClose');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
-      setStatus('Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error));
+      attemptFallbackOrFail('Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error));
     });
     video.addEventListener('playing', function () { setStatus(''); });
   }
@@ -62,10 +67,28 @@
   // direct" (mp4/mkv...) que les extensions de VOD reconnues.
   function isDirectFile(url) { return /\.(mp4|mkv|webm|mov|m4v|avi)(\?|#|$)/i.test(url); }
 
-  function open(url, title) {
-    ensureDom();
-    overlay.classList.add('show');
-    titleEl.textContent = title || '';
+  // Remplace (ou ajoute) l'extension de l'URL par .m3u8, en préservant une
+  // éventuelle query string / ancre.
+  function swapExtToM3u8(url) {
+    var m = /^([^?#]*)([?#].*)?$/.exec(url);
+    var base = (m ? m[1] : url).replace(/\.[a-zA-Z0-9]+$/, '');
+    return base + '.m3u8' + (m && m[2] ? m[2] : '');
+  }
+
+  function attemptFallbackOrFail(reasonMsg) {
+    if (!triedM3u8Fallback && !isM3u8(currentUrl)) {
+      triedM3u8Fallback = true;
+      setStatus('Échec — nouvelle tentative en HLS transcodé…');
+      startPlayback(swapExtToM3u8(currentUrl), currentTitle);
+    } else {
+      setStatus(reasonMsg);
+    }
+  }
+
+  function startPlayback(url, title) {
+    currentUrl = url;
+    currentTitle = title || '';
+    titleEl.textContent = currentTitle;
     destroyPlayers();
     video.removeAttribute('src');
     video.load();
@@ -75,7 +98,7 @@
       setStatus('Connexion au flux (HLS)…');
       hls = new global.Hls({ enableWorker: true });
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
-        if (data && data.fatal) setStatus('Flux HLS interrompu (' + data.type + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
+        if (data && data.fatal) attemptFallbackOrFail('Flux HLS interrompu (' + data.type + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
       hls.loadSource(url);
       hls.attachMedia(video);
@@ -85,7 +108,7 @@
       setStatus('Connexion au flux (mpeg-ts)…');
       mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: url });
       mpegtsPlayer.on(global.mpegts.Events.ERROR, function () {
-        setStatus('Flux mpeg-ts interrompu — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
+        attemptFallbackOrFail('Flux mpeg-ts interrompu — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
       });
       mpegtsPlayer.attachMediaElement(video);
       mpegtsPlayer.load();
@@ -96,6 +119,13 @@
       video.src = url;
       video.play().catch(function () {});
     }
+  }
+
+  function open(url, title) {
+    ensureDom();
+    overlay.classList.add('show');
+    triedM3u8Fallback = false;
+    startPlayback(url, title);
   }
 
   function close() {
