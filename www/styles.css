@@ -119,6 +119,14 @@ button.ghost { background: var(--card2); color: var(--text); }
   position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   overflow: hidden; cursor: pointer; display: flex; flex-direction: column;
 }
+/* entrée décorative de playlist (séparateur de catégorie, pas une vraie
+   chaîne) : rendue comme un titre de section pleine largeur plutôt qu'une
+   carte cliquable. */
+.carte-section {
+  grid-column: 1 / -1; margin: 10px 0 2px; padding: 0 2px;
+  font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--muted); font-weight: 700; text-align: center;
+}
 .carte-thumb { aspect-ratio: 16/10; background: var(--card2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .carte-thumb img { width: 100%; height: 100%; object-fit: contain; background: #0d1826; }
 .carte-thumb.vide { font-size: 30px; color: var(--muted); }

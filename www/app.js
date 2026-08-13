@@ -159,6 +159,17 @@
     });
   }
 
+  // Beaucoup de playlists IPTV insèrent des entrées purement décoratives
+  // entre les groupes de chaînes (ex. « ||--- |FR| GENERALISTES |FR| ---|| »)
+  // sans flux valide derrière : elles bloquent le lecteur indéfiniment sans
+  // jamais renvoyer d'erreur claire. Heuristique : beaucoup de caractères de
+  // séparation (-=#*_|~) par rapport à la longueur du nom.
+  function looksLikeSeparator(name) {
+    if (!name) return false;
+    var decorative = (name.match(/[-=#*_|~]/g) || []).length;
+    return decorative / name.length > 0.25;
+  }
+
   function card(item, opts) {
     opts = opts || {};
     var card = el('div', 'carte');
@@ -200,6 +211,13 @@
 
   function iconFor(kind) { return kind === 'films' ? '🎬' : kind === 'series' ? '🎞️' : '📺'; }
 
+  // Titre de section (ex. "titre de section" au lieu de carte) : voir
+  // looksLikeSeparator(name).
+  function sectionTitle(name) {
+    var clean = name.replace(/[-=#*_|~]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return el('div', 'carte-section', clean || name);
+  }
+
   function renderList(container, moreBtn, items, shownKey, opts) {
     var shown = state.shown[shownKey];
     container.innerHTML = '';
@@ -208,7 +226,9 @@
       moreBtn.style.display = 'none';
       return;
     }
-    items.slice(0, shown).forEach(function (item) { container.appendChild(card(item, opts)); });
+    items.slice(0, shown).forEach(function (item) {
+      container.appendChild(item.url && looksLikeSeparator(item.name) ? sectionTitle(item.name) : card(item, opts));
+    });
     moreBtn.style.display = items.length > shown ? '' : 'none';
   }
 
@@ -250,7 +270,8 @@
           renderList(container, moreBtn, items, kindKey, { epgBadgeFn: null });
           // (le badge EPG est déjà calculé par item ; on l'injecte après coup)
           Array.prototype.forEach.call(container.children, function (node, i) {
-            if (items[i] && items[i]._badge) node.querySelector('.carte-corps').appendChild(items[i]._badge);
+            var corps = items[i] && items[i]._badge && node.querySelector('.carte-corps');
+            if (corps) corps.appendChild(items[i]._badge);
           });
         }
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); moreBtn.style.display = 'none'; });

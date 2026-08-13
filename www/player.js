@@ -26,6 +26,10 @@
   var triedNativeFallback = false, triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, castLauncher;
   var castSdkRequested = false;
+  var loadTimeoutId = null;
+  var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
+  // de catégorie décoratifs, chaînes mortes) ne renvoient jamais d'erreur et
+  // restent bloquées indéfiniment sans ce filet de sécurité.
 
   function ensureDom() {
     if (overlay) return;
@@ -50,9 +54,10 @@
     castLauncher = overlay.querySelector('#castLauncher');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
+      clearLoadTimeout();
       attemptFallbackOrFail('Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error));
     });
-    video.addEventListener('playing', function () { setStatus(''); });
+    video.addEventListener('playing', function () { clearLoadTimeout(); setStatus(''); });
     setupAirplay();
     setupChromecast();
   }
@@ -109,6 +114,7 @@
   function castCurrentMedia() {
     var session = cast.framework.CastContext.getInstance().getCurrentSession();
     if (!session || !currentUrl) return;
+    clearLoadTimeout();
     destroyPlayers();
     video.pause();
     var mediaInfo = new chrome.cast.media.MediaInfo(currentUrl, castMimeType(currentUrl));
@@ -141,6 +147,17 @@
   function destroyPlayers() {
     if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
     if (mpegtsPlayer) { try { mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
+  }
+
+  function clearLoadTimeout() {
+    if (loadTimeoutId) { clearTimeout(loadTimeoutId); loadTimeoutId = null; }
+  }
+
+  function armLoadTimeout() {
+    clearLoadTimeout();
+    loadTimeoutId = setTimeout(function () {
+      attemptFallbackOrFail('Le flux ne répond pas (délai dépassé) — probablement hors service ou une entrée de playlist invalide.');
+    }, LOAD_TIMEOUT_MS);
   }
 
   function isM3u8(url) { return /\.m3u8(\?|#|$)/i.test(url); }
@@ -196,6 +213,7 @@
 
     if (isCasting()) { castCurrentMedia(); return; }
 
+    armLoadTimeout();
     destroyPlayers();
     video.removeAttribute('src');
     video.load();
@@ -247,6 +265,7 @@
   }
 
   function close() {
+    clearLoadTimeout();
     destroyPlayers();
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
     if (overlay) overlay.classList.remove('show');

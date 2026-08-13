@@ -57,6 +57,8 @@ public class NativePlayerPlugin extends Plugin {
 ACTIVITY_JAVA = """package com.laurent.iptvlecteur;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.TextView;
@@ -74,15 +76,28 @@ import com.google.android.gms.cast.framework.CastButtonFactory;
 import com.google.android.gms.cast.framework.CastContext;
 
 public class NativePlayerActivity extends AppCompatActivity {
+    private static final long LOAD_TIMEOUT_MS = 20000; // certaines entrées de
+    // playlist (séparateurs de catégorie décoratifs, chaînes mortes) ne
+    // renvoient jamais d'erreur et resteraient bloquées indéfiniment sans ça.
+
     private ExoPlayer localPlayer;
     private CastPlayer castPlayer;
     private PlayerView playerView;
     private TextView statusView;
     private String mediaUrl;
+    private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
+    private final Runnable timeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            statusView.setText("Le flux ne répond pas (délai dépassé) — probablement hors service ou une entrée de playlist invalide.");
+            statusView.setVisibility(View.VISIBLE);
+        }
+    };
 
     private final Player.Listener playerListener = new Player.Listener() {
         @Override
         public void onPlayerError(PlaybackException error) {
+            timeoutHandler.removeCallbacks(timeoutRunnable);
             statusView.setText("Lecture impossible : " + error.getErrorCodeName());
             statusView.setVisibility(View.VISIBLE);
         }
@@ -90,6 +105,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         @Override
         public void onPlaybackStateChanged(int state) {
             if (state == Player.STATE_READY) {
+                timeoutHandler.removeCallbacks(timeoutRunnable);
                 statusView.setVisibility(View.GONE);
             }
         }
@@ -169,10 +185,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         playerView.setPlayer(newPlayer);
         newPlayer.addListener(playerListener);
 
+        timeoutHandler.removeCallbacks(timeoutRunnable);
         if (mediaUrl != null && !mediaUrl.isEmpty()) {
             newPlayer.setMediaItem(MediaItem.fromUri(mediaUrl), position);
             newPlayer.prepare();
             newPlayer.setPlayWhenReady(playWhenReady);
+            timeoutHandler.postDelayed(timeoutRunnable, LOAD_TIMEOUT_MS);
         } else {
             statusView.setText("Lecture impossible : URL manquante.");
             statusView.setVisibility(View.VISIBLE);
@@ -181,6 +199,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        timeoutHandler.removeCallbacks(timeoutRunnable);
         if (castPlayer != null) {
             castPlayer.setSessionAvailabilityListener(null);
             castPlayer.release();

@@ -77,6 +77,16 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
   et PWA).
 - La lecture nécessite une connexion réseau vers ton fournisseur : seule
   l'interface de l'app fonctionne hors ligne.
+- **Entrées décoratives de playlist** : certaines playlists M3U utilisent
+  une chaîne factice comme séparateur visuel de catégorie (ex.
+  `||--- |FR| GENERALISTES |FR| ---||`). L'app les détecte (forte
+  proportion de caractères de ponctuation décorative dans le nom) et les
+  affiche comme un titre de section pleine largeur, non cliquable, plutôt
+  que comme une carte de chaîne cassée.
+- **Flux qui ne démarre jamais** : si un flux ne déclenche ni lecture ni
+  erreur dans les 20 secondes (chaîne hors service, entrée de playlist
+  invalide), le lecteur (web comme natif) affiche un message explicite
+  au lieu de rester bloqué indéfiniment sur 00:00.
 
 ## Confidentialité
 

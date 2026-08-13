@@ -131,7 +131,7 @@
       <div class="card warn">
         <h2>⚠️ Ce que cette app fait — et ne fait pas</h2>
         <p>C'est un <strong>lecteur</strong> : il affiche et joue les flux d'une playlist M3U ou d'un compte Xtream Codes que <em>toi</em> tu fournis. L'app ne fournit, ne vend ni n'héberge aucune chaîne, film ou série.</p>
-        <p class="hint">Limites connues : les films/séries dont le fichier utilise un codec que le navigateur ne décode pas (HEVC, audio AC3/E-AC3/DTS/TrueHD, courants sur des rips IPTV) peuvent échouer dans le lecteur web — sur l'<strong>APK Android</strong>, l'app retente alors automatiquement avec le lecteur vidéo natif de l'appareil (Media3 ExoPlayer, hors WebView), qui embarque en plus un décodeur audio FFmpeg pour l'AC3/E-AC3/DTS/TrueHD ; sur la <strong>PWA</strong>, il n'y a pas de repli natif possible. Les flux <code>.ts</code> bruts (mpeg-ts en direct) sont lus via une librairie de démuxage dédiée (mpegts.js). L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Sur l'APK Android, le chargement des playlists, de l'API Xtream et des flux HLS (manifeste + segments) passe par le réseau natif pour éviter les blocages CORS des serveurs IPTV ; sur la PWA, un serveur qui bloque les requêtes navigateur (CORS) peut empêcher la playlist ou la vidéo de se charger. Les flux mpeg-ts bruts (en continu, non découpés en segments) et l'EPG restent soumis au CORS du serveur dans les deux cas.</p>
+        <p class="hint">Limites connues : les films/séries dont le fichier utilise un codec que le navigateur ne décode pas (HEVC, audio AC3/E-AC3/DTS/TrueHD, courants sur des rips IPTV) peuvent échouer dans le lecteur web — sur l'<strong>APK Android</strong>, l'app retente alors automatiquement avec le lecteur vidéo natif de l'appareil (Media3 ExoPlayer, hors WebView), qui embarque en plus un décodeur audio FFmpeg pour l'AC3/E-AC3/DTS/TrueHD ; sur la <strong>PWA</strong>, il n'y a pas de repli natif possible. Les flux <code>.ts</code> bruts (mpeg-ts en direct) sont lus via une librairie de démuxage dédiée (mpegts.js). L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Sur l'APK Android, le chargement des playlists, de l'API Xtream et des flux HLS (manifeste + segments) passe par le réseau natif pour éviter les blocages CORS des serveurs IPTV ; sur la PWA, un serveur qui bloque les requêtes navigateur (CORS) peut empêcher la playlist ou la vidéo de se charger. Les flux mpeg-ts bruts (en continu, non découpés en segments) et l'EPG restent soumis au CORS du serveur dans les deux cas. Certaines playlists utilisent une entrée factice comme séparateur visuel de catégorie (ex. <code>||--- FR ---||</code>) : l'app la détecte et l'affiche comme un titre de section, pas comme une chaîne cliquable. Si un flux ne démarre ni n'échoue en 20 secondes (chaîne hors service), un message s'affiche au lieu de rester bloqué.</p>
       </div>
       <div class="card">
         <h2>📺 Diffusion vers une TV</h2>
@@ -151,7 +151,7 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    window.APP_VERSION = '1.9';
+    window.APP_VERSION = '1.10';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
