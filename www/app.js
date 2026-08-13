@@ -618,25 +618,63 @@
     container.appendChild(wrap);
   }
 
+  // Complète (sans jamais écraser) ce que le fournisseur IPTV a déjà donné :
+  // affiche, descriptif, âge — les trois infos les plus souvent absentes
+  // d'une playlist M3U ou d'un catalogue Xtream peu renseigné. Facultatif,
+  // seulement si une clé TMDB est enregistrée (voir l'onglet Infos).
+  function needsEnrichment(info) {
+    return !(info.cover_big || info.movie_image) || !(info.plot || info.description) || !(info.age || info.mpaa_rating);
+  }
+
+  function applyTmdb(info, extra) {
+    if (!extra) return info;
+    var merged = Object.assign({}, info);
+    if (!merged.cover_big && !merged.movie_image) merged.cover_big = extra.cover_big;
+    if (!merged.plot && !merged.description) merged.plot = extra.plot;
+    if (!merged.age && !merged.mpaa_rating) merged.age = extra.age;
+    if (!merged.rating) merged.rating = extra.rating;
+    if (!merged.duration) merged.duration = extra.duration;
+    if (!merged.genre) merged.genre = extra.genre;
+    if (!merged.releasedate && !merged.release_date) merged.releasedate = extra.releasedate;
+    return merged;
+  }
+
+  function enrichIfNeeded(info, name) {
+    if (!Tmdb.hasKey() || !needsEnrichment(info)) return Promise.resolve(info);
+    return Tmdb.enrich(name).then(function (extra) { return applyTmdb(info, extra); });
+  }
+
   function openFilmXtream(item) {
     var pl = state.playlist, cfg = xtreamCfg(pl);
     showFilmShell(function (det) {
       var loading = el('div', 'hint', 'Chargement…');
       det.appendChild(loading);
       Xtream.vodInfo(cfg, item.streamId).then(function (data) {
-        loading.remove();
-        renderFilmDetails(det, item, (data && data.info) || {});
+        return (data && data.info) || {};
       }).catch(function () {
+        return {};
+      }).then(function (info) {
+        return enrichIfNeeded(info, item.name);
+      }).then(function (info) {
         loading.remove();
-        renderFilmDetails(det, item, {});
+        renderFilmDetails(det, item, info);
       });
     });
   }
 
   function openFilmSimple(item) {
-    // Une playlist M3U ne transporte pas de genre à proprement parler ;
-    // groupTitle (catégorie de la playlist) est la meilleure approximation.
-    showFilmShell(function (det) { renderFilmDetails(det, item, { genre: item.groupTitle || item.group }); });
+    showFilmShell(function (det) {
+      var loading = el('div', 'hint', 'Chargement…');
+      det.appendChild(loading);
+      // Ne préremplit pas le genre avec groupTitle avant l'enrichissement,
+      // sinon ça bloquerait le genre TMDB (plus précis qu'une simple
+      // catégorie de playlist) ; groupTitle ne sert qu'en dernier recours.
+      enrichIfNeeded({}, item.name).then(function (info) {
+        loading.remove();
+        if (!info.genre) info = Object.assign({}, info, { genre: item.groupTitle || item.group });
+        renderFilmDetails(det, item, info);
+      });
+    });
   }
 
   function openFilm(item) {
@@ -811,6 +849,14 @@
         finish();
       }).catch(function (err) { toast('Fichier illisible : ' + err.message); });
     } else finish();
+  });
+
+  // ---------- réglage TMDB (fiches films) ----------
+  $id('tmdbKeyInput').value = Store.getTmdbKey() || '';
+  $id('btnSaveTmdb').addEventListener('click', function () {
+    var v = $id('tmdbKeyInput').value.trim();
+    Store.setTmdbKey(v);
+    $id('tmdbStatus').textContent = v ? 'Clé enregistrée — les fiches films incomplètes seront complétées via TMDB.' : 'Clé supprimée — enrichissement TMDB désactivé.';
   });
 
   // ---------- démarrage ----------

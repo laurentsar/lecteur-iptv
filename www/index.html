@@ -173,7 +173,17 @@
       </div>
       <div class="card">
         <h2>🎬 Fiches films</h2>
-        <p class="hint">Toucher un film ouvre sa fiche (affiche, âge, note, durée, genre, descriptif) avant de lancer la lecture. Ces informations viennent du catalogue du fournisseur (comptes Xtream Codes uniquement, via <code>get_vod_info</code>) — leur disponibilité, et en particulier l'âge, dépend de ce que le fournisseur a renseigné. Une playlist M3U n'affiche que l'affiche, le titre et la catégorie, faute de ces métadonnées dans le format.</p>
+        <p class="hint">Toucher un film ouvre sa fiche (affiche, âge, note, durée, genre, descriptif) avant de lancer la lecture. Ces informations viennent du catalogue du fournisseur (comptes Xtream Codes uniquement, via <code>get_vod_info</code>) — leur disponibilité, et en particulier l'âge, dépend de ce que le fournisseur a renseigné. Une playlist M3U n'affiche que l'affiche, le titre et la catégorie, faute de ces métadonnées dans le format. Ce qui manque peut être complété via TMDB, voir ci-dessous.</p>
+      </div>
+      <div class="card">
+        <h2>🖼️ Enrichissement TMDB (facultatif)</h2>
+        <p class="hint">Si un film n'a pas d'affiche, de descriptif ou d'âge (playlists M3U, ou catalogue Xtream peu renseigné), l'app peut compléter sa fiche en interrogeant <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> à partir du titre — seulement pour ce qui manque, jamais pour remplacer les infos déjà fournies par ton fournisseur. Facultatif : laisse le champ vide pour désactiver. <strong>Contrairement au reste de l'app, activer ceci envoie le titre du film recherché à TMDB</strong> (un tiers), rien d'autre.</p>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="tmdbKeyInput" placeholder="Clé API TMDB (v3, facultative)" style="flex:1 1 220px" autocomplete="off" />
+          <button id="btnSaveTmdb" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+        </div>
+        <p class="hint"><a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Obtenir une clé API TMDB gratuite</a></p>
+        <p class="hint" id="tmdbStatus"></p>
       </div>
       <div class="card">
         <h2>Confidentialité</h2>
@@ -189,7 +199,7 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    window.APP_VERSION = '1.15';
+    window.APP_VERSION = '1.16';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
@@ -199,6 +209,7 @@
   <script src="store.js"></script>
   <script src="m3u.js"></script>
   <script src="xtream.js"></script>
+  <script src="tmdb.js"></script>
   <script src="epg.js"></script>
   <script src="player.js"></script>
   <script src="app.js"></script>

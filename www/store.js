@@ -22,6 +22,7 @@
   var K_PLAYLISTS = 'iptv:playlists';
   var K_ACTIVE = 'iptv:active';
   var K_FAVORIS = 'iptv:favoris';
+  var K_TMDB = 'iptv:tmdbKey';
 
   function getPlaylists() { return lsGet(K_PLAYLISTS, []); }
   function savePlaylists(list) { return lsSet(K_PLAYLISTS, list); }
@@ -50,6 +51,12 @@
   }
   function getActivePlaylistId() { return lsGet(K_ACTIVE, null); }
   function setActivePlaylistId(id) { lsSet(K_ACTIVE, id); }
+
+  // Clé API TMDB (facultative) : n'est utilisée que pour compléter les fiches
+  // films quand le fournisseur IPTV ne renseigne pas l'affiche/le descriptif/
+  // l'âge — voir tmdb.js. Reste locale comme le reste des réglages.
+  function getTmdbKey() { return lsGet(K_TMDB, null); }
+  function setTmdbKey(key) { return lsSet(K_TMDB, key || null); }
 
   function getFavoris() { return lsGet(K_FAVORIS, []); }
   function isFavori(key) { return getFavoris().some(function (f) { return f.key === key; }); }
@@ -112,6 +119,7 @@
     getPlaylists: getPlaylists, addPlaylist: addPlaylist,
     updatePlaylist: updatePlaylist, removePlaylist: removePlaylist,
     getActivePlaylistId: getActivePlaylistId, setActivePlaylistId: setActivePlaylistId,
+    getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
     getFavoris: getFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
     cacheGet: function (playlistId) { return idbGet('cache:' + playlistId); },
     cacheSet: function (playlistId, data) { return idbSet('cache:' + playlistId, data); },

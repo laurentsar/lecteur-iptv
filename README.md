@@ -15,7 +15,7 @@ qu'elle affiche vient de la source que tu as configurée.
 | 🏠 **Accueil** | Playlist active (et sélecteur si tu en as plusieurs), accès rapide aux 3 catégories, nombre de favoris. |
 | 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). Bouton **Picture-in-Picture** dans le lecteur pour continuer à regarder en mini-fenêtre. |
 | 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. |
-| 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture. |
+| 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture, complétée via TMDB si une clé est renseignée (voir plus bas). |
 | 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
 | ⭐ **Favoris** | Chaînes, films et séries marqués d'un ☆, tous fournisseurs confondus. |
 | 🗂️ **Playlists** | Ajoute, teste et supprime des sources M3U ou Xtream Codes ; plusieurs playlists peuvent être enregistrées et basculées à la volée. |
@@ -64,6 +64,25 @@ disponibles pour le flux en cours, quand il y en a plusieurs.
   Media3 ExoPlayer, qui l'expose de la même façon quel que soit le
   conteneur (HLS, mp4, mkv…) — c'est justement le cas d'usage type de ce
   lecteur de secours (VOD HEVC/mkv multi-pistes).
+
+## Enrichissement TMDB des fiches films (facultatif)
+
+Quand un film n'a ni affiche, ni descriptif, ni âge (playlists M3U, ou
+compte Xtream avec un catalogue peu renseigné), l'app peut compléter sa
+fiche en interrogeant [TMDB](https://www.themoviedb.org/) (The Movie
+Database) à partir du titre — réglage dans l'onglet Infos (clé API TMDB
+v3, gratuite).
+
+- **Opt-in** : désactivé par défaut, tant qu'aucune clé n'est renseignée.
+- **Ne remplace jamais** ce que le fournisseur IPTV a déjà donné —
+  complète uniquement les champs manquants (affiche, descriptif, âge,
+  note, durée, genre).
+- Le titre nettoyé (année/qualité/tags entre parenthèses ou crochets
+  retirés) est envoyé à TMDB pour la recherche — seule exception à la
+  politique de confidentialité de l'app (voir plus bas), documentée dans
+  l'onglet Infos au moment d'activer le réglage.
+- L'âge vient de la certification TMDB (France, sinon États-Unis ou
+  Royaume-Uni en repli) — absente si TMDB ne l'a pas pour ce film.
 
 ## Sources prises en charge
 
@@ -130,7 +149,9 @@ disponibles pour le flux en cours, quand il y en a plusieurs.
 
 Playlists, identifiants et favoris restent **uniquement sur l'appareil**
 (stockage local / IndexedDB). Rien n'est envoyé ailleurs qu'au serveur IPTV
-que tu as toi-même renseigné.
+que tu as toi-même renseigné — seule exception, opt-in : si tu actives
+l'enrichissement TMDB (voir plus haut), le titre des films consultés est
+envoyé à TMDB pour compléter leur fiche.
 
 ## Installation
 
@@ -169,6 +190,7 @@ www/
   store.js       persistance locale (playlists, favoris, cache)
   m3u.js         analyse des playlists M3U/M3U8, détection des séries
   xtream.js      client de l'API Xtream Codes
+  tmdb.js        enrichissement TMDB des fiches films (facultatif)
   epg.js         guide XMLTV (now/next)
   player.js      lecteur vidéo (hls.js pour le HLS, mpegts.js pour le .ts brut, natif sinon)
   app.js         interface, onglets, playlists, grilles
