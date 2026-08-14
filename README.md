@@ -15,12 +15,10 @@ qu'elle affiche vient de la source que tu as configurée.
 | 🏠 **Accueil** | Playlist active (et sélecteur si tu en as plusieurs), accès rapide aux 3 catégories, nombre de favoris. |
 | 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). Bouton **Picture-in-Picture** dans le lecteur pour continuer à regarder en mini-fenêtre. Les chaînes en double dans la playlist (sources/qualités multiples) sont **regroupées** sous une seule carte, avec un sélecteur pour choisir la source. |
 | 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. Bouton ⏺ sur une émission à venir pour programmer son enregistrement (APK Android). |
-| 📼 **Enreg.** | Enregistrements programmés (à venir) et terminés (lecture, suppression) — APK Android uniquement, voir plus bas. |
 | 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture, complétée via TMDB si une clé est renseignée (voir plus bas). Les doublons (même film listé plusieurs fois) sont regroupés, comme pour les chaînes. |
 | 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
-| ⭐ **Favoris** | Chaînes, films et séries marqués d'un ☆, tous fournisseurs confondus. |
-| 🗂️ **Playlists** | Ajoute, teste et supprime des sources M3U ou Xtream Codes ; plusieurs playlists peuvent être enregistrées et basculées à la volée. |
-| ℹ️ **Infos** | Limites connues et confidentialité. |
+| ⭐ **Ma liste** | Favoris (chaînes/films/séries marqués d'un ☆) et enregistrements (programmés et terminés, APK Android) dans un seul onglet. |
+| ⚙️ **Réglages** | Playlists (ajout/test/suppression) et infos (limites connues, réglages TMDB/PIN, confidentialité) — infos présentées en accordéon replié par défaut, pour ne pas encombrer l'écran. |
 
 ## Diffusion vers une TV
 
@@ -39,7 +37,7 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
 
 ## Code PIN (bouquet adulte)
 
-Réglage facultatif dans l'onglet Infos. Une fois un code défini, les
+Réglage facultatif dans l'onglet Réglages. Une fois un code défini, les
 catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ »
 (groupe M3U ou catégorie Xtream, détection sur le nom uniquement) sont
 masquées dans **En direct**, **Films** et **Séries**, remplacées par une
@@ -67,7 +65,7 @@ en arrière-plan).
   un flux brut) — pas de remuxage ni de transcodage. Le fichier obtenu
   (`.ts`) se lit comme n'importe quel contenu de l'app (mpeg-ts déjà
   vendorisé, avec repli automatique vers le lecteur natif si besoin).
-- Consultation, lecture et suppression dans l'onglet **📼 Enreg.**
+- Consultation, lecture et suppression dans l'onglet **Ma liste**.
 - **Un seul enregistrement à la fois.** Une programmation qui tombe
   pendant un enregistrement déjà en cours est ignorée.
 - **Limite assumée** : certains téléphones (gestion de batterie agressive
@@ -113,7 +111,7 @@ disponibles pour le flux en cours, quand il y en a plusieurs.
 Quand un film n'a ni affiche, ni descriptif, ni âge (playlists M3U, ou
 compte Xtream avec un catalogue peu renseigné), l'app peut compléter sa
 fiche en interrogeant [TMDB](https://www.themoviedb.org/) (The Movie
-Database) à partir du titre — réglage dans l'onglet Infos (clé API TMDB
+Database) à partir du titre — réglage dans l'onglet Réglages (clé API TMDB
 v3, gratuite).
 
 - **Opt-in** : désactivé par défaut, tant qu'aucune clé n'est renseignée.
@@ -123,7 +121,7 @@ v3, gratuite).
 - Le titre nettoyé (année/qualité/tags entre parenthèses ou crochets
   retirés) est envoyé à TMDB pour la recherche — seule exception à la
   politique de confidentialité de l'app (voir plus bas), documentée dans
-  l'onglet Infos au moment d'activer le réglage.
+  l'onglet Réglages au moment d'activer le réglage.
 - L'âge vient de la certification TMDB (France, sinon États-Unis ou
   Royaume-Uni en repli) — absente si TMDB ne l'a pas pour ce film.
 
@@ -276,7 +274,7 @@ uniquement par un build qui compile.
 
 ```
 www/
-  index.html     8 onglets
+  index.html     7 onglets (Playlists+Infos et Favoris+Enregistrements regroupés)
   net.js         requêtes réseau playlist/API (contourne les CORS via Capacitor sur Android)
   hls-native-loader.js  chargeur hls.js natif (contourne les CORS sur les flux HLS, Android)
   store.js       persistance locale (playlists, favoris, cache)

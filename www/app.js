@@ -51,9 +51,8 @@
     else if (name === 'films') { $id('filmDetail').style.display = 'none'; $id('filmsRacine').style.display = ''; renderKind('films'); }
     else if (name === 'series') { $id('serieDetail').style.display = 'none'; $id('seriesRacine').style.display = ''; renderKind('series'); }
     else if (name === 'guide') renderGuide(true);
-    else if (name === 'enregistrements') renderEnregistrements();
-    else if (name === 'favoris') renderFavoris();
-    else if (name === 'playlists') renderPlaylists();
+    else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
+    else if (name === 'reglages') renderPlaylists();
   }
   document.getElementById('tabs').addEventListener('click', function (e) {
     var b = e.target.closest('.tab');
@@ -360,7 +359,7 @@
         e.stopPropagation();
         var justAdded = Store.toggleFavori({ key: item.key, kind: item.kind, name: item.name, logo: item.logo, group: item.group, url: item.url, streamId: item.streamId });
         star.textContent = justAdded ? '★' : '☆';
-        if (isTabActive('favoris')) renderFavoris();
+        if (isTabActive('maliste')) renderFavoris();
       });
       card.appendChild(star);
     }
@@ -933,7 +932,7 @@
       c.appendChild(el('h2', null, 'Bienvenue'));
       c.appendChild(el('p', 'hint', 'Ajoute une playlist M3U ou un compte Xtream Codes pour commencer.'));
       var btn = el('button', 'primary', '🗂️ Ajouter une playlist');
-      btn.addEventListener('click', function () { goTab('playlists'); });
+      btn.addEventListener('click', function () { goTab('reglages'); });
       c.appendChild(btn);
       container.appendChild(c);
       return;

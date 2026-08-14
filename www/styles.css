@@ -202,6 +202,9 @@ button.ghost { background: var(--card2); color: var(--text); }
 .saison-titre::after { content: '▾'; font-size: 11px; color: var(--muted); flex: none; transition: transform .15s; transform: rotate(-90deg); }
 .saison[open] > .saison-titre::after { transform: rotate(0deg); }
 .saison .episodes { padding: 0 10px 10px; margin: 0; }
+.saison .accordion-body { padding: 0 12px 14px; }
+.saison .accordion-body p { margin: 0 0 8px; }
+.saison .accordion-body p:last-child { margin-bottom: 0; }
 
 /* ---------- épisodes ---------- */
 .episodes { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }

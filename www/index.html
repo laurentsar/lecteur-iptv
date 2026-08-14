@@ -24,12 +24,10 @@
     <button class="tab active" data-tab="accueil">🏠 Accueil</button>
     <button class="tab" data-tab="direct">📺 En direct</button>
     <button class="tab" data-tab="guide">🗓️ Guide</button>
-    <button class="tab" data-tab="enregistrements">📼 Enreg.</button>
     <button class="tab" data-tab="films">🎬 Films</button>
     <button class="tab" data-tab="series">🎞️ Séries</button>
-    <button class="tab" data-tab="favoris">⭐ Favoris</button>
-    <button class="tab" data-tab="playlists">🗂️ Playlists</button>
-    <button class="tab" data-tab="infos">ℹ️ Infos</button>
+    <button class="tab" data-tab="maliste">⭐ Ma liste</button>
+    <button class="tab" data-tab="reglages">⚙️ Réglages</button>
   </nav>
 
   <main>
@@ -66,24 +64,6 @@
       <div class="row"><button id="plusGuide" class="ghost" style="display:none">Charger plus</button></div>
     </section>
 
-    <!-- ================= ENREGISTREMENTS ================= -->
-    <section class="panel" id="tab-enregistrements">
-      <div id="enregNonDispo" class="card warn" style="display:none">
-        <h2>⚠️ Indisponible</h2>
-        <p class="hint">L'enregistrement nécessite un service en arrière-plan qui continue de tourner appli fermée — possible uniquement sur l'<strong>APK Android</strong>, pas sur cette PWA/ce navigateur.</p>
-      </div>
-      <div id="enregDispo">
-        <div class="card">
-          <h2>Programmés</h2>
-          <div id="listeProgrammes"></div>
-        </div>
-        <div class="card">
-          <h2>Enregistrements</h2>
-          <div id="listeEnregistrements"></div>
-        </div>
-      </div>
-    </section>
-
     <!-- ================= FILMS ================= -->
     <section class="panel" id="tab-films">
       <div id="filmsRacine">
@@ -110,13 +90,31 @@
       <div id="serieDetail" style="display:none"></div>
     </section>
 
-    <!-- ================= FAVORIS ================= -->
-    <section class="panel" id="tab-favoris">
+    <!-- ================= MA LISTE (favoris + enregistrements) ================= -->
+    <section class="panel" id="tab-maliste">
+      <div class="cat-title">⭐ Favoris</div>
       <div id="listeFavoris" class="grid-cartes"></div>
+
+      <div class="cat-title" style="margin-top:22px">📼 Enregistrements</div>
+      <div id="enregNonDispo" class="card warn" style="display:none">
+        <h2>⚠️ Indisponible</h2>
+        <p class="hint">L'enregistrement nécessite un service en arrière-plan qui continue de tourner appli fermée — possible uniquement sur l'<strong>APK Android</strong>, pas sur cette PWA/ce navigateur.</p>
+      </div>
+      <div id="enregDispo">
+        <div class="card">
+          <h2>Programmés</h2>
+          <div id="listeProgrammes"></div>
+        </div>
+        <div class="card">
+          <h2>Terminés</h2>
+          <div id="listeEnregistrements"></div>
+        </div>
+      </div>
     </section>
 
-    <!-- ================= PLAYLISTS ================= -->
-    <section class="panel" id="tab-playlists">
+    <!-- ================= RÉGLAGES (playlists + infos) ================= -->
+    <section class="panel" id="tab-reglages">
+      <div class="cat-title">🗂️ Playlists</div>
       <div class="card">
         <h2>Mes playlists</h2>
         <div id="playlists"></div>
@@ -165,62 +163,88 @@
         </div>
         <div id="testResult" class="hint"></div>
       </div>
-    </section>
 
-    <!-- ================= INFOS ================= -->
-    <section class="panel" id="tab-infos">
+      <div class="cat-title" style="margin-top:22px">ℹ️ Infos</div>
       <div class="card warn">
         <h2>⚠️ Ce que cette app fait — et ne fait pas</h2>
         <p>C'est un <strong>lecteur</strong> : il affiche et joue les flux d'une playlist M3U ou d'un compte Xtream Codes que <em>toi</em> tu fournis. L'app ne fournit, ne vend ni n'héberge aucune chaîne, film ou série.</p>
         <p class="hint">Limites connues : les films/séries dont le fichier utilise un codec que le navigateur ne décode pas (HEVC, audio AC3/E-AC3/DTS/TrueHD, courants sur des rips IPTV) peuvent échouer dans le lecteur web — sur l'<strong>APK Android</strong>, l'app retente alors automatiquement avec le lecteur vidéo natif de l'appareil (Media3 ExoPlayer, hors WebView), qui embarque en plus un décodeur audio FFmpeg pour l'AC3/E-AC3/DTS/TrueHD ; sur la <strong>PWA</strong>, il n'y a pas de repli natif possible. Les flux <code>.ts</code> bruts (mpeg-ts en direct) sont lus via une librairie de démuxage dédiée (mpegts.js). L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Sur l'APK Android, le chargement des playlists, de l'API Xtream et des flux HLS (manifeste + segments) passe par le réseau natif pour éviter les blocages CORS des serveurs IPTV ; sur la PWA, un serveur qui bloque les requêtes navigateur (CORS) peut empêcher la playlist ou la vidéo de se charger. Les flux mpeg-ts bruts (en continu, non découpés en segments) et l'EPG restent soumis au CORS du serveur dans les deux cas. Certaines playlists utilisent une entrée factice comme séparateur visuel de catégorie (ex. <code>||--- FR ---||</code>) : l'app la détecte et l'affiche comme un titre de section, pas comme une chaîne cliquable. Si un flux ne démarre ni n'échoue en 20 secondes (chaîne hors service), un message s'affiche au lieu de rester bloqué.</p>
       </div>
-      <div class="card">
-        <h2>🔲 Mosaïque &amp; 🗓️ Guide TV</h2>
-        <p class="hint">Dans <strong>En direct</strong>, un bouton bascule entre la liste habituelle et une <strong>mosaïque</strong> compacte (logos + programme en cours). L'onglet <strong>Guide</strong> affiche un agenda heure par heure de toutes les chaînes en direct (une ligne par chaîne, défilement horizontal dans le temps, ligne rouge = maintenant, navigation jour précédent/suivant). Nécessite un EPG XMLTV (playlist M3U avec url-tvg, ou export xmltv.php automatique pour les comptes Xtream Codes) — sans EPG disponible, les chaînes s'affichent sans programme.</p>
-      </div>
-      <div class="card">
-        <h2>📺 Diffusion vers une TV</h2>
-        <p class="hint">Le bouton dans le lecteur envoie le flux en cours sur une TV : <strong>Chromecast</strong> (Android, APK et navigateur Chrome) ou <strong>AirPlay</strong> (iPhone/Mac, Safari). Aucun compte requis. Sur iPhone, comme l'app n'existe pas en version installable, c'est le lecteur web (Safari) qui sert de lecteur.</p>
-      </div>
-      <div class="card">
-        <h2>🔒 Code PIN (bouquet adulte)</h2>
-        <p class="hint">Protège par code les catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ » (détection automatique sur le nom de la catégorie, pas de liste de contenus). Facultatif : tant qu'aucun code n'est défini, rien n'est masqué. Le code reste uniquement sur cet appareil.</p>
-        <div class="row" style="margin-top:8px">
-          <input type="password" inputmode="numeric" autocomplete="off" id="pinSettingInput" placeholder="Nouveau code PIN (4 chiffres ou plus)" style="flex:1 1 220px" />
-          <button id="btnSavePin" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+
+      <details class="saison">
+        <summary class="saison-titre">🔲 Mosaïque &amp; 🗓️ Guide TV</summary>
+        <div class="accordion-body">
+          <p class="hint">Dans <strong>En direct</strong>, un bouton bascule entre la liste habituelle et une <strong>mosaïque</strong> compacte (logos + programme en cours). L'onglet <strong>Guide</strong> affiche un agenda heure par heure de toutes les chaînes en direct (une ligne par chaîne, défilement horizontal dans le temps, ligne rouge = maintenant, navigation jour précédent/suivant). Nécessite un EPG XMLTV (playlist M3U avec url-tvg, ou export xmltv.php automatique pour les comptes Xtream Codes) — sans EPG disponible, les chaînes s'affichent sans programme.</p>
         </div>
-        <p class="hint" id="pinSettingStatus"></p>
-      </div>
-      <div class="card">
-        <h2>📼 Enregistrement (DVR)</h2>
-        <p class="hint"><strong>APK Android uniquement</strong> — enregistre un flux vers un fichier local via un service en arrière-plan, y compris appli fermée (notification permanente pendant l'enregistrement, obligatoire côté Android). Bouton ⏺ dans le lecteur d'une chaîne (immédiat, arrêt manuel ou après 4h) ou sur une émission à venir dans le <strong>Guide</strong> (programmé, démarre même appli fermée, réarmé après un redémarrage du téléphone). Consultation dans l'onglet <strong>Enreg.</strong> Un seul enregistrement à la fois. Limite assumée : certains téléphones (gestion de batterie agressive de certains constructeurs) peuvent arrêter le service sauf exception manuelle dans les réglages batterie — aucune app ne peut le garantir à 100 % sur Android.</p>
-      </div>
-      <div class="card">
-        <h2>⧉ Picture-in-Picture</h2>
-        <p class="hint">Pour le <strong>direct</strong> uniquement, un bouton ⧉ réduit la chaîne en mini-fenêtre pour continuer à regarder en utilisant le reste de l'app ou une autre appli. Sur l'APK Android, si le lecteur natif de secours est utilisé (codec non décodable par le navigateur), appuyer sur le bouton Accueil réduit aussi automatiquement en PiP.</p>
-      </div>
-      <div class="card">
-        <h2>🌐 Langue et sous-titres</h2>
-        <p class="hint">Quand un flux propose plusieurs pistes audio ou des sous-titres, un bouton 🌐 dans le lecteur permet de les choisir. Sur le web (PWA et APK), ça marche pour les flux <strong>HLS</strong> qui déclarent des pistes alternatives dans leur manifeste — pas pour le mpeg-ts brut ni la lecture directe (mp4/mkv). Sur l'APK, le lecteur natif de secours (ExoPlayer) le permet pour n'importe quel format, y compris mp4/mkv multi-pistes.</p>
-      </div>
-      <div class="card">
-        <h2>📶 Débit faible &amp; doublons</h2>
-        <p class="hint">Les réglages de lecture (HLS, mpeg-ts, lecteur natif de secours) priorisent la stabilité plutôt que la qualité maximale : démarrage sur la qualité la plus basse puis remontée prudente, mémoire tampon étendue pour absorber les ralentissements sans décrocher. Dans <strong>En direct</strong> et <strong>Films</strong>, les entrées listées plusieurs fois sous des noms voisins (sources ou qualités différentes) sont regroupées sous une seule carte ; toucher une carte à plusieurs sources (ou le bouton Regarder d'une fiche film) ouvre un sélecteur pour basculer manuellement vers une version plus légère si besoin.</p>
-      </div>
-      <div class="card">
-        <h2>🎬 Fiches films</h2>
-        <p class="hint">Toucher un film ouvre sa fiche (affiche, âge, note, durée, genre, descriptif) avant de lancer la lecture. Ces informations viennent du catalogue du fournisseur (comptes Xtream Codes uniquement, via <code>get_vod_info</code>) — leur disponibilité, et en particulier l'âge, dépend de ce que le fournisseur a renseigné. Une playlist M3U n'affiche que l'affiche, le titre et la catégorie, faute de ces métadonnées dans le format. Ce qui manque peut être complété via TMDB, voir ci-dessous.</p>
-      </div>
-      <div class="card">
-        <h2>🖼️ Enrichissement TMDB (facultatif)</h2>
-        <p class="hint">Si un film n'a pas d'affiche, de descriptif ou d'âge (playlists M3U, ou catalogue Xtream peu renseigné), l'app peut compléter sa fiche en interrogeant <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> à partir du titre — seulement pour ce qui manque, jamais pour remplacer les infos déjà fournies par ton fournisseur. Facultatif : laisse le champ vide pour désactiver. <strong>Contrairement au reste de l'app, activer ceci envoie le titre du film recherché à TMDB</strong> (un tiers), rien d'autre.</p>
-        <div class="row" style="margin-top:8px">
-          <input type="text" id="tmdbKeyInput" placeholder="Clé API TMDB (v3, facultative)" style="flex:1 1 220px" autocomplete="off" />
-          <button id="btnSaveTmdb" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">📺 Diffusion vers une TV</summary>
+        <div class="accordion-body">
+          <p class="hint">Le bouton dans le lecteur envoie le flux en cours sur une TV : <strong>Chromecast</strong> (Android, APK et navigateur Chrome) ou <strong>AirPlay</strong> (iPhone/Mac, Safari). Aucun compte requis. Sur iPhone, comme l'app n'existe pas en version installable, c'est le lecteur web (Safari) qui sert de lecteur.</p>
         </div>
-        <p class="hint"><a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Obtenir une clé API TMDB gratuite</a></p>
-        <p class="hint" id="tmdbStatus"></p>
-      </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">🔒 Code PIN (bouquet adulte)</summary>
+        <div class="accordion-body">
+          <p class="hint">Protège par code les catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ » (détection automatique sur le nom de la catégorie, pas de liste de contenus). Facultatif : tant qu'aucun code n'est défini, rien n'est masqué. Le code reste uniquement sur cet appareil.</p>
+          <div class="row" style="margin-top:8px">
+            <input type="password" inputmode="numeric" autocomplete="off" id="pinSettingInput" placeholder="Nouveau code PIN (4 chiffres ou plus)" style="flex:1 1 220px" />
+            <button id="btnSavePin" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+          </div>
+          <p class="hint" id="pinSettingStatus"></p>
+        </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">📼 Enregistrement (DVR)</summary>
+        <div class="accordion-body">
+          <p class="hint"><strong>APK Android uniquement</strong> — enregistre un flux vers un fichier local via un service en arrière-plan, y compris appli fermée (notification permanente pendant l'enregistrement, obligatoire côté Android). Bouton ⏺ dans le lecteur d'une chaîne (immédiat, arrêt manuel ou après 4h) ou sur une émission à venir dans le <strong>Guide</strong> (programmé, démarre même appli fermée, réarmé après un redémarrage du téléphone). Consultation dans <strong>Ma liste</strong>. Un seul enregistrement à la fois. Limite assumée : certains téléphones (gestion de batterie agressive de certains constructeurs) peuvent arrêter le service sauf exception manuelle dans les réglages batterie — aucune app ne peut le garantir à 100 % sur Android.</p>
+        </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">⧉ Picture-in-Picture</summary>
+        <div class="accordion-body">
+          <p class="hint">Pour le <strong>direct</strong> uniquement, un bouton ⧉ réduit la chaîne en mini-fenêtre pour continuer à regarder en utilisant le reste de l'app ou une autre appli. Sur l'APK Android, si le lecteur natif de secours est utilisé (codec non décodable par le navigateur), appuyer sur le bouton Accueil réduit aussi automatiquement en PiP.</p>
+        </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">🌐 Langue et sous-titres</summary>
+        <div class="accordion-body">
+          <p class="hint">Quand un flux propose plusieurs pistes audio ou des sous-titres, un bouton 🌐 dans le lecteur permet de les choisir. Sur le web (PWA et APK), ça marche pour les flux <strong>HLS</strong> qui déclarent des pistes alternatives dans leur manifeste — pas pour le mpeg-ts brut ni la lecture directe (mp4/mkv). Sur l'APK, le lecteur natif de secours (ExoPlayer) le permet pour n'importe quel format, y compris mp4/mkv multi-pistes.</p>
+        </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">📶 Débit faible &amp; doublons</summary>
+        <div class="accordion-body">
+          <p class="hint">Les réglages de lecture (HLS, mpeg-ts, lecteur natif de secours) priorisent la stabilité plutôt que la qualité maximale : démarrage sur la qualité la plus basse puis remontée prudente, mémoire tampon étendue pour absorber les ralentissements sans décrocher. Dans <strong>En direct</strong> et <strong>Films</strong>, les entrées listées plusieurs fois sous des noms voisins (sources ou qualités différentes) sont regroupées sous une seule carte ; toucher une carte à plusieurs sources (ou le bouton Regarder d'une fiche film) ouvre un sélecteur pour basculer manuellement vers une version plus légère si besoin.</p>
+        </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">🎬 Fiches films</summary>
+        <div class="accordion-body">
+          <p class="hint">Toucher un film ouvre sa fiche (affiche, âge, note, durée, genre, descriptif) avant de lancer la lecture. Ces informations viennent du catalogue du fournisseur (comptes Xtream Codes uniquement, via <code>get_vod_info</code>) — leur disponibilité, et en particulier l'âge, dépend de ce que le fournisseur a renseigné. Une playlist M3U n'affiche que l'affiche, le titre et la catégorie, faute de ces métadonnées dans le format. Ce qui manque peut être complété via TMDB, ci-dessous.</p>
+        </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">🖼️ Enrichissement TMDB (facultatif)</summary>
+        <div class="accordion-body">
+          <p class="hint">Si un film n'a pas d'affiche, de descriptif ou d'âge (playlists M3U, ou catalogue Xtream peu renseigné), l'app peut compléter sa fiche en interrogeant <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> à partir du titre — seulement pour ce qui manque, jamais pour remplacer les infos déjà fournies par ton fournisseur. Facultatif : laisse le champ vide pour désactiver. <strong>Contrairement au reste de l'app, activer ceci envoie le titre du film recherché à TMDB</strong> (un tiers), rien d'autre.</p>
+          <div class="row" style="margin-top:8px">
+            <input type="text" id="tmdbKeyInput" placeholder="Clé API TMDB (v3, facultative)" style="flex:1 1 220px" autocomplete="off" />
+            <button id="btnSaveTmdb" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+          </div>
+          <p class="hint"><a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Obtenir une clé API TMDB gratuite</a></p>
+          <p class="hint" id="tmdbStatus"></p>
+        </div>
+      </details>
+
       <div class="card">
         <h2>Confidentialité</h2>
         <p class="hint">Tes playlists, identifiants et favoris restent uniquement sur cet appareil (stockage local). Rien n'est envoyé ailleurs qu'au serveur IPTV que tu as toi-même renseigné.</p>
@@ -257,7 +281,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.20';
+    window.APP_VERSION = '1.21';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
