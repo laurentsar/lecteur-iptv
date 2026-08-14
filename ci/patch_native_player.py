@@ -20,6 +20,11 @@ Diffuse aussi vers une TV (Chromecast) via Media3 CastPlayer + Google Play
 Services Cast Framework : un bouton dans l'écran natif bascule la lecture
 entre l'ExoPlayer local et la session Cast, sans code de lecture dupliqué
 (les deux implémentent la même interface Player).
+
+Tampon (DefaultLoadControl) élargi par rapport aux réglages par défaut
+d'ExoPlayer : priorité à la stabilité sur un débit faible/instable plutôt
+qu'au démarrage rapide, cohérent avec le réglage équivalent du lecteur web
+(hls.js) dans player.js.
 """
 import os
 import re
@@ -83,6 +88,7 @@ import androidx.media3.common.Player;
 import androidx.media3.common.TrackGroup;
 import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
@@ -184,7 +190,15 @@ public class NativePlayerActivity extends AppCompatActivity {
         // pas (elle ne déclare le support que pour ces codecs précis).
         DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(this)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER);
-        localPlayer = new ExoPlayer.Builder(this, renderersFactory).build();
+
+        // Tampon plus généreux qu'en réglages par défaut : priorité à la
+        // stabilité sur un débit faible/instable plutôt qu'au démarrage
+        // rapide. La sélection adaptative de piste (ABR) reste celle
+        // d'ExoPlayer par défaut pour les sources HLS/DASH multi-débits.
+        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(30000, 90000, 2500, 10000)
+                .build();
+        localPlayer = new ExoPlayer.Builder(this, renderersFactory).setLoadControl(loadControl).build();
 
         // Diffusion Chromecast : CastPlayer implémente la même interface
         // Player qu'ExoPlayer, donc PlayerView continue de fonctionner à

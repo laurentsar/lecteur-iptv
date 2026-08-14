@@ -14,7 +14,14 @@
  *
  * Diffusion vers une TV : AirPlay (Safari, natif au <video> — bouton
  * explicite ajouté ici) et Chromecast (Cast Sender SDK de Google, chargé à
- * la demande). Les deux sont indépendants du moteur de lecture local. */
+ * la demande). Les deux sont indépendants du moteur de lecture local.
+ *
+ * Réglages pensés pour un débit faible/instable (connexions mobiles,
+ * ADSL...), plutôt que pour la latence minimale : mémoire tampon plus
+ * généreuse pour absorber les ralentissements sans décrocher, démarrage
+ * systématique sur la qualité la plus basse (évite un premier segment trop
+ * gros qui bloque le lancement), remontée en qualité prudente pour éviter
+ * les allers-retours HD/SD qui aggravent les coupures. */
 (function (global) {
   'use strict';
 
@@ -31,6 +38,33 @@
   var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
   // de catégorie décoratifs, chaînes mortes) ne renvoient jamais d'erreur et
   // restent bloquées indéfiniment sans ce filet de sécurité.
+
+  // hls.js : priorité à la stabilité sur un lien faible plutôt qu'à la
+  // qualité ou la latence. startLevel:0 = démarre toujours sur le plus
+  // petit débit disponible (la remontée ABR se fait ensuite si le réseau
+  // le permet) ; abrEwmaDefaultEstimate bas = pas d'hypothèse optimiste
+  // tant qu'aucune mesure réelle n'existe ; abrBandWidthUpFactor bas =
+  // remonter en qualité seulement avec une marge confortable, pour éviter
+  // les allers-retours qui provoquent des coupures ; buffers étendus =
+  // encaisse des ralentissements plus longs avant de décrocher.
+  var HLS_LOW_BANDWIDTH_CONFIG = {
+    enableWorker: true,
+    startLevel: 0,
+    abrEwmaDefaultEstimate: 300000,
+    abrBandWidthFactor: 0.9,
+    abrBandWidthUpFactor: 0.6,
+    maxBufferLength: 60,
+    maxMaxBufferLength: 120,
+    maxBufferHole: 1
+  };
+
+  // mpegts.js (flux mpeg-ts bruts, débit fixe — pas d'ABR possible) : un
+  // tampon initial plus grand absorbe les micro-coupures réseau avant de
+  // devoir mettre la lecture en pause pour recharger.
+  var MPEGTS_LOW_BANDWIDTH_CONFIG = {
+    enableStashBuffer: true,
+    stashInitialSize: 1024 * 1024 // 1 Mo (défaut mpegts.js : ~384 Ko)
+  };
 
   function ensureDom() {
     if (overlay) return;
@@ -379,7 +413,8 @@
       var useNativeLoader = global.Net && global.Net.isNative() && global.CapacitorHttpLoader;
       currentEngine = 'HLS' + (useNativeLoader ? ' natif' : '');
       setStatus('Connexion au flux (HLS)…');
-      hls = new global.Hls(useNativeLoader ? { enableWorker: true, loader: global.CapacitorHttpLoader } : { enableWorker: true });
+      var hlsConfig = Object.assign({}, HLS_LOW_BANDWIDTH_CONFIG, useNativeLoader ? { loader: global.CapacitorHttpLoader } : {});
+      hls = new global.Hls(hlsConfig);
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
         if (data && data.fatal) attemptFallbackOrFail('Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
@@ -398,7 +433,7 @@
     } else if (!isDirectFile(url) && !isM3u8(url) && global.mpegts && global.mpegts.isSupported()) {
       currentEngine = 'mpeg-ts';
       setStatus('Connexion au flux (mpeg-ts)…');
-      mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: url });
+      mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: url }, MPEGTS_LOW_BANDWIDTH_CONFIG);
       mpegtsPlayer.on(global.mpegts.Events.ERROR, function () {
         attemptFallbackOrFail('Flux mpeg-ts interrompu — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
       });

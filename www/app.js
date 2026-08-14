@@ -202,6 +202,63 @@
     return decorative / name.length > 0.25;
   }
 
+  // Beaucoup de playlists (surtout M3U) listent la même chaîne plusieurs
+  // fois sous des noms voisins — sources de secours, qualités différentes
+  // ("TF1", "TF1 HD", "TF1 FHD (2)"...). On les regroupe sous une seule
+  // carte à partir d'une clé normalisée (nom sans mention de qualité/source
+  // ni ponctuation), et on garde chaque entrée d'origine dans `versions` :
+  // pratique pour retomber sur une source plus légère si le débit est
+  // faible, sans avoir à fouiller une liste pleine de doublons.
+  var CHANNEL_QUALITY_TAGS = /\b(4k|uhd|fhd|full ?hd|hd|sd|hevc|h ?265|h ?264|vostfr|vf|vo|multi)\b/gi;
+  function channelFamilyKey(name) {
+    var key = String(name || '')
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(CHANNEL_QUALITY_TAGS, ' ')
+      .replace(/[^a-z0-9+]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return key || String(name || '').toLowerCase().trim();
+  }
+
+  function groupChannels(items) {
+    var byKey = {}, order = [];
+    items.forEach(function (it) {
+      var fam = channelFamilyKey(it.name);
+      if (!byKey[fam]) { byKey[fam] = []; order.push(fam); }
+      byKey[fam].push(it);
+    });
+    return order.map(function (fam) {
+      var versions = byKey[fam];
+      var logo = versions.map(function (v) { return v.logo; }).filter(Boolean)[0] || null;
+      return Object.assign({}, versions[0], { logo: logo, versions: versions });
+    });
+  }
+
+  function openChannelVersions(item) {
+    if (item.versions && item.versions.length > 1) { showVersionPicker(item); return; }
+    Player.open(item.url, item.name, { live: true });
+  }
+
+  function showVersionPicker(item) {
+    var modal = $id('versionPicker');
+    $id('versionPickerTitle').textContent = item.name;
+    var list = $id('versionPickerList');
+    list.innerHTML = '';
+    item.versions.forEach(function (v) {
+      var b = el('button', 'version-item', v.name);
+      b.addEventListener('click', function () { hideVersionPicker(); Player.open(v.url, v.name, { live: true }); });
+      list.appendChild(b);
+    });
+    modal.style.display = 'flex';
+  }
+
+  function hideVersionPicker() { $id('versionPicker').style.display = 'none'; }
+
+  $id('versionPickerClose').addEventListener('click', hideVersionPicker);
+  $id('versionPicker').addEventListener('click', function (e) { if (e.target.id === 'versionPicker') hideVersionPicker(); });
+
   function card(item, opts) {
     opts = opts || {};
     var card = el('div', 'carte');
@@ -217,6 +274,7 @@
       thumb.classList.add('vide');
     }
     if (!item.logo) thumb.textContent = iconFor(item.kind);
+    if (item.versions && item.versions.length > 1) thumb.appendChild(el('div', 'carte-versions', item.versions.length + ' sources'));
     card.appendChild(thumb);
 
     var body = el('div', 'carte-corps');
@@ -297,11 +355,12 @@
         } else {
           var items = pool.filter(function (it) { return (!cat || it.groupTitle === cat) && matchesSearch(it, q); })
             .map(function (it) {
-              var withKey = Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle });
+              var withKey = Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle, logo: it.tvgLogo });
               withKey._badge = epgBadge(withKey);
               return withKey;
             });
-          renderList(container, moreBtn, items, kindKey, { onOpen: kindKey === 'films' ? openFilm : null });
+          if (kindKey === 'direct') items = groupChannels(items);
+          renderList(container, moreBtn, items, kindKey, { onOpen: kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null });
           // (le badge EPG est déjà calculé par item ; on l'injecte après coup)
           Array.prototype.forEach.call(container.children, function (node, i) {
             var corps = items[i] && items[i]._badge && node.querySelector('.carte-corps');
@@ -324,8 +383,11 @@
         state.xtreamItems[kindKey] = items;
         var q = search.value.trim().toLowerCase();
         var filtered = items.filter(function (it) { return matchesSearch(it, q); });
-        if (kindKey === 'direct') filtered = filtered.map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
-        renderList(container, moreBtn, filtered, kindKey, { onOpen: kindKey === 'series' ? openSerieXtream : kindKey === 'films' ? openFilm : null });
+        if (kindKey === 'direct') {
+          filtered = filtered.map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
+          filtered = groupChannels(filtered);
+        }
+        renderList(container, moreBtn, filtered, kindKey, { onOpen: kindKey === 'series' ? openSerieXtream : kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null });
         if (kindKey === 'direct') {
           Array.prototype.forEach.call(container.children, function (node, i) {
             var corps = filtered[i] && filtered[i]._badge && node.querySelector('.carte-corps');
@@ -367,7 +429,7 @@
       return ensureM3uLoaded().then(function (data) {
         return data.items
           .filter(function (it) { return it.kind === 'live' && it.url && !looksLikeSeparator(it.name); })
-          .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null }); });
+          .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, logo: it.tvgLogo }); });
       });
     }
     if (state.guideChannelsCache) return Promise.resolve(state.guideChannelsCache);

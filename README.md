@@ -13,7 +13,7 @@ qu'elle affiche vient de la source que tu as configurée.
 | Onglet | Contenu |
 |---|---|
 | 🏠 **Accueil** | Playlist active (et sélecteur si tu en as plusieurs), accès rapide aux 3 catégories, nombre de favoris. |
-| 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). Bouton **Picture-in-Picture** dans le lecteur pour continuer à regarder en mini-fenêtre. |
+| 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). Bouton **Picture-in-Picture** dans le lecteur pour continuer à regarder en mini-fenêtre. Les chaînes en double dans la playlist (sources/qualités multiples) sont **regroupées** sous une seule carte, avec un sélecteur pour choisir la source. |
 | 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. |
 | 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture, complétée via TMDB si une clé est renseignée (voir plus bas). |
 | 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
@@ -83,6 +83,35 @@ v3, gratuite).
   l'onglet Infos au moment d'activer le réglage.
 - L'âge vient de la certification TMDB (France, sinon États-Unis ou
   Royaume-Uni en repli) — absente si TMDB ne l'a pas pour ce film.
+
+## Chaînes en double et sélecteur de source
+
+Beaucoup de playlists (surtout M3U) listent la même chaîne plusieurs fois
+sous des noms voisins — sources de secours, qualités différentes ("TF1",
+"TF1 HD", "TF1 FHD (2)"...). L'onglet **En direct** les regroupe sous une
+seule carte à partir d'une clé de nom normalisée (mentions de qualité/
+source et ponctuation retirées) : l'affiche est celle de la meilleure
+version disponible parmi le groupe, et un badge indique le nombre de
+sources. Toucher la carte ouvre un sélecteur listant chaque version
+d'origine — pratique pour basculer manuellement vers une source plus
+légère si le débit est faible. Une chaîne sans doublon s'ouvre directement,
+comme avant.
+
+## Optimisations pour un débit faible
+
+Les réglages de lecture priorisent la stabilité (pas de coupures) plutôt
+que la qualité maximale ou la latence minimale :
+
+- **HLS (hls.js)** : démarre toujours sur la qualité la plus basse
+  disponible (l'ABR remonte ensuite si le réseau le permet), hypothèse de
+  débit initiale prudente, remontée en qualité progressive pour éviter les
+  allers-retours HD/SD qui aggravent les coupures, mémoire tampon étendue
+  (jusqu'à 120 s) pour absorber des ralentissements plus longs sans
+  décrocher.
+- **mpeg-ts brut (mpegts.js)** : tampon initial plus grand (débit fixe,
+  pas d'ABR possible pour ce format).
+- **APK Android, lecteur natif de secours (ExoPlayer)** : mêmes principes
+  via un `DefaultLoadControl` aux tampons étendus.
 
 ## Sources prises en charge
 
@@ -172,13 +201,30 @@ python3 tools_gen_icon.py # régénère les icônes (aucune dépendance)
 `android/` n'est pas versionné : le workflow le régénère à chaque build, puis
 applique la signature (`ci/patch_signing.py`), la version (`ci/set_version.py`),
 les icônes (`ci/set_icons.py`), l'autorisation HTTP en clair pour les
-serveurs IPTV en `http://` (`ci/patch_manifest.py`) et le lecteur vidéo natif
+serveurs IPTV en `http://` (`ci/patch_manifest.py`), le lecteur vidéo natif
 (`ci/patch_native_player.py` — injecte `NativePlayerPlugin` / Media3
-ExoPlayer, voir plus bas).
+ExoPlayer, voir plus bas) et la restriction aux ABI de vrais téléphones
+(`ci/patch_abi.py` — voir « Taille de l'APK » plus bas).
 
 La clé de signature (`signing/release.keystore`) **est** versionnée dans ce
 dépôt — un choix inhabituel, expliqué avec ses implications dans
 [`signing/README.md`](signing/README.md).
+
+## Taille de l'APK
+
+L'APK ne cible que les ABI de vrais téléphones (`armeabi-v7a`, `arm64-v8a`)
+— `x86`/`x86_64` ne servent qu'aux émulateurs, jamais à un appareil réel, et
+doublaient inutilement la taille des libs natives (Media3 ExoPlayer, Google
+Play Services Cast, extension FFmpeg vendorisée) en les embarquant pour
+quatre ABI au lieu de deux (`ci/patch_abi.py`) : environ 10,0 Mo → 8,9 Mo
+sur l'APK signé v1.16. Le code compilé (dex, ~5 Mo compressés — AndroidX +
+Media3 + Google Play Services Cast) reste le plus gros poste ; le réduire
+davantage nécessiterait d'activer la réduction de code R8 (`minifyEnabled`),
+non fait pour l'instant : ça demande des règles `-keep` explicites pour le
+plugin Capacitor maison (`NativePlayerPlugin`, découvert par réflexion) et
+un test réel sur téléphone avant de pouvoir l'assumer sans risque de casser
+silencieusement une fonctionnalité — pas quelque chose qu'on peut valider
+uniquement par un build qui compile.
 
 ## Structure
 

@@ -154,6 +154,29 @@ button.ghost { background: var(--card2); color: var(--text); }
   position: absolute; top: 6px; right: 6px; background: rgba(10,16,24,.65); border: none;
   color: #ffd75e; font-size: 16px; border-radius: 8px; padding: 3px 6px; cursor: pointer; line-height: 1;
 }
+/* chaîne regroupée : plusieurs sources dispo (voir sélecteur de source) */
+.carte-versions {
+  position: absolute; left: 6px; bottom: 6px; background: rgba(10,16,24,.75);
+  color: var(--text); font-size: 10px; font-weight: 700; border-radius: 8px; padding: 2px 7px;
+}
+
+/* ---------- sélecteur de source (chaînes regroupées) ---------- */
+.version-picker {
+  position: fixed; inset: 0; background: rgba(6,10,16,.75); z-index: 70;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.version-picker-card {
+  width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px 16px 0 0; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  max-height: 80vh; overflow-y: auto;
+}
+.version-picker-card h3 { margin: 0 0 4px; font-size: 16px; }
+.version-item {
+  display: block; width: 100%; text-align: left; background: var(--card2); border: 1px solid var(--line);
+  color: var(--text); font-size: 13.5px; padding: 11px 12px; border-radius: 10px; cursor: pointer;
+  font-family: inherit; margin-top: 8px;
+}
+.version-item:active { border-color: var(--accent); }
 
 /* ---------- saisons (accordéon, replié par défaut) ---------- */
 .saison {
