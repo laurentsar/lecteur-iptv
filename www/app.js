@@ -18,7 +18,7 @@
     activeCategory: { direct: '', films: '', series: '' },
     shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE },
     xtreamItems: { direct: null, films: null, series: null }, // chargés à la demande par catégorie
-    directView: 'liste',   // 'liste' | 'mosaique'
+    directView: 'liste',   // 'liste' | 'tuile'
     guideChannelsCache: null, // toutes les chaînes direct (Xtream), indépendant du filtre par catégorie
     guideDayOffset: 0,
     unlockedAdult: {} // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
@@ -414,7 +414,7 @@
     var chipsId = kindKey === 'direct' ? 'chipsDirect' : kindKey === 'films' ? 'chipsFilms' : 'chipsSeries';
     var searchId = kindKey === 'direct' ? 'rechDirect' : kindKey === 'films' ? 'rechFilms' : 'rechSeries';
     var container = $id(listId), moreBtn = $id(moreId), chips = $id(chipsId), search = $id(searchId);
-    if (kindKey === 'direct') { container.classList.toggle('mosaique', state.directView === 'mosaique'); kickEpg(); }
+    if (kindKey === 'direct') { container.classList.toggle('tuile', state.directView === 'tuile'); kickEpg(); }
 
     if (!pl) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.')); moreBtn.style.display = 'none'; chips.innerHTML = ''; return; }
 
