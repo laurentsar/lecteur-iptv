@@ -172,8 +172,8 @@
         <p class="hint">Quand un flux propose plusieurs pistes audio ou des sous-titres, un bouton 🌐 dans le lecteur permet de les choisir. Sur le web (PWA et APK), ça marche pour les flux <strong>HLS</strong> qui déclarent des pistes alternatives dans leur manifeste — pas pour le mpeg-ts brut ni la lecture directe (mp4/mkv). Sur l'APK, le lecteur natif de secours (ExoPlayer) le permet pour n'importe quel format, y compris mp4/mkv multi-pistes.</p>
       </div>
       <div class="card">
-        <h2>📶 Débit faible &amp; chaînes en double</h2>
-        <p class="hint">Les réglages de lecture (HLS, mpeg-ts, lecteur natif de secours) priorisent la stabilité plutôt que la qualité maximale : démarrage sur la qualité la plus basse puis remontée prudente, mémoire tampon étendue pour absorber les ralentissements sans décrocher. Dans <strong>En direct</strong>, les chaînes listées plusieurs fois sous des noms voisins (sources ou qualités différentes) sont regroupées sous une seule carte ; toucher une carte à plusieurs sources ouvre un sélecteur pour basculer manuellement vers une version plus légère si besoin.</p>
+        <h2>📶 Débit faible &amp; doublons</h2>
+        <p class="hint">Les réglages de lecture (HLS, mpeg-ts, lecteur natif de secours) priorisent la stabilité plutôt que la qualité maximale : démarrage sur la qualité la plus basse puis remontée prudente, mémoire tampon étendue pour absorber les ralentissements sans décrocher. Dans <strong>En direct</strong> et <strong>Films</strong>, les entrées listées plusieurs fois sous des noms voisins (sources ou qualités différentes) sont regroupées sous une seule carte ; toucher une carte à plusieurs sources (ou le bouton Regarder d'une fiche film) ouvre un sélecteur pour basculer manuellement vers une version plus légère si besoin.</p>
       </div>
       <div class="card">
         <h2>🎬 Fiches films</h2>
@@ -212,7 +212,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.17';
+    window.APP_VERSION = '1.18';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

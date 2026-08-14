@@ -202,13 +202,14 @@
     return decorative / name.length > 0.25;
   }
 
-  // Beaucoup de playlists (surtout M3U) listent la même chaîne plusieurs
-  // fois sous des noms voisins — sources de secours, qualités différentes
-  // ("TF1", "TF1 HD", "TF1 FHD (2)"...). On les regroupe sous une seule
-  // carte à partir d'une clé normalisée (nom sans mention de qualité/source
-  // ni ponctuation), et on garde chaque entrée d'origine dans `versions` :
-  // pratique pour retomber sur une source plus légère si le débit est
-  // faible, sans avoir à fouiller une liste pleine de doublons.
+  // Beaucoup de playlists (surtout M3U) listent la même chaîne ou le même
+  // film plusieurs fois sous des noms voisins — sources de secours,
+  // qualités différentes ("TF1", "TF1 HD", "TF1 FHD (2)", "Inception 4K"...).
+  // On les regroupe sous une seule carte à partir d'une clé normalisée (nom
+  // sans mention de qualité/source ni ponctuation), et on garde chaque
+  // entrée d'origine dans `versions` : pratique pour retomber sur une
+  // source plus légère si le débit est faible, sans avoir à fouiller une
+  // liste pleine de doublons.
   var CHANNEL_QUALITY_TAGS = /\b(4k|uhd|fhd|full ?hd|hd|sd|hevc|h ?265|h ?264|vostfr|vf|vo|multi)\b/gi;
   function channelFamilyKey(name) {
     var key = String(name || '')
@@ -237,18 +238,18 @@
   }
 
   function openChannelVersions(item) {
-    if (item.versions && item.versions.length > 1) { showVersionPicker(item); return; }
+    if (item.versions && item.versions.length > 1) { showVersionPicker(item, true); return; }
     Player.open(item.url, item.name, { live: true });
   }
 
-  function showVersionPicker(item) {
+  function showVersionPicker(item, isLive) {
     var modal = $id('versionPicker');
     $id('versionPickerTitle').textContent = item.name;
     var list = $id('versionPickerList');
     list.innerHTML = '';
     item.versions.forEach(function (v) {
       var b = el('button', 'version-item', v.name);
-      b.addEventListener('click', function () { hideVersionPicker(); Player.open(v.url, v.name, { live: true }); });
+      b.addEventListener('click', function () { hideVersionPicker(); Player.open(v.url, v.name, { live: !!isLive }); });
       list.appendChild(b);
     });
     modal.style.display = 'flex';
@@ -359,7 +360,7 @@
               withKey._badge = epgBadge(withKey);
               return withKey;
             });
-          if (kindKey === 'direct') items = groupChannels(items);
+          if (kindKey === 'direct' || kindKey === 'films') items = groupChannels(items);
           renderList(container, moreBtn, items, kindKey, { onOpen: kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null });
           // (le badge EPG est déjà calculé par item ; on l'injecte après coup)
           Array.prototype.forEach.call(container.children, function (node, i) {
@@ -385,8 +386,8 @@
         var filtered = items.filter(function (it) { return matchesSearch(it, q); });
         if (kindKey === 'direct') {
           filtered = filtered.map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
-          filtered = groupChannels(filtered);
         }
+        if (kindKey === 'direct' || kindKey === 'films') filtered = groupChannels(filtered);
         renderList(container, moreBtn, filtered, kindKey, { onOpen: kindKey === 'series' ? openSerieXtream : kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null });
         if (kindKey === 'direct') {
           Array.prototype.forEach.call(container.children, function (node, i) {
@@ -672,8 +673,12 @@
     var plot = info.plot || info.description;
     col.appendChild(el('p', 'film-plot', plot || 'Aucun descriptif fourni par le fournisseur pour ce contenu.'));
 
-    var playBtn = el('button', 'primary', '▶ Regarder');
-    playBtn.addEventListener('click', function () { Player.open(item.url, item.name); });
+    var hasVersions = item.versions && item.versions.length > 1;
+    var playBtn = el('button', 'primary', hasVersions ? '▶ Regarder (' + item.versions.length + ' sources)' : '▶ Regarder');
+    playBtn.addEventListener('click', function () {
+      if (hasVersions) { showVersionPicker(item, false); return; }
+      Player.open(item.url, item.name);
+    });
     col.appendChild(playBtn);
 
     wrap.appendChild(col);

@@ -15,7 +15,7 @@ qu'elle affiche vient de la source que tu as configurée.
 | 🏠 **Accueil** | Playlist active (et sélecteur si tu en as plusieurs), accès rapide aux 3 catégories, nombre de favoris. |
 | 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). Bouton **Picture-in-Picture** dans le lecteur pour continuer à regarder en mini-fenêtre. Les chaînes en double dans la playlist (sources/qualités multiples) sont **regroupées** sous une seule carte, avec un sélecteur pour choisir la source. |
 | 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. |
-| 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture, complétée via TMDB si une clé est renseignée (voir plus bas). |
+| 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture, complétée via TMDB si une clé est renseignée (voir plus bas). Les doublons (même film listé plusieurs fois) sont regroupés, comme pour les chaînes. |
 | 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
 | ⭐ **Favoris** | Chaînes, films et séries marqués d'un ☆, tous fournisseurs confondus. |
 | 🗂️ **Playlists** | Ajoute, teste et supprime des sources M3U ou Xtream Codes ; plusieurs playlists peuvent être enregistrées et basculées à la volée. |
@@ -84,18 +84,19 @@ v3, gratuite).
 - L'âge vient de la certification TMDB (France, sinon États-Unis ou
   Royaume-Uni en repli) — absente si TMDB ne l'a pas pour ce film.
 
-## Chaînes en double et sélecteur de source
+## Chaînes et films en double, sélecteur de source
 
-Beaucoup de playlists (surtout M3U) listent la même chaîne plusieurs fois
-sous des noms voisins — sources de secours, qualités différentes ("TF1",
-"TF1 HD", "TF1 FHD (2)"...). L'onglet **En direct** les regroupe sous une
-seule carte à partir d'une clé de nom normalisée (mentions de qualité/
-source et ponctuation retirées) : l'affiche est celle de la meilleure
-version disponible parmi le groupe, et un badge indique le nombre de
-sources. Toucher la carte ouvre un sélecteur listant chaque version
-d'origine — pratique pour basculer manuellement vers une source plus
-légère si le débit est faible. Une chaîne sans doublon s'ouvre directement,
-comme avant.
+Beaucoup de playlists (surtout M3U) listent la même chaîne ou le même film
+plusieurs fois sous des noms voisins — sources de secours, qualités
+différentes ("TF1", "TF1 HD", "TF1 FHD (2)", "Inception 4K"...). Les
+onglets **En direct** et **Films** les regroupent sous une seule carte à
+partir d'une clé de nom normalisée (mentions de qualité/source et
+ponctuation retirées) : l'affiche est celle de la meilleure version
+disponible parmi le groupe, et un badge indique le nombre de sources.
+Toucher la carte (ou le bouton « Regarder » d'une fiche film) ouvre un
+sélecteur listant chaque version d'origine — pratique pour basculer
+manuellement vers une source plus légère si le débit est faible. Une
+entrée sans doublon s'ouvre directement, comme avant.
 
 ## Optimisations pour un débit faible
 
