@@ -20,7 +20,8 @@
     xtreamItems: { direct: null, films: null, series: null }, // chargés à la demande par catégorie
     directView: 'liste',   // 'liste' | 'mosaique'
     guideChannelsCache: null, // toutes les chaînes direct (Xtream), indépendant du filtre par catégorie
-    guideDayOffset: 0
+    guideDayOffset: 0,
+    unlockedAdult: {} // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
   };
 
   // ---------- utilitaires ----------
@@ -192,6 +193,73 @@
     });
   }
 
+  // ---------- code PIN (bouquets/catégories « adulte ») ----------
+  // Facultatif : tant qu'aucun code PIN n'est défini, rien n'est masqué.
+  // Détection par nom de catégorie (groupe M3U ou catégorie Xtream) —
+  // aucune liste de contenus, juste une heuristique sur le nom.
+  var ADULT_GROUP_RE = /adult|adulte|xxx|18\+|porn/i;
+  function isAdultGroup(name) { return ADULT_GROUP_RE.test(name || ''); }
+
+  function filterAdultLocked(items) {
+    var pin = Store.getParentalPin();
+    if (!pin) return { visible: items, locked: {} };
+    var visible = [], locked = {};
+    items.forEach(function (it) {
+      var groupName = (it.group || it.groupTitle || '').trim();
+      var key = groupName.toLowerCase();
+      if (groupName && isAdultGroup(groupName) && !state.unlockedAdult[key]) {
+        if (!locked[key]) locked[key] = { label: groupName, count: 0 };
+        locked[key].count++;
+      } else {
+        visible.push(it);
+      }
+    });
+    return { visible: visible, locked: locked };
+  }
+
+  function appendLockedCards(container, locked, onUnlock) {
+    Object.keys(locked).forEach(function (key) {
+      var info = locked[key];
+      var card = el('div', 'carte-lock');
+      card.appendChild(el('div', 'carte-lock-ico', '🔒'));
+      var txt = el('div', 'carte-lock-txt');
+      txt.appendChild(el('div', 'carte-lock-nom', info.label));
+      txt.appendChild(el('div', 'hint', info.count + ' élément(s) protégé(s) par code PIN — toucher pour déverrouiller'));
+      card.appendChild(txt);
+      card.addEventListener('click', function () {
+        askPin('Code PIN pour « ' + info.label + ' »').then(function (ok) {
+          if (ok) { state.unlockedAdult[key] = true; onUnlock(); }
+        });
+      });
+      container.appendChild(card);
+    });
+  }
+
+  var pinResolveCallback = null;
+  function askPin(message) {
+    return new Promise(function (resolve) {
+      $id('pinModalMsg').textContent = message;
+      $id('pinInput').value = '';
+      $id('pinError').textContent = '';
+      $id('pinModal').style.display = 'flex';
+      pinResolveCallback = resolve;
+      setTimeout(function () { $id('pinInput').focus(); }, 50);
+    });
+  }
+  function closePinModal(result) {
+    $id('pinModal').style.display = 'none';
+    var cb = pinResolveCallback;
+    pinResolveCallback = null;
+    if (cb) cb(result);
+  }
+  $id('pinCancel').addEventListener('click', function () { closePinModal(false); });
+  $id('pinConfirm').addEventListener('click', function () {
+    var v = $id('pinInput').value.trim();
+    if (v && v === Store.getParentalPin()) { closePinModal(true); }
+    else { $id('pinError').textContent = 'Code incorrect.'; }
+  });
+  $id('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') $id('pinConfirm').click(); });
+
   // Beaucoup de playlists IPTV insèrent des entrées purement décoratives
   // entre les groupes de chaînes (ex. « ||--- |FR| GENERALISTES |FR| ---|| »)
   // sans flux valide derrière : elles bloquent le lecteur indéfiniment sans
@@ -350,10 +418,13 @@
         var q = search.value.trim().toLowerCase();
         if (kindKey === 'series') {
           var series = M3U.groupSeries(pool.filter(function (it) { return !cat || it.groupTitle === cat; }))
-            .filter(function (s) { return matchesSearch({ name: s.nom }, q); });
-          renderList(container, moreBtn, series.map(function (s) {
-            return { key: 'serie:' + pl.id + ':' + s.nom, kind: 'series', name: s.nom, logo: s.logo, group: s.groupTitle, saisons: s.saisons };
-          }), kindKey, { onOpen: openSerieM3u });
+            .filter(function (s) { return matchesSearch({ name: s.nom }, q); })
+            .map(function (s) {
+              return { key: 'serie:' + pl.id + ':' + s.nom, kind: 'series', name: s.nom, logo: s.logo, group: s.groupTitle, saisons: s.saisons };
+            });
+          var seriesLock = filterAdultLocked(series);
+          renderList(container, moreBtn, seriesLock.visible, kindKey, { onOpen: openSerieM3u });
+          appendLockedCards(container, seriesLock.locked, function () { renderKind(kindKey); });
         } else {
           var items = pool.filter(function (it) { return (!cat || it.groupTitle === cat) && matchesSearch(it, q); })
             .map(function (it) {
@@ -361,13 +432,18 @@
               withKey._badge = epgBadge(withKey);
               return withKey;
             });
+          var itemsLock = filterAdultLocked(items);
+          items = itemsLock.visible;
           if (kindKey === 'direct' || kindKey === 'films') items = groupChannels(items);
           renderList(container, moreBtn, items, kindKey, { onOpen: kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null });
-          // (le badge EPG est déjà calculé par item ; on l'injecte après coup)
+          // (le badge EPG est déjà calculé par item ; on l'injecte après coup —
+          // avant d'ajouter les cartes verrouillées, pour garder l'alignement
+          // d'index entre `items` et les enfants du conteneur)
           Array.prototype.forEach.call(container.children, function (node, i) {
             var corps = items[i] && items[i]._badge && node.querySelector('.carte-corps');
             if (corps) corps.appendChild(items[i]._badge);
           });
+          appendLockedCards(container, itemsLock.locked, function () { renderKind(kindKey); });
         }
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); moreBtn.style.display = 'none'; });
       return;
@@ -388,6 +464,8 @@
         if (kindKey === 'direct') {
           filtered = filtered.map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
         }
+        var xtreamLock = filterAdultLocked(filtered);
+        filtered = xtreamLock.visible;
         if (kindKey === 'direct' || kindKey === 'films') filtered = groupChannels(filtered);
         renderList(container, moreBtn, filtered, kindKey, { onOpen: kindKey === 'series' ? openSerieXtream : kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null });
         if (kindKey === 'direct') {
@@ -396,6 +474,7 @@
             if (corps) corps.appendChild(filtered[i]._badge);
           });
         }
+        appendLockedCards(container, xtreamLock.locked, function () { renderKind(kindKey); });
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
     }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
   }
@@ -1007,6 +1086,18 @@
     var v = $id('tmdbKeyInput').value.trim();
     Store.setTmdbKey(v);
     $id('tmdbStatus').textContent = v ? 'Clé enregistrée — les fiches films incomplètes seront complétées via TMDB.' : 'Clé supprimée — enrichissement TMDB désactivé.';
+  });
+
+  // ---------- réglage code PIN (bouquet adulte) ----------
+  // Le champ n'est jamais prérempli avec le code existant (on ne le
+  // réaffiche pas en clair) ; laisser vide et valider retire le code.
+  $id('pinSettingStatus').textContent = Store.getParentalPin() ? 'Un code PIN est actuellement défini.' : 'Aucun code PIN défini — rien n’est masqué.';
+  $id('btnSavePin').addEventListener('click', function () {
+    var v = $id('pinSettingInput').value.trim();
+    Store.setParentalPin(v);
+    $id('pinSettingInput').value = '';
+    state.unlockedAdult = {};
+    $id('pinSettingStatus').textContent = v ? 'Code PIN enregistré.' : 'Code PIN retiré — rien n’est masqué.';
   });
 
   // ---------- démarrage ----------

@@ -183,6 +183,15 @@
         <p class="hint">Le bouton dans le lecteur envoie le flux en cours sur une TV : <strong>Chromecast</strong> (Android, APK et navigateur Chrome) ou <strong>AirPlay</strong> (iPhone/Mac, Safari). Aucun compte requis. Sur iPhone, comme l'app n'existe pas en version installable, c'est le lecteur web (Safari) qui sert de lecteur.</p>
       </div>
       <div class="card">
+        <h2>🔒 Code PIN (bouquet adulte)</h2>
+        <p class="hint">Protège par code les catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ » (détection automatique sur le nom de la catégorie, pas de liste de contenus). Facultatif : tant qu'aucun code n'est défini, rien n'est masqué. Le code reste uniquement sur cet appareil.</p>
+        <div class="row" style="margin-top:8px">
+          <input type="password" inputmode="numeric" autocomplete="off" id="pinSettingInput" placeholder="Nouveau code PIN (4 chiffres ou plus)" style="flex:1 1 220px" />
+          <button id="btnSavePin" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+        </div>
+        <p class="hint" id="pinSettingStatus"></p>
+      </div>
+      <div class="card">
         <h2>📼 Enregistrement (DVR)</h2>
         <p class="hint"><strong>APK Android uniquement</strong> — enregistre un flux vers un fichier local via un service en arrière-plan, y compris appli fermée (notification permanente pendant l'enregistrement, obligatoire côté Android). Bouton ⏺ dans le lecteur d'une chaîne (immédiat, arrêt manuel ou après 4h) ou sur une émission à venir dans le <strong>Guide</strong> (programmé, démarre même appli fermée, réarmé après un redémarrage du téléphone). Consultation dans l'onglet <strong>Enreg.</strong> Un seul enregistrement à la fois. Limite assumée : certains téléphones (gestion de batterie agressive de certains constructeurs) peuvent arrêter le service sauf exception manuelle dans les réglages batterie — aucune app ne peut le garantir à 100 % sur Android.</p>
       </div>
@@ -234,8 +243,21 @@
     </div>
   </div>
 
+  <div id="pinModal" class="version-picker" style="display:none">
+    <div class="version-picker-card">
+      <h3>🔒 Code PIN requis</h3>
+      <p class="hint" id="pinModalMsg">Ce contenu est protégé.</p>
+      <input type="password" inputmode="numeric" autocomplete="off" id="pinInput" maxlength="8" placeholder="Code PIN" />
+      <p class="hint" id="pinError" style="color:var(--bad); min-height:16px"></p>
+      <div class="row" style="margin-top:4px">
+        <button id="pinCancel" class="ghost">Annuler</button>
+        <button id="pinConfirm" class="primary">Valider</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    window.APP_VERSION = '1.19';
+    window.APP_VERSION = '1.20';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

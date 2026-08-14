@@ -23,6 +23,7 @@
   var K_ACTIVE = 'iptv:active';
   var K_FAVORIS = 'iptv:favoris';
   var K_TMDB = 'iptv:tmdbKey';
+  var K_PIN = 'iptv:parentalPin';
 
   function getPlaylists() { return lsGet(K_PLAYLISTS, []); }
   function savePlaylists(list) { return lsSet(K_PLAYLISTS, list); }
@@ -57,6 +58,12 @@
   // l'âge — voir tmdb.js. Reste locale comme le reste des réglages.
   function getTmdbKey() { return lsGet(K_TMDB, null); }
   function setTmdbKey(key) { return lsSet(K_TMDB, key || null); }
+
+  // Code PIN local (contrôle parental, catégories « adulte ») — stocké tel
+  // quel comme le reste des réglages (rien n'est envoyé nulle part) ;
+  // facultatif, aucune catégorie n'est masquée tant qu'il n'est pas défini.
+  function getParentalPin() { return lsGet(K_PIN, null); }
+  function setParentalPin(pin) { return lsSet(K_PIN, pin || null); }
 
   function getFavoris() { return lsGet(K_FAVORIS, []); }
   function isFavori(key) { return getFavoris().some(function (f) { return f.key === key; }); }
@@ -120,6 +127,7 @@
     updatePlaylist: updatePlaylist, removePlaylist: removePlaylist,
     getActivePlaylistId: getActivePlaylistId, setActivePlaylistId: setActivePlaylistId,
     getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
+    getParentalPin: getParentalPin, setParentalPin: setParentalPin,
     getFavoris: getFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
     cacheGet: function (playlistId) { return idbGet('cache:' + playlistId); },
     cacheSet: function (playlistId, data) { return idbSet('cache:' + playlistId, data); },

@@ -37,6 +37,18 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
 - Aucun compte ni inscription requis (récepteur Cast « par défaut » de
   Google, pas d'application Cast dédiée à enregistrer).
 
+## Code PIN (bouquet adulte)
+
+Réglage facultatif dans l'onglet Infos. Une fois un code défini, les
+catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ »
+(groupe M3U ou catégorie Xtream, détection sur le nom uniquement) sont
+masquées dans **En direct**, **Films** et **Séries**, remplacées par une
+carte « 🔒 N élément(s) protégé(s) » qui demande le code au clic. Une fois
+déverrouillée, une catégorie le reste pour la session en cours (jusqu'au
+prochain lancement de l'app). Tant qu'aucun code n'est défini, rien n'est
+masqué. Le code reste uniquement sur l'appareil, comme le reste des
+réglages.
+
 ## Enregistrement (DVR, APK Android uniquement)
 
 Enregistre un flux en direct vers un fichier local, **y compris si l'app
