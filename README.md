@@ -8,6 +8,10 @@ C'est un **lecteur**, pas un fournisseur de contenu : l'app n'héberge, ne
 vend et ne recommande aucune chaîne, aucun film ni aucune série. Tout ce
 qu'elle affiche vient de la source que tu as configurée.
 
+🌐 **Version web (PWA)** : https://laurentsar.github.io/lecteur-iptv/ —
+utilisable directement dans le navigateur, sans installation (voir les
+limites de la PWA face à l'APK dans [Limites connues](#limites-connues)).
+
 ## Fonctionnalités
 
 | Onglet | Contenu |
@@ -246,8 +250,12 @@ envoyé à TMDB pour compléter leur fiche.
 - **APK** : chaque push sur `main` publie une Release GitHub signée, taguée
   `vX.Y`. L'app vérifie elle-même s'il en existe une plus récente et propose
   le téléchargement.
-- **PWA** : servir le dossier `www/` en HTTPS, puis « Ajouter à l'écran
-  d'accueil ».
+- **PWA** : déjà servie en HTTPS via GitHub Pages —
+  https://laurentsar.github.io/lecteur-iptv/ (redéployée automatiquement à
+  chaque push sur `main` qui touche `www/`, voir
+  `.github/workflows/deploy-pages.yml`). Ouvrir le lien puis « Ajouter à
+  l'écran d'accueil » pour l'installer comme une app. Pour l'auto-héberger
+  ailleurs, il suffit de servir le dossier `www/` en HTTPS.
 
 ## Développement
 

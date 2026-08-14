@@ -1,7 +1,7 @@
 /* sw.js — cache uniquement le shell de l'application (pages/scripts/styles).
  * Les flux vidéo, les appels API (Xtream, GitHub) et l'EPG ne sont jamais mis
  * en cache : ils viennent toujours du réseau, en direct. */
-const CACHE = 'iptv-lecteur-v1.23';
+const CACHE = 'iptv-lecteur-v1.24';
 const SHELL = [
   'index.html', 'styles.css',
   'net.js', 'hls-native-loader.js', 'store.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'player.js', 'recorder.js', 'app.js', 'update-check.js',
@@ -22,7 +22,12 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return; // flux/API distants : jamais interceptés
-  const path = url.pathname.replace(/^.*\/iptv-lecteur\//, '').replace(/^\//, '') || 'index.html';
+  // Chemin relatif à la racine de déploiement (scope du service worker), pas
+  // un préfixe codé en dur : fonctionne aussi bien servi à la racine (APK,
+  // domaine dédié) que sous un sous-dossier (ex. GitHub Pages /lecteur-iptv/).
+  const scope = new URL(self.registration.scope).pathname;
+  if (!url.pathname.startsWith(scope)) return;
+  const path = url.pathname.slice(scope.length) || 'index.html';
   if (!SHELL.includes(path)) return;
   e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });
