@@ -321,6 +321,11 @@ button.ghost { background: var(--card2); color: var(--text); }
 }
 .guide-prog.now { background: var(--accent-dim); border-color: var(--accent); color: #06181c; font-weight: 700; }
 .guide-empty { position: absolute; top: 4px; left: 6px; font-size: 11px; color: var(--muted); }
+.guide-rec-btn {
+  position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; line-height: 14px;
+  background: rgba(10,16,24,.7); border: none; border-radius: 50%; color: var(--bad);
+  font-size: 9px; cursor: pointer; padding: 0;
+}
 
 /* ---------- toast ---------- */
 .toast {

@@ -32,7 +32,7 @@
   var originalUrl = '', originalTitle = '';
   var currentIsLive = false; // PiP proposé uniquement pour le direct
   var triedNativeFallback = false, triedM3u8Fallback = false;
-  var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, tracksBtn, tracksMenu, castLauncher;
+  var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
   var castSdkRequested = false;
   var loadTimeoutId = null;
   var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
@@ -77,6 +77,7 @@
       '  <google-cast-launcher id="castLauncher" class="player-cast" style="display:none"></google-cast-launcher>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
       '  <button id="playerPip" class="player-cast" aria-label="Picture-in-Picture" style="display:none">⧉</button>' +
+      '  <button id="playerRecord" class="player-cast" aria-label="Enregistrer" style="display:none">⏺</button>' +
       '  <button id="playerTracks" class="player-cast" aria-label="Langue et sous-titres" style="display:none">🌐</button>' +
       '  <button id="playerClose" class="player-close" aria-label="Fermer">✕</button>' +
       '</div>' +
@@ -95,6 +96,7 @@
     closeBtn = overlay.querySelector('#playerClose');
     airplayBtn = overlay.querySelector('#playerAirplay');
     pipBtn = overlay.querySelector('#playerPip');
+    recordBtn = overlay.querySelector('#playerRecord');
     tracksBtn = overlay.querySelector('#playerTracks');
     tracksMenu = overlay.querySelector('#playerTracksMenu');
     castLauncher = overlay.querySelector('#castLauncher');
@@ -108,6 +110,44 @@
     setupChromecast();
     setupPip();
     setupTracks();
+    setupRecording();
+  }
+
+  // ---------- Enregistrement (chaînes en direct uniquement, APK Android —
+  // service natif en arrière-plan, voir recorder.js). Continue de tourner
+  // si on ferme le lecteur ou l'appli : ce bouton ne fait que démarrer/
+  // arrêter, il ne « possède » pas l'enregistrement. ----------
+  function updateRecordVisibility() {
+    recordBtn.style.display = (currentIsLive && global.Recorder && Recorder.isAvailable() && !isCasting()) ? '' : 'none';
+  }
+
+  function syncRecordButtonState() {
+    if (!global.Recorder || !Recorder.isAvailable()) return;
+    Recorder.isRecording().then(function (r) {
+      var recording = !!(r && r.recording && r.title === currentTitle);
+      recordBtn.classList.toggle('active', recording);
+      recordBtn.textContent = recording ? '⏹' : '⏺';
+    });
+  }
+
+  function setupRecording() {
+    recordBtn.addEventListener('click', function () {
+      Recorder.isRecording().then(function (r) {
+        if (r && r.recording) {
+          Recorder.stop().then(function () {
+            recordBtn.classList.remove('active');
+            recordBtn.textContent = '⏺';
+            setStatus('Enregistrement arrêté.');
+          });
+        } else {
+          Recorder.startNow({ url: currentUrl, name: currentTitle }, 4 * 60 * 60 * 1000).then(function () {
+            recordBtn.classList.add('active');
+            recordBtn.textContent = '⏹';
+            setStatus('Enregistrement démarré — continue même si tu fermes le lecteur ou l’app.');
+          }).catch(function (err) { setStatus('Enregistrement impossible : ' + err.message); });
+        }
+      });
+    });
   }
 
   // ---------- Picture-in-Picture (chaînes en direct uniquement) ----------
@@ -281,6 +321,7 @@
             castCurrentMedia();
           }
           if (pipBtn) updatePipVisibility();
+          if (recordBtn) updateRecordVisibility();
         }
       );
     };
@@ -457,7 +498,9 @@
     ensureDom();
     overlay.classList.add('show');
     updatePipVisibility();
+    updateRecordVisibility();
     startPlayback(url, title);
+    syncRecordButtonState();
   }
 
   function close() {

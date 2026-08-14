@@ -24,6 +24,7 @@
     <button class="tab active" data-tab="accueil">🏠 Accueil</button>
     <button class="tab" data-tab="direct">📺 En direct</button>
     <button class="tab" data-tab="guide">🗓️ Guide</button>
+    <button class="tab" data-tab="enregistrements">📼 Enreg.</button>
     <button class="tab" data-tab="films">🎬 Films</button>
     <button class="tab" data-tab="series">🎞️ Séries</button>
     <button class="tab" data-tab="favoris">⭐ Favoris</button>
@@ -63,6 +64,24 @@
       </div>
       <div id="guideWrap" class="guide-wrap"></div>
       <div class="row"><button id="plusGuide" class="ghost" style="display:none">Charger plus</button></div>
+    </section>
+
+    <!-- ================= ENREGISTREMENTS ================= -->
+    <section class="panel" id="tab-enregistrements">
+      <div id="enregNonDispo" class="card warn" style="display:none">
+        <h2>⚠️ Indisponible</h2>
+        <p class="hint">L'enregistrement nécessite un service en arrière-plan qui continue de tourner appli fermée — possible uniquement sur l'<strong>APK Android</strong>, pas sur cette PWA/ce navigateur.</p>
+      </div>
+      <div id="enregDispo">
+        <div class="card">
+          <h2>Programmés</h2>
+          <div id="listeProgrammes"></div>
+        </div>
+        <div class="card">
+          <h2>Enregistrements</h2>
+          <div id="listeEnregistrements"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ================= FILMS ================= -->
@@ -164,6 +183,10 @@
         <p class="hint">Le bouton dans le lecteur envoie le flux en cours sur une TV : <strong>Chromecast</strong> (Android, APK et navigateur Chrome) ou <strong>AirPlay</strong> (iPhone/Mac, Safari). Aucun compte requis. Sur iPhone, comme l'app n'existe pas en version installable, c'est le lecteur web (Safari) qui sert de lecteur.</p>
       </div>
       <div class="card">
+        <h2>📼 Enregistrement (DVR)</h2>
+        <p class="hint"><strong>APK Android uniquement</strong> — enregistre un flux vers un fichier local via un service en arrière-plan, y compris appli fermée (notification permanente pendant l'enregistrement, obligatoire côté Android). Bouton ⏺ dans le lecteur d'une chaîne (immédiat, arrêt manuel ou après 4h) ou sur une émission à venir dans le <strong>Guide</strong> (programmé, démarre même appli fermée, réarmé après un redémarrage du téléphone). Consultation dans l'onglet <strong>Enreg.</strong> Un seul enregistrement à la fois. Limite assumée : certains téléphones (gestion de batterie agressive de certains constructeurs) peuvent arrêter le service sauf exception manuelle dans les réglages batterie — aucune app ne peut le garantir à 100 % sur Android.</p>
+      </div>
+      <div class="card">
         <h2>⧉ Picture-in-Picture</h2>
         <p class="hint">Pour le <strong>direct</strong> uniquement, un bouton ⧉ réduit la chaîne en mini-fenêtre pour continuer à regarder en utilisant le reste de l'app ou une autre appli. Sur l'APK Android, si le lecteur natif de secours est utilisé (codec non décodable par le navigateur), appuyer sur le bouton Accueil réduit aussi automatiquement en PiP.</p>
       </div>
@@ -212,7 +235,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.18';
+    window.APP_VERSION = '1.19';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
@@ -225,6 +248,7 @@
   <script src="tmdb.js"></script>
   <script src="epg.js"></script>
   <script src="player.js"></script>
+  <script src="recorder.js"></script>
   <script src="app.js"></script>
   <script src="update-check.js"></script>
 </body>

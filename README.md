@@ -14,7 +14,8 @@ qu'elle affiche vient de la source que tu as configurée.
 |---|---|
 | 🏠 **Accueil** | Playlist active (et sélecteur si tu en as plusieurs), accès rapide aux 3 catégories, nombre de favoris. |
 | 📺 **En direct** | Chaînes en direct, recherche et filtre par catégorie/groupe, badge « en cours / à suivre » quand un guide EPG est disponible. Bascule **Liste / Mosaïque** (tuiles compactes centrées sur le logo). Bouton **Picture-in-Picture** dans le lecteur pour continuer à regarder en mini-fenêtre. Les chaînes en double dans la playlist (sources/qualités multiples) sont **regroupées** sous une seule carte, avec un sélecteur pour choisir la source. |
-| 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. |
+| 🗓️ **Guide** | Agenda EPG heure par heure : une ligne par chaîne, défilement horizontal dans le temps, ligne « maintenant », navigation jour précédent/suivant, recherche. Bouton ⏺ sur une émission à venir pour programmer son enregistrement (APK Android). |
+| 📼 **Enreg.** | Enregistrements programmés (à venir) et terminés (lecture, suppression) — APK Android uniquement, voir plus bas. |
 | 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture, complétée via TMDB si une clé est renseignée (voir plus bas). Les doublons (même film listé plusieurs fois) sont regroupés, comme pour les chaînes. |
 | 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
 | ⭐ **Favoris** | Chaînes, films et séries marqués d'un ☆, tous fournisseurs confondus. |
@@ -35,6 +36,36 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
   d'utiliser le lecteur sur iPhone (la PWA fonctionne dans Safari).
 - Aucun compte ni inscription requis (récepteur Cast « par défaut » de
   Google, pas d'application Cast dédiée à enregistrer).
+
+## Enregistrement (DVR, APK Android uniquement)
+
+Enregistre un flux en direct vers un fichier local, **y compris si l'app
+est fermée** — via un service Android en avant-plan (notification
+permanente, obligatoire pour qu'Android autorise une exécution prolongée
+en arrière-plan).
+
+- **Immédiat** : bouton ⏺ dans le lecteur d'une chaîne en direct.
+  Enregistre jusqu'à l'arrêt manuel (bouton ⏹, ou depuis la notification),
+  avec une limite de sécurité à 4 h.
+- **Programmé** : bouton ⏺ sur une émission à venir dans le **Guide**.
+  Une alarme système (`AlarmManager`) démarre l'enregistrement à l'heure
+  prévue, même appli fermée ; réarmée automatiquement après un redémarrage
+  du téléphone.
+- Capture le flux tel quel (segments HLS concaténés, ou copie directe pour
+  un flux brut) — pas de remuxage ni de transcodage. Le fichier obtenu
+  (`.ts`) se lit comme n'importe quel contenu de l'app (mpeg-ts déjà
+  vendorisé, avec repli automatique vers le lecteur natif si besoin).
+- Consultation, lecture et suppression dans l'onglet **📼 Enreg.**
+- **Un seul enregistrement à la fois.** Une programmation qui tombe
+  pendant un enregistrement déjà en cours est ignorée.
+- **Limite assumée** : certains téléphones (gestion de batterie agressive
+  de certains constructeurs — Xiaomi, Huawei, Samsung…) peuvent malgré
+  tout arrêter le service en arrière-plan, sauf si l'app est mise en
+  exception manuellement dans les réglages de batterie. Aucune app ne peut
+  garantir à 100 % l'exécution en arrière-plan sur Android — c'est une
+  contrainte de la plateforme, pas un choix de conception.
+- Non disponible sur la PWA/navigateur/iPhone : aucune exécution en
+  arrière-plan fiable n'y existe.
 
 ## Picture-in-Picture (direct uniquement)
 
@@ -204,8 +235,10 @@ applique la signature (`ci/patch_signing.py`), la version (`ci/set_version.py`),
 les icônes (`ci/set_icons.py`), l'autorisation HTTP en clair pour les
 serveurs IPTV en `http://` (`ci/patch_manifest.py`), le lecteur vidéo natif
 (`ci/patch_native_player.py` — injecte `NativePlayerPlugin` / Media3
-ExoPlayer, voir plus bas) et la restriction aux ABI de vrais téléphones
-(`ci/patch_abi.py` — voir « Taille de l'APK » plus bas).
+ExoPlayer, voir plus bas), l'enregistreur DVR (`ci/patch_recorder.py` —
+injecte `RecorderPlugin` / `RecordingService`, voir « Enregistrement »
+plus haut) et la restriction aux ABI de vrais téléphones (`ci/patch_abi.py`
+— voir « Taille de l'APK » plus bas).
 
 La clé de signature (`signing/release.keystore`) **est** versionnée dans ce
 dépôt — un choix inhabituel, expliqué avec ses implications dans
@@ -231,7 +264,7 @@ uniquement par un build qui compile.
 
 ```
 www/
-  index.html     7 onglets
+  index.html     8 onglets
   net.js         requêtes réseau playlist/API (contourne les CORS via Capacitor sur Android)
   hls-native-loader.js  chargeur hls.js natif (contourne les CORS sur les flux HLS, Android)
   store.js       persistance locale (playlists, favoris, cache)
@@ -240,6 +273,7 @@ www/
   tmdb.js        enrichissement TMDB des fiches films (facultatif)
   epg.js         guide XMLTV (now/next)
   player.js      lecteur vidéo (hls.js pour le HLS, mpegts.js pour le .ts brut, natif sinon)
+  recorder.js    pont JS vers RecorderPlugin (DVR, APK Android uniquement)
   app.js         interface, onglets, playlists, grilles
   vendor/hls.min.js     lecture HLS (Apache-2.0, video-dev/hls.js)
   vendor/mpegts.min.js  lecture mpeg-ts brut (Apache-2.0, xqq/mpegts.js)
@@ -249,6 +283,13 @@ ci/patch_native_player.py  injecte (à chaque build) dans android/ :
   NativePlayerActivity.java   lecteur plein écran (Media3 ExoPlayer + FFmpeg + Cast)
   CastOptionsProvider.java    config. Google Cast (récepteur par défaut)
   activity_native_player.xml  mise en page (PlayerView + titre + cast + fermer)
+
+ci/patch_recorder.py  injecte (à chaque build) dans android/ :
+  RecorderPlugin.java             plugin Capacitor (start/stop/programmer/lister)
+  RecordingService.java           service en avant-plan, capture HLS ou flux brut
+  RecordingScheduleReceiver.java  déclenche un enregistrement programmé (AlarmManager)
+  RecordingBootReceiver.java      réarme les programmations après redémarrage
+  Recordings.java                 persistance (SharedPreferences + JSON)
 
 native/decoder-ffmpeg/  module Gradle vendorisé (voir NOTICE.md) :
   décodeur audio FFmpeg pour AC3/E-AC3/DTS/TrueHD, relié au projet

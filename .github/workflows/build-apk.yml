@@ -58,6 +58,11 @@ jobs:
       - name: Add native video player (ExoPlayer)
         run: python3 ci/patch_native_player.py
 
+      # Enregistrement DVR (service en avant-plan, manuel ou programmé
+      # depuis le Guide) — doit tourner appli fermée, donc natif.
+      - name: Add background recorder (DVR)
+        run: python3 ci/patch_recorder.py
+
       # x86/x86_64 ne servent qu'aux émulateurs : les exclure réduit
       # sensiblement la taille de l'APK (libs natives ExoPlayer/Cast/FFmpeg
       # en 2 ABI au lieu de 4).

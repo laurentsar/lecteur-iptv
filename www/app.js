@@ -50,6 +50,7 @@
     else if (name === 'films') { $id('filmDetail').style.display = 'none'; $id('filmsRacine').style.display = ''; renderKind('films'); }
     else if (name === 'series') { $id('serieDetail').style.display = 'none'; $id('seriesRacine').style.display = ''; renderKind('series'); }
     else if (name === 'guide') renderGuide(true);
+    else if (name === 'enregistrements') renderEnregistrements();
     else if (name === 'favoris') renderFavoris();
     else if (name === 'playlists') renderPlaylists();
   }
@@ -513,6 +514,18 @@
             block.style.width = Math.max(28, (e - s) / 60000 * PX_PER_MIN) + 'px';
             block.title = p.titre || '';
             block.addEventListener('click', function () { Player.open(item.url, item.name, { live: true }); });
+            if (p.start > now && Recorder.isAvailable()) {
+              var schedBtn = el('button', 'guide-rec-btn', '⏺');
+              schedBtn.title = 'Programmer l’enregistrement';
+              schedBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                Recorder.schedule({ url: item.url, name: p.titre || item.name, key: item.epgKey },
+                  p.start, p.stop).then(function () {
+                  toast('« ' + (p.titre || item.name) + ' » programmé.');
+                }).catch(function (err) { toast('Programmation impossible : ' + err.message); });
+              });
+              block.appendChild(schedBtn);
+            }
             timeline.appendChild(block);
           });
         }
@@ -747,6 +760,76 @@
   function openFilm(item) {
     goTab('films');
     if (item.streamId != null) openFilmXtream(item); else openFilmSimple(item);
+  }
+
+  // ---------- enregistrements (DVR, APK Android uniquement) ----------
+  function formatDateTime(ms) {
+    return new Date(ms).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatBytes(n) {
+    if (!n) return '';
+    var units = ['o', 'Ko', 'Mo', 'Go'];
+    var i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return n.toFixed(i ? 1 : 0) + ' ' + units[i];
+  }
+
+  function renderEnregistrements() {
+    var dispo = Recorder.isAvailable();
+    $id('enregNonDispo').style.display = dispo ? 'none' : '';
+    $id('enregDispo').style.display = dispo ? '' : 'none';
+    if (!dispo) return;
+
+    Recorder.listScheduled().then(function (items) {
+      var container = $id('listeProgrammes');
+      container.innerHTML = '';
+      if (!items.length) { container.appendChild(el('div', 'hint', 'Aucun enregistrement programmé.')); return; }
+      items.sort(function (a, b) { return a.startAtMs - b.startAtMs; }).forEach(function (it) {
+        var row = el('div', 'projet');
+        var left = el('div'); left.style.flex = '1';
+        left.appendChild(el('div', 'p-nom', it.title));
+        left.appendChild(el('div', 'p-sub', formatDateTime(it.startAtMs) + ' → ' + formatDateTime(it.endAtMs)));
+        row.appendChild(left);
+        var del = el('button', null, '🗑️');
+        del.title = 'Annuler';
+        del.addEventListener('click', function () { Recorder.cancelScheduled(it.id).then(renderEnregistrements); });
+        row.appendChild(del);
+        container.appendChild(row);
+      });
+    });
+
+    Recorder.listRecordings().then(function (items) {
+      var container = $id('listeEnregistrements');
+      container.innerHTML = '';
+      if (!items.length) { container.appendChild(el('div', 'hint', 'Aucun enregistrement pour le moment.')); return; }
+      items.sort(function (a, b) { return (b.startedAtMs || 0) - (a.startedAtMs || 0); }).forEach(function (it) {
+        var row = el('div', 'projet');
+        var left = el('div'); left.style.flex = '1';
+        left.appendChild(el('div', 'p-nom', it.title));
+        var statusLabel = it.status === 'recording' ? '⏺ en cours…'
+          : it.status === 'error' ? '❌ échec' + (it.error ? ' — ' + it.error : '')
+          : it.status === 'stopped' ? '⏹ arrêté'
+          : '✅ terminé';
+        var sub = formatDateTime(it.startedAtMs) + ' · ' + statusLabel + (it.sizeBytes ? ' · ' + formatBytes(it.sizeBytes) : '');
+        left.appendChild(el('div', 'p-sub', sub));
+        row.appendChild(left);
+        if (it.status !== 'recording' && it.filePath) {
+          var play = el('button', null, '▶️');
+          play.title = 'Lire';
+          play.addEventListener('click', function () { Player.open(Recorder.playableUrl(it.filePath), it.title); });
+          row.appendChild(play);
+        }
+        var del = el('button', null, '🗑️');
+        del.title = 'Supprimer';
+        del.addEventListener('click', function () {
+          if (!confirm('Supprimer l’enregistrement « ' + it.title + ' » ?')) return;
+          Recorder.deleteRecording(it.id).then(renderEnregistrements);
+        });
+        row.appendChild(del);
+        container.appendChild(row);
+      });
+    });
   }
 
   // ---------- favoris ----------
