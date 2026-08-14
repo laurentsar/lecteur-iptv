@@ -33,6 +33,19 @@
     if (text != null) e.textContent = text;
     return e;
   }
+  // Rend un <div> cliquable navigable au clavier/D-pad (télécommande TV) :
+  // un <div> n'entre pas dans l'ordre de tabulation par défaut, contrairement
+  // à <button>. Entrée/Espace déclenchent le clic, comme un vrai bouton.
+  function makeFocusable(node) {
+    node.tabIndex = 0;
+    node.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        node.click();
+      }
+    });
+    return node;
+  }
   var toastTimer;
   function toast(msg) {
     var t = $id('toast');
@@ -230,7 +243,7 @@
           if (ok) { state.unlockedAdult[key] = true; onUnlock(); }
         });
       });
-      container.appendChild(card);
+      container.appendChild(makeFocusable(card));
     });
   }
 
@@ -367,7 +380,7 @@
     // item.kind vaut 'direct' (Xtream) ou 'live' (M3U, voir m3u.js
     // classifyGroup) selon la source — les deux désignent une chaîne en direct.
     card.addEventListener('click', function () { opts.onOpen ? opts.onOpen(item) : Player.open(item.url, item.name, { live: item.kind === 'direct' || item.kind === 'live' }); });
-    return card;
+    return makeFocusable(card);
   }
 
   function iconFor(kind) { return kind === 'films' ? '🎬' : kind === 'series' ? '🎞️' : '📺'; }
@@ -576,7 +589,7 @@
         }
         chan.appendChild(el('span', null, item.name));
         chan.addEventListener('click', function () { Player.open(item.url, item.name, { live: true }); });
-        grid.appendChild(chan);
+        grid.appendChild(makeFocusable(chan));
 
         var timeline = el('div', 'guide-timeline');
         var progs = (item.epgKey && state.epgMap && state.epgMap[item.epgKey]) || [];
@@ -604,7 +617,7 @@
               });
               block.appendChild(schedBtn);
             }
-            timeline.appendChild(block);
+            timeline.appendChild(makeFocusable(block));
           });
         }
         grid.appendChild(timeline);

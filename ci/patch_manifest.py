@@ -51,3 +51,21 @@ if "supportsPictureInPicture" not in s:
         print("MainActivity introuvable dans le manifeste — PiP non ajouté")
 else:
     print("supportsPictureInPicture déjà présent")
+
+# Compatibilité TV Android : sans ces déclarations, le Play Store et certains
+# lanceurs TV considèrent l'appli incompatible avec les appareils sans écran
+# tactile (Android TV, boîtiers IPTV). required="false" pour les deux : on ne
+# fournit pas de lanceur Leanback dédié, seulement une installation/lecture
+# correcte via l'activité standard, navigable au D-pad (voir makeFocusable()
+# dans app.js).
+s = open(mf).read()
+if "android.software.leanback" not in s:
+    features = (
+        '    <uses-feature android:name="android.software.leanback" android:required="false"/>\n'
+        '    <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>\n'
+    )
+    s = re.sub(r"(<manifest\b[^>]*>)", r"\1\n" + features, s, count=1)
+    open(mf, "w").write(s)
+    print("TV Android : uses-feature leanback/touchscreen ajoutés")
+else:
+    print("uses-feature leanback déjà présent")

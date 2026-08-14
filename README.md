@@ -35,6 +35,23 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
 - Aucun compte ni inscription requis (récepteur Cast « par défaut » de
   Google, pas d'application Cast dédiée à enregistrer).
 
+## Compatibilité TV Android et casque VR (Quest 3)
+
+- **TV Android / boîtiers IPTV (APK)** : le manifeste déclare l'app
+  compatible sans écran tactile (`android.hardware.touchscreen` et
+  `android.software.leanback` en `required="false"`), donc installable et
+  listée sur ces appareils. Ce n'est pas une intégration Leanback complète
+  (pas de lanceur TV dédié à grosses tuiles) : l'app s'ouvre dans son
+  interface habituelle, mais tous les éléments cliquables (cartes de
+  chaînes/films, grille du Guide, cartes verrouillées par le PIN) sont
+  navigables à la télécommande/D-pad — Entrée ou OK les active comme un
+  clic, avec un contour visible autour de l'élément sélectionné.
+- **Casque VR Meta Quest 3** : fonctionne déjà sans aucune adaptation,
+  installée en side-load comme une app Android classique. Horizon OS
+  l'exécute en mode « panneau 2D » flottant (comme n'importe quelle app
+  téléphone/tablette non conçue pour la VR) : lecture, navigation tactile
+  virtuelle et Cast fonctionnent normalement dans ce panneau.
+
 ## Code PIN (bouquet adulte)
 
 Réglage facultatif dans l'onglet Réglages. Une fois un code défini, les
