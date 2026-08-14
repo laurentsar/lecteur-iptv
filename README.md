@@ -22,7 +22,7 @@ limites de la PWA face à l'APK dans [Limites connues](#limites-connues)).
 | 🎬 **Films** | Catalogue VOD, recherche et filtre par catégorie. Fiche détaillée par film (affiche, âge, note, durée, genre, descriptif — comptes Xtream Codes) avant de lancer la lecture, complétée via TMDB si une clé est renseignée (voir plus bas). Les doublons (même film listé plusieurs fois) sont regroupés, comme pour les chaînes. |
 | 🎞️ **Séries** | Liste des séries, puis épisodes regroupés par saison (accordéon replié par défaut). Pour une playlist M3U, les séries sont détectées automatiquement dans les noms (`SxxExx`, `1x02`, …). |
 | ⭐ **Ma liste** | Favoris (chaînes/films/séries marqués d'un ☆) et enregistrements (programmés et terminés, APK Android) dans un seul onglet. |
-| ⚙️ **Réglages** | Playlists (ajout/test/suppression) et infos (limites connues, réglages TMDB/PIN, confidentialité) — infos présentées en accordéon replié par défaut, pour ne pas encombrer l'écran. |
+| ⚙️ **Réglages** | Playlists (ajout/test/suppression), export/import chiffré de la config (voir plus bas) et infos (limites connues, réglages TMDB/PIN, confidentialité) — infos présentées en accordéon replié par défaut, pour ne pas encombrer l'écran. |
 
 ## Diffusion vers une TV
 
@@ -55,6 +55,48 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
   l'exécute en mode « panneau 2D » flottant (comme n'importe quelle app
   téléphone/tablette non conçue pour la VR) : lecture, navigation tactile
   virtuelle et Cast fonctionnent normalement dans ce panneau.
+
+## Compatibilité navigateur Tesla
+
+La **version web** (PWA, https://laurentsar.github.io/lecteur-iptv/) est
+utilisable dans le navigateur embarqué des Tesla : l'interface est tactile
+par défaut, sans dépendance à la souris (`:hover`) ni raccourcis clavier
+obligatoires, et le code ne s'appuie que sur des API web standard
+supportées depuis longtemps par Chromium (pas de syntaxe JS récente type
+`?.`/`??`).
+
+**Limites connues, propres au navigateur Tesla et non à l'app :**
+- Le navigateur est **désactivé pendant la conduite** (sécurité imposée par
+  Tesla) — utilisable à l'arrêt (Parking), ou en continu sur l'écran
+  passager des véhicules qui en ont un.
+- Version de moteur Chromium embarquée historiquement en retrait des
+  navigateurs grand public : la lecture vidéo (HLS via hls.js/MSE) devrait
+  fonctionner, mais n'a pas pu être testée sur un véhicule réel lors du
+  développement — un retour d'expérience est bienvenu si quelque chose ne
+  s'affiche pas correctement.
+- Pas de « Ajouter à l'écran d'accueil » ni de téléchargement de fichier
+  dans ce navigateur : voir la section suivante pour transférer ta
+  configuration sans tout retaper au clavier tactile.
+
+## Sauvegarde et export de configuration (Tesla, autre appareil)
+
+Dans **Réglages → 💾 Sauvegarde & export**, un code **chiffré** (phrase
+secrète obligatoire, PBKDF2 + AES-GCM via l'API Web Crypto du navigateur)
+résume tes playlists (et, au choix, favoris/clé TMDB) — le code PIN
+parental n'est jamais inclus. Trois façons de le faire arriver sur un
+autre appareil :
+
+1. **Copier-coller** : Exporter → copier le code → Importer sur l'autre
+   appareil avec la même phrase secrète.
+2. **Lien direct** : ouvrir `…/lecteur-iptv/#import=<code>` ouvre
+   directement la fenêtre d'import avec le code déjà rempli (il ne reste
+   qu'à taper la phrase secrète).
+3. **Lien court via GitHub** (le plus pratique sur un écran sans clavier
+   physique comme une Tesla) : demande à Claude de publier ton code
+   exporté dans `www/sync/<id>.json` sur ce dépôt — GitHub Pages le sert
+   alors à `…/lecteur-iptv/?sync=<id>`, un lien court à taper une seule
+   fois. Le fichier reste chiffré (inutilisable sans la phrase secrète)
+   même s'il est hébergé sur un dépôt public.
 
 ## Code PIN (bouquet adulte)
 

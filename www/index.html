@@ -164,6 +164,15 @@
         <div id="testResult" class="hint"></div>
       </div>
 
+      <div class="card">
+        <h2>💾 Sauvegarde &amp; export (Tesla, autre appareil…)</h2>
+        <p class="hint">Exporte ta configuration (playlists, favoris) sous forme d'un code chiffré, à transférer facilement vers un autre appareil — par exemple le navigateur d'une Tesla, où retaper un compte Xtream au clavier tactile est pénible.</p>
+        <div class="row" style="margin-top:8px">
+          <button id="btnExportConfig" class="ghost">📤 Exporter</button>
+          <button id="btnImportConfig" class="ghost">📥 Importer</button>
+        </div>
+      </div>
+
       <div class="cat-title" style="margin-top:22px">ℹ️ Infos</div>
       <div class="card warn">
         <h2>⚠️ Ce que cette app fait — et ne fait pas</h2>
@@ -189,6 +198,13 @@
         <summary class="saison-titre">📡 TV Android &amp; casque VR (Quest 3)</summary>
         <div class="accordion-body">
           <p class="hint"><strong>TV Android / boîtiers IPTV</strong> : l'app s'installe et se lance normalement (pas d'écran tactile requis), et tous les éléments cliquables (cartes, grille du Guide) sont navigables à la télécommande — Entrée/OK activent l'élément sélectionné, avec un contour visible. Pas de lanceur Leanback dédié à grosses tuiles. <strong>Meta Quest 3</strong> : fonctionne déjà tel quel en side-load, exécuté par Horizon OS dans un panneau 2D flottant, sans adaptation nécessaire.</p>
+        </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">🚗 Navigateur Tesla &amp; export de config</summary>
+        <div class="accordion-body">
+          <p class="hint">La version web (PWA) fonctionne dans le navigateur embarqué d'une Tesla (interface tactile, aucune dépendance à la souris) — utilisable à l'arrêt, le navigateur étant désactivé pendant la conduite (restriction Tesla, pas de l'app). Pour éviter de retaper un compte Xtream au clavier tactile : <strong>Réglages → 💾 Sauvegarde &amp; export</strong> génère un code chiffré (phrase secrète obligatoire, PIN jamais inclus) à importer sur l'autre appareil par copier-coller, par lien direct (<code>#import=…</code>), ou via un lien court hébergé sur GitHub Pages (<code>?sync=…</code>, à demander à Claude) — pratique sur un écran sans clavier physique.</p>
         </div>
       </details>
 
@@ -287,8 +303,52 @@
     </div>
   </div>
 
+  <div id="exportModal" class="version-picker" style="display:none">
+    <div class="version-picker-card">
+      <h3>📤 Exporter ma configuration</h3>
+      <div id="exportStep1">
+        <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="exportFavoris" checked /> Inclure mes favoris</label>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:6px"><input type="checkbox" id="exportTmdb" checked /> Inclure ma clé TMDB</label>
+        <label style="margin-top:10px; display:block">Phrase secrète (obligatoire — protège le code, y compris tes identifiants IPTV)
+          <input type="password" autocomplete="off" id="exportPassphrase" placeholder="Choisis une phrase secrète" />
+        </label>
+        <p class="hint" id="exportError" style="color:var(--bad); min-height:16px"></p>
+        <div class="row" style="margin-top:4px">
+          <button id="exportCancel" class="ghost">Annuler</button>
+          <button id="exportGenerate" class="primary">Générer le code</button>
+        </div>
+      </div>
+      <div id="exportStep2" style="display:none">
+        <p class="hint">Code chiffré — colle-le dans <strong>Importer</strong> sur l'autre appareil (avec la même phrase secrète). Sans la phrase secrète, ce code est inutilisable.</p>
+        <textarea id="exportResult" readonly rows="5" style="width:100%; font-family:monospace; font-size:11px"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button id="exportCopy" class="ghost">📋 Copier le code</button>
+        </div>
+        <p class="hint">Pour la Tesla : demande à Claude de publier ce code sur GitHub Pages (dossier <code>www/sync/</code>) — tu n'auras alors qu'un lien court à taper une seule fois sur l'écran de la voiture.</p>
+        <div class="row" style="margin-top:4px">
+          <button id="exportClose" class="ghost">Fermer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="importModal" class="version-picker" style="display:none">
+    <div class="version-picker-card">
+      <h3>📥 Importer une configuration</h3>
+      <textarea id="importCode" placeholder="Colle ici le code exporté" rows="5" style="width:100%; font-family:monospace; font-size:11px"></textarea>
+      <label style="margin-top:10px; display:block">Phrase secrète
+        <input type="password" autocomplete="off" id="importPassphrase" placeholder="Phrase secrète utilisée à l'export" />
+      </label>
+      <p class="hint" id="importError" style="color:var(--bad); min-height:16px"></p>
+      <div class="row" style="margin-top:4px">
+        <button id="importCancel" class="ghost">Annuler</button>
+        <button id="importConfirm" class="primary">Importer</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    window.APP_VERSION = '1.24';
+    window.APP_VERSION = '1.25';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
@@ -296,6 +356,7 @@
   <script src="net.js"></script>
   <script src="hls-native-loader.js"></script>
   <script src="store.js"></script>
+  <script src="crypto.js"></script>
   <script src="m3u.js"></script>
   <script src="xtream.js"></script>
   <script src="tmdb.js"></script>

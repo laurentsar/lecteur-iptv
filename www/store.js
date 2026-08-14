@@ -65,6 +65,39 @@
   function getParentalPin() { return lsGet(K_PIN, null); }
   function setParentalPin(pin) { return lsSet(K_PIN, pin || null); }
 
+  // Export/import de config (sauvegarde, transfert vers un autre appareil —
+  // ex. le navigateur embarqué d'une Tesla, où retaper un compte Xtream au
+  // clavier tactile est pénible). Le code PIN n'est volontairement jamais
+  // inclus : un export peut circuler (lien, fichier) hors de cet appareil.
+  function exportConfig(opts) {
+    opts = opts || {};
+    var cfg = { v: 1, playlists: getPlaylists() };
+    if (opts.favoris !== false) cfg.favoris = getFavoris();
+    if (opts.tmdbKey !== false) { var k = getTmdbKey(); if (k) cfg.tmdbKey = k; }
+    return cfg;
+  }
+  function importConfig(cfg) {
+    var added = { playlists: 0, favoris: 0, tmdbKey: false };
+    (cfg.playlists || []).forEach(function (p) {
+      var clean = Object.assign({}, p); delete clean.id; delete clean.creeLe;
+      var dup = getPlaylists().some(function (e) {
+        return e.type === clean.type &&
+          (clean.type === 'm3u' ? e.m3uUrl === clean.m3uUrl : (e.serveur === clean.serveur && e.utilisateur === clean.utilisateur));
+      });
+      if (!dup) { addPlaylist(clean); added.playlists++; }
+    });
+    if (cfg.favoris && cfg.favoris.length) {
+      var favoris = getFavoris();
+      var keys = favoris.map(function (f) { return f.key; });
+      cfg.favoris.forEach(function (f) {
+        if (keys.indexOf(f.key) === -1) { favoris.push(f); keys.push(f.key); added.favoris++; }
+      });
+      lsSet(K_FAVORIS, favoris);
+    }
+    if (cfg.tmdbKey && !getTmdbKey()) { setTmdbKey(cfg.tmdbKey); added.tmdbKey = true; }
+    return added;
+  }
+
   function getFavoris() { return lsGet(K_FAVORIS, []); }
   function isFavori(key) { return getFavoris().some(function (f) { return f.key === key; }); }
   function toggleFavori(item) {
@@ -129,6 +162,7 @@
     getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
     getParentalPin: getParentalPin, setParentalPin: setParentalPin,
     getFavoris: getFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
+    exportConfig: exportConfig, importConfig: importConfig,
     cacheGet: function (playlistId) { return idbGet('cache:' + playlistId); },
     cacheSet: function (playlistId, data) { return idbSet('cache:' + playlistId, data); },
     rawGet: function (playlistId) { return idbGet('raw:' + playlistId); },

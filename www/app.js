@@ -272,6 +272,94 @@
   });
   $id('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') $id('pinConfirm').click(); });
 
+  // ---------- Export / import de config (sauvegarde, transfert vers un
+  // autre appareil — ex. navigateur Tesla) ----------
+  function openExportModal() {
+    $id('exportStep1').style.display = '';
+    $id('exportStep2').style.display = 'none';
+    $id('exportPassphrase').value = '';
+    $id('exportError').textContent = '';
+    $id('exportModal').style.display = 'flex';
+  }
+  function closeExportModal() { $id('exportModal').style.display = 'none'; }
+  $id('btnExportConfig').addEventListener('click', openExportModal);
+  $id('exportCancel').addEventListener('click', closeExportModal);
+  $id('exportClose').addEventListener('click', closeExportModal);
+  $id('exportModal').addEventListener('click', function (e) { if (e.target.id === 'exportModal') closeExportModal(); });
+  $id('exportGenerate').addEventListener('click', function () {
+    var pass = $id('exportPassphrase').value;
+    if (!pass) { $id('exportError').textContent = 'La phrase secrète est obligatoire.'; return; }
+    var cfg = Store.exportConfig({ favoris: $id('exportFavoris').checked, tmdbKey: $id('exportTmdb').checked });
+    if (!cfg.playlists.length) { $id('exportError').textContent = 'Aucune playlist à exporter.'; return; }
+    $id('exportError').textContent = '';
+    ConfigCrypto.encrypt(JSON.stringify(cfg), pass).then(function (code) {
+      $id('exportResult').value = code;
+      $id('exportStep1').style.display = 'none';
+      $id('exportStep2').style.display = '';
+    }).catch(function (err) { $id('exportError').textContent = 'Chiffrement impossible : ' + err.message; });
+  });
+  $id('exportCopy').addEventListener('click', function () {
+    var ta = $id('exportResult');
+    ta.focus(); ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    if (!ok && navigator.clipboard) { navigator.clipboard.writeText(ta.value).then(function () { toast('Code copié'); }); }
+    else if (ok) toast('Code copié');
+    else toast('Sélectionne le code et copie-le manuellement');
+  });
+
+  function openImportModal(prefill) {
+    $id('importCode').value = prefill || '';
+    $id('importPassphrase').value = '';
+    $id('importError').textContent = '';
+    $id('importModal').style.display = 'flex';
+    setTimeout(function () { $id('importPassphrase').focus(); }, 50);
+  }
+  function closeImportModal() { $id('importModal').style.display = 'none'; }
+  $id('btnImportConfig').addEventListener('click', function () { openImportModal(); });
+  $id('importCancel').addEventListener('click', closeImportModal);
+  $id('importModal').addEventListener('click', function (e) { if (e.target.id === 'importModal') closeImportModal(); });
+  $id('importConfirm').addEventListener('click', function () {
+    var code = $id('importCode').value.trim();
+    var pass = $id('importPassphrase').value;
+    if (!code || !pass) { $id('importError').textContent = 'Code et phrase secrète obligatoires.'; return; }
+    $id('importError').textContent = '';
+    ConfigCrypto.decrypt(code, pass).then(function (json) {
+      var cfg = JSON.parse(json);
+      var added = Store.importConfig(cfg);
+      closeImportModal();
+      toast('Importé : ' + added.playlists + ' playlist(s), ' + added.favoris + ' favori(s)');
+      renderPlaylists();
+    }).catch(function (err) { $id('importError').textContent = err.message || 'Import impossible.'; });
+  });
+
+  // Ouverture directe d'un import depuis un lien (#import=<code>, généré par
+  // Exporter) ou depuis un code hébergé sur GitHub Pages (?sync=<id> ->
+  // sync/<id>.json, relatif : fonctionne aussi bien sous / que sous un
+  // sous-dossier comme /lecteur-iptv/). Utile pour taper un lien court une
+  // seule fois sur un écran sans clavier physique (ex. Tesla) plutôt que de
+  // recopier tout le code chiffré.
+  (function checkIncomingImport() {
+    if (location.hash.indexOf('#import=') === 0) {
+      var code = decodeURIComponent(location.hash.slice('#import='.length));
+      history.replaceState(null, '', location.pathname + location.search);
+      goTab('reglages');
+      openImportModal(code);
+      return;
+    }
+    var params = new URLSearchParams(location.search);
+    var syncId = params.get('sync');
+    if (syncId && /^[a-z0-9_-]+$/i.test(syncId)) {
+      fetch('sync/' + syncId + '.json').then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(function (code) {
+        goTab('reglages');
+        openImportModal(code);
+      }).catch(function () { toast('Config « ' + syncId + ' » introuvable'); });
+    }
+  })();
+
   // Beaucoup de playlists IPTV insèrent des entrées purement décoratives
   // entre les groupes de chaînes (ex. « ||--- |FR| GENERALISTES |FR| ---|| »)
   // sans flux valide derrière : elles bloquent le lecteur indéfiniment sans
