@@ -435,6 +435,11 @@
     return decorative / name.length > 0.25;
   }
 
+  // Chaînes de bienvenue/pub insérées par certains fournisseurs IPTV, sans
+  // contenu réel — masquées par nom exact (insensible à la casse).
+  var HIDDEN_CHANNEL_NAMES = /^welcome ultimate tv$/i;
+  function isHiddenChannel(name) { return HIDDEN_CHANNEL_NAMES.test(String(name || '').trim()); }
+
   // Beaucoup de playlists (surtout M3U) listent la même chaîne ou le même
   // film plusieurs fois sous des noms voisins — sources de secours,
   // qualités différentes ("TF1", "TF1 HD", "TF1 FHD (2)", "Inception 4K"...).
@@ -462,6 +467,7 @@
   // est déjà implicite (les items radio ne passent jamais kind==='live') ;
   // utile surtout côté Xtream où get_live_streams renvoie tout ensemble.
   function excludeRadio(items) { return items.filter(function (it) { return it.kind !== 'radio'; }); }
+  function excludeHidden(items) { return items.filter(function (it) { return !isHiddenChannel(it.name); }); }
 
   function groupChannels(items) {
     var byKey = {}, order = [];
@@ -628,7 +634,7 @@
           renderList(container, moreBtn, seriesLock.visible, kindKey, { onOpen: openSerieM3u });
           appendLockedCards(container, seriesLock.locked, function () { renderKind(kindKey); });
         } else {
-          var items = pool.filter(function (it) { return (!cat || it.groupTitle === cat) && matchesSearch(it, q); })
+          var items = pool.filter(function (it) { return (!cat || it.groupTitle === cat) && matchesSearch(it, q) && !isHiddenChannel(it.name); })
             .map(function (it) {
               var withKey = Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle, logo: it.tvgLogo, chno: it.tvgChno || '' });
               withKey._badge = epgBadge(withKey);
@@ -663,7 +669,7 @@
       load.then(function (items) {
         state.xtreamItems[kindKey] = items;
         var q = search.value.trim().toLowerCase();
-        var filtered = items.filter(function (it) { return matchesSearch(it, q); });
+        var filtered = items.filter(function (it) { return matchesSearch(it, q) && !isHiddenChannel(it.name); });
         if (kindKey === 'direct') {
           filtered = excludeRadio(filtered).map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
         }
@@ -718,7 +724,7 @@
 
     if (pl.type === 'm3u') {
       ensureM3uLoaded().then(function (data) {
-        var pool = data.items.filter(function (it) { return it.kind === 'live'; });
+        var pool = data.items.filter(function (it) { return it.kind === 'live' && !isHiddenChannel(it.name); });
         var byGroup = {};
         pool.forEach(function (it) {
           var g = it.groupTitle || 'Sans groupe';
@@ -731,7 +737,7 @@
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); });
     } else {
       Promise.all([ensureXtreamCats('direct'), ensureXtreamItems('direct', '')]).then(function (r) {
-        var cats = r[0].filter(function (c) { return !/radio/i.test(c.label || ''); }), items = excludeRadio(r[1]);
+        var cats = r[0].filter(function (c) { return !/radio/i.test(c.label || ''); }), items = excludeHidden(excludeRadio(r[1]));
         var countByLabel = {}, logoByLabel = {};
         items.forEach(function (it) {
           var g = it.group || '';
@@ -761,7 +767,7 @@
     var q = search.value.trim().toLowerCase();
 
     function finish(items) {
-      var filtered = items.filter(function (it) { return matchesSearch(it, q); });
+      var filtered = items.filter(function (it) { return matchesSearch(it, q) && !isHiddenChannel(it.name); });
       filtered = groupChannels(filtered);
       var lock = filterAdultLocked(filtered);
       renderList(container, moreBtn, lock.visible, 'radio', { onOpen: function (item) {
@@ -824,13 +830,13 @@
             return { key: 'serie:' + pl.id + ':' + s.nom, kind: 'series', name: s.nom, logo: s.logo, group: s.groupTitle, saisons: s.saisons };
           });
         }
-        var items = pool.filter(function (it) { return it.url && !looksLikeSeparator(it.name); })
+        var items = pool.filter(function (it) { return it.url && !looksLikeSeparator(it.name) && !isHiddenChannel(it.name); })
           .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle, logo: it.tvgLogo, chno: it.tvgChno || '' }); });
         return (kindKey === 'direct' || kindKey === 'films') ? groupChannels(items) : items;
       });
     } else {
       p = ensureXtreamItems(kindKey, '');
-      if (kindKey === 'direct') p = p.then(excludeRadio);
+      if (kindKey === 'direct') p = p.then(excludeRadio).then(excludeHidden);
       if (kindKey === 'direct' || kindKey === 'films') p = p.then(groupChannels);
     }
     p = p.then(function (items) { return filterAdultLocked(items).visible; });
@@ -885,14 +891,14 @@
     if (pl.type === 'm3u') {
       return ensureM3uLoaded().then(function (data) {
         return data.items
-          .filter(function (it) { return it.kind === 'live' && it.url && !looksLikeSeparator(it.name); })
+          .filter(function (it) { return it.kind === 'live' && it.url && !looksLikeSeparator(it.name) && !isHiddenChannel(it.name); })
           .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, logo: it.tvgLogo, chno: it.tvgChno || '' }); });
       });
     }
-    if (state.guideChannelsCache) return Promise.resolve(excludeRadio(state.guideChannelsCache));
+    if (state.guideChannelsCache) return Promise.resolve(excludeHidden(excludeRadio(state.guideChannelsCache)));
     return ensureXtreamItems('direct', '').then(function (items) {
       state.guideChannelsCache = items;
-      return excludeRadio(items);
+      return excludeHidden(excludeRadio(items));
     });
   }
 
