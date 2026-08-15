@@ -157,6 +157,27 @@
     }
   }
 
+  // Comme refreshActivePlaylist, mais silencieux et déclenché tout seul à
+  // l'ouverture de l'appli : le Xtream est de toute façon déjà rechargé à
+  // chaque démarrage (state.xtreamCats/Items repartent à zéro dans
+  // setActivePlaylist), seul le M3U reste en cache indéfiniment sans ce
+  // rafraîchissement automatique. Se fait en tâche de fond, sans bloquer
+  // l'affichage initial (qui utilise le cache existant) ; si l'onglet
+  // concerné est déjà ouvert quand les données fraîches arrivent, on le
+  // re-affiche pour qu'elles apparaissent sans action de l'utilisateur.
+  function refreshOnOpen() {
+    var pl = state.playlist;
+    if (!pl || pl.type !== 'm3u') return;
+    ensureM3uLoaded(true).then(function () {
+      state.searchCache = {};
+      if (isTabActive('direct')) renderKind('direct');
+      else if (isTabActive('films')) renderKind('films');
+      else if (isTabActive('series')) renderKind('series');
+      else if (isTabActive('radio')) renderRadio();
+      else if (isTabActive('guide')) renderGuide(false);
+    }).catch(function () {}); // échec silencieux : on garde les données déjà affichées
+  }
+
   function updateHeader() {
     $id('activePlaylistLabel').textContent = state.playlist
       ? state.playlist.nom + ' · ' + (state.playlist.type === 'xtream' ? 'Xtream Codes' : 'M3U')
@@ -1550,7 +1571,7 @@
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');
     $id('verText').textContent = window.APP_VERSION || '';
     var activeId = Store.getActivePlaylistId();
-    if (activeId) setActivePlaylist(activeId);
+    if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
     renderAccueil();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(function () {});
