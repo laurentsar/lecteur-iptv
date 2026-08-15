@@ -119,15 +119,12 @@
       '<div id="playerStatus" class="player-status"></div>' +
       '<div id="remotePanel" class="remote-panel" style="display:none">' +
       '  <div class="remote-panel-card">' +
-      '    <div class="remote-panel-head">' +
-      '      <h3>🕹️ Télécommande</h3>' +
-      '      <button id="remotePanelClose" class="ghost">Fermer</button>' +
-      '    </div>' +
       '    <div class="remote-zap-row">' +
-      '      <button id="remoteZapPrev" class="ghost">◀ Précédente</button>' +
-      '      <button id="remoteZapNext" class="ghost">Suivante ▶</button>' +
+      '      <button id="remoteZapPrev" class="ghost" aria-label="Chaîne précédente">▼</button>' +
+      '      <button id="remotePanelClose" class="ghost" aria-label="Fermer la télécommande">✕</button>' +
+      '      <button id="remoteZapNext" class="ghost" aria-label="Chaîne suivante">▲</button>' +
       '    </div>' +
-      '    <input type="search" id="remoteSearch" placeholder="Rechercher une chaîne…" />' +
+      '    <input type="search" id="remoteSearch" placeholder="Chercher…" />' +
       '    <div class="cat-title">⭐ Favoris</div>' +
       '    <div id="remoteFavoris"></div>' +
       '    <div class="cat-title">📺 Chaînes</div>' +
@@ -183,6 +180,20 @@
     return null;
   }
 
+  // screen.orientation.lock() n'est autorisé par la plupart des navigateurs
+  // que pendant que le document est réellement en plein écran — d'où
+  // l'appel au moment du fullscreenchange plutôt qu'au clic. Échoue
+  // silencieusement si l'appareil/le navigateur ne l'expose pas (ex. iOS
+  // Safari, ou orientation déjà verrouillée au niveau système).
+  function lockLandscape() {
+    try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); }
+    catch (e) {}
+  }
+  function unlockOrientation() {
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }
+    catch (e) {}
+  }
+
   function setupFullscreen() {
     if (!fullscreenSupported()) { fullscreenBtn.style.display = 'none'; return; }
     fullscreenBtn.style.display = '';
@@ -192,7 +203,11 @@
         if (p && typeof p.catch === 'function') p.catch(function () { setStatus('Plein écran indisponible sur cet appareil.'); });
       } catch (e) { setStatus('Plein écran indisponible sur cet appareil.'); }
     });
-    function sync() { fullscreenBtn.classList.toggle('active', isFullscreen()); }
+    function sync() {
+      var fs = isFullscreen();
+      fullscreenBtn.classList.toggle('active', fs);
+      if (fs) lockLandscape(); else unlockOrientation();
+    }
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
   }
@@ -277,10 +292,16 @@
 
   function zapStep(delta) {
     var list = (global.AppZap && global.AppZap.list()) || [];
-    if (list.length < 2) return;
+    if (list.length < 2) {
+      setStatus('Zapping indisponible — ouvre l’onglet Direct ou Guide dans l’app pour charger la liste des chaînes.');
+      return;
+    }
     var idx = -1;
     for (var i = 0; i < list.length; i++) { if (list[i].url === originalUrl) { idx = i; break; } }
-    if (idx === -1) return;
+    if (idx === -1) {
+      setStatus('Chaîne actuelle absente de cette liste — impossible de zapper depuis ici.');
+      return;
+    }
     var next = list[(idx + delta + list.length) % list.length];
     open(next.url, next.name, { live: true });
   }

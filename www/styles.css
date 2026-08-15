@@ -271,6 +271,7 @@ button.ghost { background: var(--card2); color: var(--text); }
 .player-top {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: rgba(10,16,24,.85);
+  position: relative; z-index: 50; /* toujours au-dessus des panneaux (qualité, télécommande) */
 }
 .player-title { color: #fff; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .player-cast {
@@ -299,20 +300,25 @@ button.ghost { background: var(--card2); color: var(--text); }
 .tracks-item.active { color: var(--accent); font-weight: 700; }
 
 /* ---------- télécommande virtuelle (chaînes en direct) ---------- */
+/* Mini panneau flottant délibérément sommaire (zap + favoris/chaînes),
+   ancré en bas à droite — ne couvre pas l'écran, laisse la vidéo et le
+   reste des contrôles du lecteur visibles et cliquables pendant qu'il est
+   ouvert. */
 .remote-panel {
-  position: absolute; inset: 0; background: rgba(6,10,16,.75); z-index: 40;
-  display: flex; align-items: flex-end; justify-content: center;
+  position: absolute; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 42;
+  max-width: 55vw;
 }
 .remote-panel-card {
-  width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--line);
-  border-radius: 16px 16px 0 0; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom));
-  max-height: 80vh; overflow-y: auto;
+  width: 210px; max-width: 100%; max-height: 58vh; overflow-y: auto;
+  background: rgba(16,28,43,.97); border: 1px solid var(--line);
+  border-radius: 14px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
 }
-.remote-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.remote-panel-head h3 { margin: 0; font-size: 16px; }
-.remote-zap-row { display: flex; gap: 8px; margin: 12px 0; }
-.remote-zap-row button { flex: 1; }
-#remoteSearch { width: 100%; margin-bottom: 4px; }
+.remote-zap-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.remote-zap-row button { flex: 1; font-size: 15px; padding: 8px 0; }
+#remoteSearch { width: 100%; margin-bottom: 4px; font-size: 12.5px; padding: 6px 8px; }
+.remote-panel-card .cat-title { margin: 8px 0 2px; font-size: 10px; }
+.remote-panel-card .version-item { padding: 7px 9px; font-size: 12.5px; margin-top: 5px; }
+.remote-panel-card .hint { font-size: 11px; }
 .version-item.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
 
 /* ---------- guide TV (agenda heure par heure) ---------- */
