@@ -39,6 +39,8 @@
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
   var remoteBtn, remotePanel;
   var fullscreenBtn;
+  var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg;
+  var zapBannerTimer = null;
   var castSdkRequested = false;
   var loadTimeoutId = null;
   var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
@@ -117,6 +119,13 @@
       '</div>' +
       '<video id="playerVideo" playsinline controls autoplay></video>' +
       '<div id="playerStatus" class="player-status"></div>' +
+      '<div id="zapBanner" class="zap-banner">' +
+      '  <img id="zapBannerLogo" class="zap-banner-logo" alt="" style="display:none" />' +
+      '  <div class="zap-banner-txt">' +
+      '    <div id="zapBannerName" class="zap-banner-name"></div>' +
+      '    <div id="zapBannerProg" class="zap-banner-prog"></div>' +
+      '  </div>' +
+      '</div>' +
       '<div id="remotePanel" class="remote-panel" style="display:none">' +
       '  <div class="remote-panel-card">' +
       '    <div class="remote-zap-row">' +
@@ -124,6 +133,7 @@
       '      <button id="remotePanelClose" class="ghost" aria-label="Fermer la télécommande">✕</button>' +
       '      <button id="remoteZapNext" class="ghost" aria-label="Chaîne suivante">▲</button>' +
       '    </div>' +
+      '    <input type="text" inputmode="numeric" pattern="[0-9]*" id="remoteChno" placeholder="Aller au n°…" />' +
       '    <input type="search" id="remoteSearch" placeholder="Chercher…" />' +
       '    <div class="cat-title">⭐ Favoris</div>' +
       '    <div id="remoteFavoris"></div>' +
@@ -145,6 +155,10 @@
     remoteBtn = overlay.querySelector('#playerRemote');
     remotePanel = overlay.querySelector('#remotePanel');
     fullscreenBtn = overlay.querySelector('#playerFullscreen');
+    zapBanner = overlay.querySelector('#zapBanner');
+    zapBannerLogo = overlay.querySelector('#zapBannerLogo');
+    zapBannerName = overlay.querySelector('#zapBannerName');
+    zapBannerProg = overlay.querySelector('#zapBannerProg');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
       clearLoadTimeout();
@@ -159,6 +173,52 @@
     setupZapSwipe();
     setupRemote();
     setupFullscreen();
+    setupResume();
+    setupChnoKeys();
+  }
+
+  // ---------- Reprise de lecture (films/séries uniquement) ----------
+  // Position mémorisée par URL (Store.getProgress/setProgress, voir
+  // store.js). Ignore le tout début (rien à reprendre) et la toute fin
+  // (considéré comme terminé) pour ne pas proposer une reprise absurde.
+  var RESUME_MIN_RATIO = 0.03, RESUME_MAX_RATIO = 0.95, RESUME_MIN_DURATION = 60;
+  var lastProgressSaveAt = 0;
+
+  function formatTime(s) {
+    s = Math.max(0, Math.round(s));
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    var mm = (h ? String(m).padStart(2, '0') : String(m));
+    var ss = String(sec).padStart(2, '0');
+    return h ? h + ':' + mm + ':' + ss : mm + ':' + ss;
+  }
+
+  function saveProgress(force) {
+    if (currentIsLive || !global.Store || !originalUrl) return;
+    var dur = video.duration;
+    if (!dur || !isFinite(dur) || dur < RESUME_MIN_DURATION) return;
+    var now = Date.now();
+    if (!force && now - lastProgressSaveAt < 5000) return;
+    lastProgressSaveAt = now;
+    var ratio = video.currentTime / dur;
+    if (ratio < RESUME_MIN_RATIO || ratio > RESUME_MAX_RATIO) {
+      Store.clearProgress(originalUrl); // terminé ou jamais vraiment commencé
+      return;
+    }
+    Store.setProgress(originalUrl, { position: video.currentTime, duration: dur, title: originalTitle });
+  }
+
+  function setupResume() {
+    video.addEventListener('loadedmetadata', function () {
+      if (currentIsLive || !global.Store) return;
+      var saved = Store.getProgress(originalUrl);
+      if (!saved || !video.duration || !isFinite(video.duration)) return;
+      var ratio = saved.position / video.duration;
+      if (ratio < RESUME_MIN_RATIO || ratio > RESUME_MAX_RATIO) return;
+      video.currentTime = saved.position;
+      setStatus('Reprise à ' + formatTime(saved.position));
+    });
+    video.addEventListener('timeupdate', function () { saveProgress(false); });
+    video.addEventListener('pause', function () { saveProgress(true); });
   }
 
   // ---------- Plein écran (masque la barre d'adresse/le système sur PWA ou
@@ -230,7 +290,7 @@
       var b = document.createElement('button');
       b.className = 'version-item' + (it.url === originalUrl ? ' active' : '');
       b.textContent = (it.url === originalUrl ? '▶ ' : '') + it.name;
-      b.addEventListener('click', function () { closeRemote(); open(it.url, it.name, { live: true }); });
+      b.addEventListener('click', function () { closeRemote(); open(it.url, it.name, { live: true, epgKey: it.epgKey, logo: it.logo }); });
       container.appendChild(b);
     });
   }
@@ -260,6 +320,37 @@
     overlay.querySelector('#remoteSearch').addEventListener('input', renderRemotePanel);
     overlay.querySelector('#remoteZapNext').addEventListener('click', function () { zapStep(1); renderRemotePanel(); });
     overlay.querySelector('#remoteZapPrev').addEventListener('click', function () { zapStep(-1); renderRemotePanel(); });
+    var chnoInput = overlay.querySelector('#remoteChno');
+    chnoInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && chnoInput.value.trim()) { goToChno(chnoInput.value.trim()); chnoInput.value = ''; chnoInput.blur(); }
+    });
+  }
+
+  // ---------- Zapping par numéro de chaîne ----------
+  // Numéro tel que fourni par la playlist (tvg-chno en M3U, num chez
+  // Xtream — voir AppZap dans app.js). Deux entrées : le petit champ du
+  // mini panneau télécommande (tactile), et la saisie au clavier/à la
+  // télécommande physique directement sur le lecteur (touches 0-9,
+  // accumulées puis validées après une pause — comme un vrai décodeur TV).
+  function goToChno(num) {
+    var item = global.AppZap && global.AppZap.byNumber && global.AppZap.byNumber(num);
+    if (!item) { setStatus('Aucune chaîne n°' + num + '.'); return; }
+    open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
+  }
+
+  var chnoBuffer = '', chnoBufferTimer = null;
+  var CHNO_COMMIT_DELAY = 1500;
+
+  function setupChnoKeys() {
+    document.addEventListener('keydown', function (e) {
+      if (!overlay || !overlay.classList.contains('show') || !currentIsLive) return;
+      if (document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return; // ne pas gêner la saisie texte
+      if (e.key < '0' || e.key > '9') return;
+      chnoBuffer += e.key;
+      setStatus('Chaîne n° ' + chnoBuffer);
+      clearTimeout(chnoBufferTimer);
+      chnoBufferTimer = setTimeout(function () { goToChno(chnoBuffer); chnoBuffer = ''; }, CHNO_COMMIT_DELAY);
+    });
   }
 
   // ---------- Zapping par swipe (chaînes en direct uniquement) ----------
@@ -303,7 +394,29 @@
       return;
     }
     var next = list[(idx + delta + list.length) % list.length];
-    open(next.url, next.name, { live: true });
+    open(next.url, next.name, { live: true, epgKey: next.epgKey, logo: next.logo });
+  }
+
+  // ---------- Bandeau au zapping (chaînes en direct uniquement) ----------
+  // Petit bandeau temporaire (nom + programme en cours/suivant via l'EPG,
+  // voir AppZap.epgNow dans app.js) affiché à chaque prise d'antenne d'une
+  // chaîne, comme le zapping d'un vrai décodeur TV.
+  function showZapBanner(name, epgKey, logo) {
+    clearTimeout(zapBannerTimer);
+    zapBannerName.textContent = name || '';
+    var info = (global.AppZap && global.AppZap.epgNow) ? global.AppZap.epgNow(epgKey) : null;
+    zapBannerProg.textContent = info && info.now
+      ? '▶ ' + info.now.titre + (info.next ? ' · ensuite : ' + info.next.titre : '')
+      : '';
+    if (logo) {
+      zapBannerLogo.src = logo;
+      zapBannerLogo.style.display = '';
+      zapBannerLogo.onerror = function () { zapBannerLogo.style.display = 'none'; };
+    } else {
+      zapBannerLogo.style.display = 'none';
+    }
+    zapBanner.classList.add('show');
+    zapBannerTimer = setTimeout(function () { zapBanner.classList.remove('show'); }, 3000);
   }
 
   // ---------- Enregistrement (chaînes en direct uniquement, APK Android —
@@ -710,6 +823,7 @@
   }
 
   function open(url, title, opts) {
+    if (overlay) saveProgress(true); // mémorise la position du contenu quitté avant de basculer
     originalUrl = url;
     originalTitle = title || '';
     currentIsLive = !!(opts && opts.live);
@@ -722,10 +836,13 @@
     updateRemoteVisibility();
     startPlayback(url, title);
     syncRecordButtonState();
+    if (currentIsLive) showZapBanner(originalTitle, opts && opts.epgKey, opts && opts.logo);
+    else if (zapBanner) zapBanner.classList.remove('show');
   }
 
   function close() {
     clearLoadTimeout();
+    saveProgress(true);
     if (document.pictureInPictureElement === video) { document.exitPictureInPicture().catch(function () {}); }
     destroyPlayers();
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }

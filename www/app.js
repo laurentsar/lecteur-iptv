@@ -22,16 +22,17 @@
     guideChannelsCache: null, // toutes les chaînes direct (Xtream), indépendant du filtre par catégorie
     guideDayOffset: 0,
     unlockedAdult: {}, // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
-    zapList: [] // chaînes en direct actuellement listées (Direct + Guide) — pour le swipe de zapping dans le lecteur
+    zapList: [], // chaînes en direct actuellement listées (Direct + Guide) — pour le swipe/télécommande de zapping dans le lecteur
+    searchCache: {} // pools chargés pour la recherche universelle (Accueil), par kindKey — voir searchPool()
   };
 
   // Liste consultée par player.js pour zapper à la chaîne suivante/précédente
-  // (swipe haut/bas en plein écran) : mise à jour à chaque rendu d'une liste
-  // de chaînes en direct, dans l'ordre affiché.
+  // (swipe, télécommande virtuelle, numéro de chaîne) : mise à jour à chaque
+  // rendu d'une liste de chaînes en direct, dans l'ordre affiché.
   function setZapList(items) {
     state.zapList = items
       .filter(function (it) { return it.url && !looksLikeSeparator(it.name); })
-      .map(function (it) { return { url: it.url, name: it.name }; });
+      .map(function (it) { return { url: it.url, name: it.name, epgKey: it.epgKey || null, logo: it.logo || null, chno: it.chno || '' }; });
   }
   // Chaînes favorites (direct uniquement), pour la section « Favoris » de la
   // télécommande virtuelle du lecteur — toujours disponible via Store, même
@@ -39,9 +40,18 @@
   function zapFavoris() {
     return Store.getFavoris()
       .filter(function (f) { return f.kind === 'direct' || f.kind === 'live'; })
-      .map(function (f) { return { url: f.url, name: f.name }; });
+      .map(function (f) { return { url: f.url, name: f.name, logo: f.logo || null }; });
   }
-  window.AppZap = { list: function () { return state.zapList; }, favoris: zapFavoris };
+  window.AppZap = {
+    list: function () { return state.zapList; },
+    favoris: zapFavoris,
+    epgNow: function (epgKey) { return epgKey ? Epg.nowNext(state.epgMap, epgKey) : null; },
+    byNumber: function (num) {
+      num = String(num).replace(/^0+(?=\d)/, '');
+      return state.zapList.filter(function (it) { return it.chno; })
+        .find(function (it) { return String(it.chno).replace(/^0+(?=\d)/, '') === num; }) || null;
+    }
+  };
 
   // ---------- utilitaires ----------
   function $(sel) { return document.querySelector(sel); }
@@ -103,6 +113,7 @@
     state.activeCategory = { direct: '', films: '', series: '' };
     state.shown = { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE };
     state.guideChannelsCache = null; state.guideDayOffset = 0;
+    state.searchCache = {};
     updateHeader();
   }
 
@@ -192,7 +203,7 @@
         if (kindKey === 'direct') {
           return { key: 'xt:live:' + pl.id + ':' + s.stream_id, kind: 'direct', name: s.name,
             logo: s.stream_icon, group: catLabel[s.category_id] || '', url: Xtream.streamUrl(cfg, 'live', s.stream_id, 'm3u8'),
-            streamId: s.stream_id, epgKey: String(s.stream_id) };
+            streamId: s.stream_id, epgKey: String(s.stream_id), chno: s.num != null ? String(s.num) : '' };
         }
         if (kindKey === 'films') {
           return { key: 'xt:vod:' + pl.id + ':' + s.stream_id, kind: 'films', name: s.name,
@@ -427,7 +438,7 @@
 
   function openChannelVersions(item) {
     if (item.versions && item.versions.length > 1) { showVersionPicker(item, true); return; }
-    Player.open(item.url, item.name, { live: true });
+    Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
   }
 
   function showVersionPicker(item, isLive) {
@@ -464,6 +475,21 @@
     }
     if (!item.logo) thumb.textContent = iconFor(item.kind);
     if (item.versions && item.versions.length > 1) thumb.appendChild(el('div', 'carte-versions', item.versions.length + ' sources'));
+    // Reprise de lecture : barre de progression sur les cartes films dont on
+    // a déjà vu une partie (voir Store.setProgress dans player.js).
+    if (item.kind === 'films' && item.url) {
+      var prog = Store.getProgress(item.url);
+      if (prog && prog.duration) {
+        var ratio = Math.min(1, Math.max(0, prog.position / prog.duration));
+        if (ratio > 0.03 && ratio < 0.95) {
+          var fill = el('div', 'carte-progress-fill');
+          fill.style.width = Math.round(ratio * 100) + '%';
+          var bar = el('div', 'carte-progress');
+          bar.appendChild(fill);
+          thumb.appendChild(bar);
+        }
+      }
+    }
     card.appendChild(thumb);
 
     var body = el('div', 'carte-corps');
@@ -486,7 +512,11 @@
 
     // item.kind vaut 'direct' (Xtream) ou 'live' (M3U, voir m3u.js
     // classifyGroup) selon la source — les deux désignent une chaîne en direct.
-    card.addEventListener('click', function () { opts.onOpen ? opts.onOpen(item) : Player.open(item.url, item.name, { live: item.kind === 'direct' || item.kind === 'live' }); });
+    card.addEventListener('click', function () {
+      if (opts.onOpen) { opts.onOpen(item); return; }
+      var isLive = item.kind === 'direct' || item.kind === 'live';
+      Player.open(item.url, item.name, { live: isLive, epgKey: item.epgKey, logo: item.logo });
+    });
     return makeFocusable(card);
   }
 
@@ -548,7 +578,7 @@
         } else {
           var items = pool.filter(function (it) { return (!cat || it.groupTitle === cat) && matchesSearch(it, q); })
             .map(function (it) {
-              var withKey = Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle, logo: it.tvgLogo });
+              var withKey = Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle, logo: it.tvgLogo, chno: it.tvgChno || '' });
               withKey._badge = epgBadge(withKey);
               return withKey;
             });
@@ -619,6 +649,74 @@
     renderKind('direct');
   });
 
+  // ---------- Recherche universelle (Accueil) ----------
+  // Charge une fois par playlist (mis en cache dans state.searchCache) le
+  // pool complet d'un kind (direct/films/series), sans filtre de catégorie
+  // ni pagination — réutilisé à chaque frappe de la recherche universelle.
+  function searchPool(kindKey) {
+    if (state.searchCache[kindKey]) return state.searchCache[kindKey];
+    var pl = state.playlist;
+    if (!pl) return Promise.resolve([]);
+    var p;
+    if (pl.type === 'm3u') {
+      var m3uKind = kindKey === 'direct' ? 'live' : kindKey === 'films' ? 'vod' : 'series';
+      p = ensureM3uLoaded().then(function (data) {
+        var pool = data.items.filter(function (it) { return it.kind === m3uKind; });
+        if (kindKey === 'series') {
+          return M3U.groupSeries(pool).map(function (s) {
+            return { key: 'serie:' + pl.id + ':' + s.nom, kind: 'series', name: s.nom, logo: s.logo, group: s.groupTitle, saisons: s.saisons };
+          });
+        }
+        var items = pool.filter(function (it) { return it.url && !looksLikeSeparator(it.name); })
+          .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle, logo: it.tvgLogo, chno: it.tvgChno || '' }); });
+        return (kindKey === 'direct' || kindKey === 'films') ? groupChannels(items) : items;
+      });
+    } else {
+      p = ensureXtreamItems(kindKey, '');
+      if (kindKey === 'direct' || kindKey === 'films') p = p.then(groupChannels);
+    }
+    p = p.then(function (items) { return filterAdultLocked(items).visible; });
+    state.searchCache[kindKey] = p;
+    return p;
+  }
+
+  function openSerie(serie) {
+    return (state.playlist && state.playlist.type === 'm3u') ? openSerieM3u(serie) : openSerieXtream(serie);
+  }
+
+  var universalSearchTimer;
+  function renderUniversalSearch() {
+    var input = $id('rechUniverselle');
+    var q = input.value.trim().toLowerCase();
+    var out = $id('accueilSearchResults');
+    out.innerHTML = '';
+    if (!q || !state.playlist) return;
+    out.appendChild(el('div', 'hint', 'Recherche…'));
+    Promise.all([searchPool('direct'), searchPool('films'), searchPool('series')]).then(function (r) {
+      if (input.value.trim().toLowerCase() !== q) return; // la recherche a changé entre-temps
+      var dir = r[0].filter(function (it) { return matchesSearch(it, q); }).slice(0, 8);
+      var fil = r[1].filter(function (it) { return matchesSearch(it, q); }).slice(0, 8);
+      var ser = r[2].filter(function (it) { return matchesSearch(it, q); }).slice(0, 8);
+      out.innerHTML = '';
+      if (!dir.length && !fil.length && !ser.length) { out.appendChild(el('div', 'hint', 'Aucun résultat.')); return; }
+      [['📺 Chaînes', dir, openChannelVersions], ['🎬 Films', fil, openFilm], ['🎞️ Séries', ser, openSerie]].forEach(function (section) {
+        var label = section[0], items = section[1], onOpen = section[2];
+        if (!items.length) return;
+        out.appendChild(el('div', 'cat-title', label));
+        var grid = el('div', 'grid-cartes');
+        items.forEach(function (it) { grid.appendChild(card(it, { onOpen: onOpen })); });
+        out.appendChild(grid);
+      });
+    }).catch(function (err) {
+      out.innerHTML = '';
+      out.appendChild(el('div', 'hint', 'Recherche impossible : ' + err.message));
+    });
+  }
+  $id('rechUniverselle').addEventListener('input', function () {
+    clearTimeout(universalSearchTimer);
+    universalSearchTimer = setTimeout(renderUniversalSearch, 250);
+  });
+
   // ---------- Guide TV (agenda heure par heure) ----------
   // Toutes les chaînes « en direct » de la playlist active, indépendamment
   // du filtre par catégorie utilisé dans l'onglet En direct. Les entrées
@@ -630,7 +728,7 @@
       return ensureM3uLoaded().then(function (data) {
         return data.items
           .filter(function (it) { return it.kind === 'live' && it.url && !looksLikeSeparator(it.name); })
-          .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, logo: it.tvgLogo }); });
+          .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, logo: it.tvgLogo, chno: it.tvgChno || '' }); });
       });
     }
     if (state.guideChannelsCache) return Promise.resolve(state.guideChannelsCache);
@@ -697,7 +795,7 @@
           chan.appendChild(img);
         }
         chan.appendChild(el('span', null, item.name));
-        chan.addEventListener('click', function () { Player.open(item.url, item.name, { live: true }); });
+        chan.addEventListener('click', function () { Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo }); });
         grid.appendChild(makeFocusable(chan));
 
         var timeline = el('div', 'guide-timeline');
@@ -713,7 +811,7 @@
             block.style.left = ((s - dayStart) / 60000 * PX_PER_MIN) + 'px';
             block.style.width = Math.max(28, (e - s) / 60000 * PX_PER_MIN) + 'px';
             block.title = p.titre || '';
-            block.addEventListener('click', function () { Player.open(item.url, item.name, { live: true }); });
+            block.addEventListener('click', function () { Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo }); });
             if (p.start > now && Recorder.isAvailable()) {
               var schedBtn = el('button', 'guide-rec-btn', '⏺');
               schedBtn.title = 'Programmer l’enregistrement';

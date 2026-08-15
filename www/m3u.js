@@ -55,6 +55,7 @@
         pending = {
           tvgId: attrs['tvg-id'] || '',
           tvgLogo: attrs['tvg-logo'] || '',
+          tvgChno: attrs['tvg-chno'] || attrs['tvg-channel-number'] || '',
           groupTitle: attrs['group-title'] || 'Sans groupe',
           name: afterComma || attrs['tvg-name'] || 'Sans nom'
         };

@@ -33,6 +33,10 @@
   <main>
     <!-- ================= ACCUEIL ================= -->
     <section class="panel active" id="tab-accueil">
+      <div class="card toolbar">
+        <input type="search" id="rechUniverselle" placeholder="Rechercher partout (chaînes, films, séries)…" />
+      </div>
+      <div id="accueilSearchResults"></div>
       <div id="accueil"></div>
     </section>
 
@@ -348,7 +352,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.29';
+    window.APP_VERSION = '1.30';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

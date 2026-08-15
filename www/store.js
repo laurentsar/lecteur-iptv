@@ -108,6 +108,28 @@
     return i === -1; // true si on vient d'ajouter
   }
 
+  // ---------- Reprise de lecture (films/séries) — position mémorisée par URL
+  // de flux. Purge les entrées les plus anciennes au-delà de PROGRESS_MAX
+  // pour ne pas laisser grossir indéfiniment le localStorage.
+  var K_PROGRESS = 'iptv:progress';
+  var PROGRESS_MAX = 300;
+  function getProgressMap() { return lsGet(K_PROGRESS, {}); }
+  function getProgress(url) { return getProgressMap()[url] || null; }
+  function setProgress(url, data) {
+    var map = getProgressMap();
+    map[url] = Object.assign({}, data, { updatedAt: Date.now() });
+    var keys = Object.keys(map);
+    if (keys.length > PROGRESS_MAX) {
+      keys.sort(function (a, b) { return map[a].updatedAt - map[b].updatedAt; });
+      keys.slice(0, keys.length - PROGRESS_MAX).forEach(function (k) { delete map[k]; });
+    }
+    lsSet(K_PROGRESS, map);
+  }
+  function clearProgress(url) {
+    var map = getProgressMap();
+    if (url in map) { delete map[url]; lsSet(K_PROGRESS, map); }
+  }
+
   // ---------- IndexedDB : cache des playlists chargées (peut être volumineux) ----------
   var DB_NAME = 'iptv-lecteur';
   var STORE = 'cache';
@@ -162,6 +184,7 @@
     getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
     getParentalPin: getParentalPin, setParentalPin: setParentalPin,
     getFavoris: getFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
+    getProgress: getProgress, setProgress: setProgress, clearProgress: clearProgress,
     exportConfig: exportConfig, importConfig: importConfig,
     cacheGet: function (playlistId) { return idbGet('cache:' + playlistId); },
     cacheSet: function (playlistId, data) { return idbSet('cache:' + playlistId, data); },
