@@ -40,7 +40,7 @@
   // si l'onglet Direct/Guide n'a pas encore été ouvert cette session.
   function zapFavoris() {
     return Store.getFavoris()
-      .filter(function (f) { return f.kind === 'direct' || f.kind === 'live'; })
+      .filter(function (f) { return (f.kind === 'direct' || f.kind === 'live') && !isHiddenChannel(f.name); })
       .map(function (f) { return { url: f.url, name: f.name, logo: f.logo || null }; });
   }
   window.AppZap = {
@@ -1426,7 +1426,7 @@
   // ---------- favoris ----------
   function renderFavoris() {
     var container = $id('listeFavoris');
-    var favs = Store.getFavoris();
+    var favs = Store.getFavoris().filter(function (item) { return !isHiddenChannel(item.name); });
     container.innerHTML = '';
     if (!favs.length) { container.appendChild(el('div', 'hint', 'Aucun favori pour le moment — touche ☆ sur une chaîne, un film ou un épisode.')); return; }
     favs.forEach(function (item) {
@@ -1618,9 +1618,20 @@
   });
 
   // ---------- démarrage ----------
+  // Purge ponctuelle des favoris déjà enregistrés vers une chaîne masquée
+  // (ex. "Welcome Ultimate...") : le masquage (isHiddenChannel) n'est
+  // appliqué qu'à l'affichage des listes, pas aux favoris déjà mis en
+  // mémoire avant l'ajout de ce filtre — sans ce nettoyage, l'étoile ☆
+  // resterait cochée pour une chaîne qu'on ne peut plus jamais rouvrir
+  // depuis Direct/Bouquets/Recherche pour la déselectionner soi-même.
+  function pruneHiddenFavoris() {
+    Store.getFavoris().forEach(function (f) { if (isHiddenChannel(f.name)) Store.toggleFavori(f); });
+  }
+
   function init() {
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');
     $id('verText').textContent = window.APP_VERSION || '';
+    pruneHiddenFavoris();
     var activeId = Store.getActivePlaylistId();
     if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
     renderAccueil();
