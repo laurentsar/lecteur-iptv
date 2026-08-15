@@ -617,10 +617,28 @@ def patch_main_activity():
         "        registerPlugin(NativePlayerPlugin.class);\n"
         "        super.onCreate(savedInstanceState);\n"
         "    }\n"
+        "\n"
+        "    // @capacitor/screen-orientation (verrouillage paysage du plein écran,\n"
+        "    // voir player.js) appelle Activity.setRequestedOrientation() en natif :\n"
+        "    // sur pas mal d'appareils/thèmes (fenêtre pas strictement opaque —\n"
+        "    // barre de statut translucide, mode fenêtré/split-screen...), Android\n"
+        "    // lève IllegalStateException(\"Only fullscreen activities can request\n"
+        "    // orientation\") — une exception native non rattrapable côté JS (elle\n"
+        "    // survient avant toute réponse au pont Capacitor) qui fait planter\n"
+        "    // toute l'appli. On l'avale ici : au pire la rotation forcée est\n"
+        "    // ignorée sur ces appareils, plutôt qu'un crash.\n"
+        "    @Override\n"
+        "    public void setRequestedOrientation(int requestedOrientation) {\n"
+        "        try {\n"
+        "            super.setRequestedOrientation(requestedOrientation);\n"
+        "        } catch (IllegalStateException e) {\n"
+        "            // ignoré volontairement — voir commentaire ci-dessus\n"
+        "        }\n"
+        "    }\n"
         "}\n",
     )
     open(p, "w").write(s)
-    print("MainActivity.java : NativePlayerPlugin enregistré")
+    print("MainActivity.java : NativePlayerPlugin enregistré + garde anti-crash orientation")
 
 
 write_if_changed(PKG_DIR + "/NativePlayerPlugin.java", PLUGIN_JAVA)
