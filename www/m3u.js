@@ -25,6 +25,7 @@
 
   var VOD_HINTS = /(film|movie|vod|cinema|ciné)/i;
   var SERIES_HINTS = /(s[ée]rie|series|show)/i;
+  var RADIO_HINTS = /radio/i;
 
   function classifyGroup(groupTitle, name) {
     var g = groupTitle || '';
@@ -32,6 +33,7 @@
     if (serie) return 'series';
     if (SERIES_HINTS.test(g)) return 'series';
     if (VOD_HINTS.test(g)) return 'vod';
+    if (RADIO_HINTS.test(g)) return 'radio';
     return 'live';
   }
 

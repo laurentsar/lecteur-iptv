@@ -16,7 +16,7 @@
     epgLoading: false,
     xtreamCats: { direct: null, films: null, series: null }, // [{id,label}]
     activeCategory: { direct: '', films: '', series: '' },
-    shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE },
+    shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE, radio: PAGE_SIZE },
     xtreamItems: { direct: null, films: null, series: null }, // chargés à la demande par catégorie
     directView: 'liste',   // 'liste' | 'tuile'
     guideChannelsCache: null, // toutes les chaînes direct (Xtream), indépendant du filtre par catégorie
@@ -93,6 +93,7 @@
     else if (name === 'films') { $id('filmDetail').style.display = 'none'; $id('filmsRacine').style.display = ''; renderKind('films'); }
     else if (name === 'series') { $id('serieDetail').style.display = 'none'; $id('seriesRacine').style.display = ''; renderKind('series'); }
     else if (name === 'guide') renderGuide(true);
+    else if (name === 'radio') renderRadio();
     else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
     else if (name === 'reglages') renderPlaylists();
   }
@@ -124,7 +125,7 @@
     state.xtreamCats = { direct: null, films: null, series: null };
     state.xtreamItems = { direct: null, films: null, series: null };
     state.activeCategory = { direct: '', films: '', series: '' };
-    state.shown = { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE };
+    state.shown = { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE, radio: PAGE_SIZE };
     state.guideChannelsCache = null; state.guideDayOffset = 0;
     state.searchCache = {};
     updateHeader();
@@ -214,8 +215,9 @@
       var catLabel = (state.xtreamCats[kindKey] || []).reduce(function (acc, c) { acc[c.id] = c.label; return acc; }, {});
       return list.map(function (s) {
         if (kindKey === 'direct') {
-          return { key: 'xt:live:' + pl.id + ':' + s.stream_id, kind: 'direct', name: s.name,
-            logo: s.stream_icon, group: catLabel[s.category_id] || '', url: Xtream.streamUrl(cfg, 'live', s.stream_id, 'm3u8'),
+          var groupLabel = catLabel[s.category_id] || '';
+          return { key: 'xt:live:' + pl.id + ':' + s.stream_id, kind: /radio/i.test(groupLabel) ? 'radio' : 'direct', name: s.name,
+            logo: s.stream_icon, group: groupLabel, url: Xtream.streamUrl(cfg, 'live', s.stream_id, 'm3u8'),
             streamId: s.stream_id, epgKey: String(s.stream_id), chno: s.num != null ? String(s.num) : '' };
         }
         if (kindKey === 'films') {
@@ -435,6 +437,13 @@
     return key || String(name || '').toLowerCase().trim();
   }
 
+  // Exclut les entrées radio (catégorie détectée par nom, voir kind:'radio'
+  // dans ensureXtreamItems/m3u.js classifyGroup) des vues « En direct » —
+  // elles ont leur propre onglet Radio. Pour les playlists M3U, ce filtre
+  // est déjà implicite (les items radio ne passent jamais kind==='live') ;
+  // utile surtout côté Xtream où get_live_streams renvoie tout ensemble.
+  function excludeRadio(items) { return items.filter(function (it) { return it.kind !== 'radio'; }); }
+
   function groupChannels(items) {
     var byKey = {}, order = [];
     items.forEach(function (it) {
@@ -527,13 +536,13 @@
     // classifyGroup) selon la source — les deux désignent une chaîne en direct.
     card.addEventListener('click', function () {
       if (opts.onOpen) { opts.onOpen(item); return; }
-      var isLive = item.kind === 'direct' || item.kind === 'live';
+      var isLive = item.kind === 'direct' || item.kind === 'live' || item.kind === 'radio';
       Player.open(item.url, item.name, { live: isLive, epgKey: item.epgKey, logo: item.logo });
     });
     return makeFocusable(card);
   }
 
-  function iconFor(kind) { return kind === 'films' ? '🎬' : kind === 'series' ? '🎞️' : '📺'; }
+  function iconFor(kind) { return kind === 'films' ? '🎬' : kind === 'series' ? '🎞️' : kind === 'bouquet' ? '📦' : kind === 'radio' ? '📻' : '📺'; }
 
   // Titre de section (ex. "titre de section" au lieu de carte) : voir
   // looksLikeSeparator(name).
@@ -568,10 +577,13 @@
     if (kindKey === 'direct') {
       container.classList.toggle('tuile', state.directView === 'tuile');
       container.classList.toggle('liste', state.directView === 'liste');
+      container.classList.toggle('bouquets', state.directView === 'bouquets');
       kickEpg();
     }
 
     if (!pl) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.')); moreBtn.style.display = 'none'; chips.innerHTML = ''; return; }
+
+    if (kindKey === 'direct' && state.directView === 'bouquets') { renderBouquets(); return; }
 
     if (pl.type === 'm3u') {
       var m3uKind = kindKey === 'direct' ? 'live' : kindKey === 'films' ? 'vod' : 'series';
@@ -629,7 +641,7 @@
         var q = search.value.trim().toLowerCase();
         var filtered = items.filter(function (it) { return matchesSearch(it, q); });
         if (kindKey === 'direct') {
-          filtered = filtered.map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
+          filtered = excludeRadio(filtered).map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
         }
         var xtreamLock = filterAdultLocked(filtered);
         filtered = xtreamLock.visible;
@@ -645,6 +657,109 @@
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
     }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
   }
+
+  // ---------- Vue « Bouquets » (En direct) ----------
+  // Une grosse tuile par catégorie plutôt qu'une liste de chaînes, avec un
+  // petit descriptif (nombre de chaînes). Toucher un bouquet filtre dessus
+  // et bascule automatiquement en mode Liste pour voir les chaînes.
+  function openBouquet(g) {
+    state.activeCategory.direct = g.id;
+    state.shown.direct = PAGE_SIZE;
+    state.directView = 'liste';
+    Array.prototype.forEach.call(document.querySelectorAll('#directViewToggle .view-btn'), function (x) {
+      x.classList.toggle('active', x.dataset.view === 'liste');
+    });
+    renderKind('direct');
+  }
+
+  function renderBouquetTiles(container, groups, q) {
+    var filtered = groups.filter(function (g) { return !q || g.label.toLowerCase().indexOf(q) !== -1; });
+    container.innerHTML = '';
+    if (!filtered.length) { container.appendChild(el('div', 'hint', 'Aucun résultat.')); return; }
+    filtered.forEach(function (g) {
+      var item = { key: 'bouquet:' + g.id, kind: 'bouquet', name: g.label, logo: g.logo,
+        group: g.count + ' chaîne' + (g.count > 1 ? 's' : '') };
+      container.appendChild(card(item, { onOpen: function () { openBouquet(g); } }));
+    });
+  }
+
+  function renderBouquets() {
+    var pl = state.playlist;
+    var container = $id('listeDirect'), moreBtn = $id('plusDirect'), chips = $id('chipsDirect'), search = $id('rechDirect');
+    moreBtn.style.display = 'none';
+    chips.innerHTML = '';
+    container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Chargement…'));
+    var q = search.value.trim().toLowerCase();
+
+    if (pl.type === 'm3u') {
+      ensureM3uLoaded().then(function (data) {
+        var pool = data.items.filter(function (it) { return it.kind === 'live'; });
+        var byGroup = {};
+        pool.forEach(function (it) {
+          var g = it.groupTitle || 'Sans groupe';
+          if (!byGroup[g]) byGroup[g] = { id: g, label: g, count: 0, logo: null };
+          byGroup[g].count++;
+          if (!byGroup[g].logo && it.tvgLogo) byGroup[g].logo = it.tvgLogo;
+        });
+        var groups = Object.keys(byGroup).sort(function (a, b) { return a.localeCompare(b); }).map(function (k) { return byGroup[k]; });
+        renderBouquetTiles(container, groups, q);
+      }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); });
+    } else {
+      Promise.all([ensureXtreamCats('direct'), ensureXtreamItems('direct', '')]).then(function (r) {
+        var cats = r[0].filter(function (c) { return !/radio/i.test(c.label || ''); }), items = excludeRadio(r[1]);
+        var countByLabel = {}, logoByLabel = {};
+        items.forEach(function (it) {
+          var g = it.group || '';
+          countByLabel[g] = (countByLabel[g] || 0) + 1;
+          if (!logoByLabel[g] && it.logo) logoByLabel[g] = it.logo;
+        });
+        var groups = cats.map(function (c) {
+          return { id: c.id, label: c.label, count: countByLabel[c.label] || 0, logo: logoByLabel[c.label] || null };
+        });
+        renderBouquetTiles(container, groups, q);
+      }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); });
+    }
+  }
+
+  // ---------- Radio ----------
+  // Détectée par nom de catégorie (M3U : kind:'radio' via m3u.js
+  // classifyGroup ; Xtream : catégorie dont le libellé contient « radio »,
+  // voir ensureXtreamItems) — pas de distinction native dans l'API Xtream
+  // classique entre chaînes TV et radios, donc heuristique comme pour le
+  // reste (VOD/séries).
+  function renderRadio() {
+    var pl = state.playlist;
+    var container = $id('listeRadio'), moreBtn = $id('plusRadio'), search = $id('rechRadio');
+    if (!pl) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Réglages.')); moreBtn.style.display = 'none'; return; }
+    container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Chargement…'));
+    moreBtn.style.display = 'none';
+    var q = search.value.trim().toLowerCase();
+
+    function finish(items) {
+      var filtered = items.filter(function (it) { return matchesSearch(it, q); });
+      filtered = groupChannels(filtered);
+      var lock = filterAdultLocked(filtered);
+      renderList(container, moreBtn, lock.visible, 'radio', { onOpen: function (item) {
+        if (item.versions && item.versions.length > 1) { showVersionPicker(item, true); return; }
+        Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
+      } });
+      appendLockedCards(container, lock.locked, renderRadio);
+    }
+
+    if (pl.type === 'm3u') {
+      ensureM3uLoaded().then(function (data) {
+        var items = data.items.filter(function (it) { return it.kind === 'radio' && it.url && !looksLikeSeparator(it.name); })
+          .map(function (it) { return Object.assign({}, it, { group: it.groupTitle, logo: it.tvgLogo }); });
+        finish(items);
+      }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); });
+    } else {
+      ensureXtreamItems('direct', '').then(function (items) {
+        finish(items.filter(function (it) { return it.kind === 'radio'; }));
+      }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); });
+    }
+  }
+  $id('rechRadio').addEventListener('input', function () { state.shown.radio = PAGE_SIZE; renderRadio(); });
+  $id('plusRadio').addEventListener('click', function () { state.shown.radio += PAGE_SIZE; renderRadio(); });
 
   function uniqueSorted(arr) {
     var set = {}; arr.forEach(function (v) { if (v) set[v] = true; });
@@ -690,6 +805,7 @@
       });
     } else {
       p = ensureXtreamItems(kindKey, '');
+      if (kindKey === 'direct') p = p.then(excludeRadio);
       if (kindKey === 'direct' || kindKey === 'films') p = p.then(groupChannels);
     }
     p = p.then(function (items) { return filterAdultLocked(items).visible; });
@@ -748,10 +864,10 @@
           .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, logo: it.tvgLogo, chno: it.tvgChno || '' }); });
       });
     }
-    if (state.guideChannelsCache) return Promise.resolve(state.guideChannelsCache);
+    if (state.guideChannelsCache) return Promise.resolve(excludeRadio(state.guideChannelsCache));
     return ensureXtreamItems('direct', '').then(function (items) {
       state.guideChannelsCache = items;
-      return items;
+      return excludeRadio(items);
     });
   }
 

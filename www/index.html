@@ -26,6 +26,7 @@
     <button class="tab" data-tab="guide"><span class="tab-ic">🗓️</span><span class="tab-lb">Guide</span></button>
     <button class="tab" data-tab="films"><span class="tab-ic">🎬</span><span class="tab-lb">Films</span></button>
     <button class="tab" data-tab="series"><span class="tab-ic">🎞️</span><span class="tab-lb">Séries</span></button>
+    <button class="tab" data-tab="radio"><span class="tab-ic">📻</span><span class="tab-lb">Radio</span></button>
     <button class="tab" data-tab="maliste"><span class="tab-ic">⭐</span><span class="tab-lb">Ma liste</span></button>
     <button class="tab" data-tab="reglages"><span class="tab-ic">⚙️</span><span class="tab-lb">Réglages</span></button>
   </nav>
@@ -47,6 +48,7 @@
         <div class="view-toggle" id="directViewToggle">
           <button class="view-btn active" data-view="liste">🔳 Liste</button>
           <button class="view-btn" data-view="tuile">🔲 Tuile</button>
+          <button class="view-btn" data-view="bouquets">📦 Bouquets</button>
         </div>
         <div id="chipsDirect" class="chips"></div>
       </div>
@@ -92,6 +94,15 @@
         <div class="row"><button id="plusSeries" class="ghost" style="display:none">Charger plus</button></div>
       </div>
       <div id="serieDetail" style="display:none"></div>
+    </section>
+
+    <!-- ================= RADIO ================= -->
+    <section class="panel" id="tab-radio">
+      <div class="card toolbar">
+        <input type="search" id="rechRadio" placeholder="Rechercher une radio…" />
+      </div>
+      <div id="listeRadio" class="grid-cartes liste"></div>
+      <div class="row"><button id="plusRadio" class="ghost" style="display:none">Charger plus</button></div>
     </section>
 
     <!-- ================= MA LISTE (favoris + enregistrements) ================= -->
@@ -352,7 +363,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.35';
+    window.APP_VERSION = '1.36';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
