@@ -116,6 +116,26 @@
     goTab('accueil');
   });
 
+  // Bouton « retour » matériel — téléphone (bouton/geste système Android)
+  // ou télécommande (touche Retour), les deux envoient le même évènement
+  // système KEYCODE_BACK côté Android, relayé ici par le plugin Capacitor
+  // « App » (contrairement à Maison ci-dessus, jamais reçu comme un simple
+  // évènement clavier) : ferme d'abord le lecteur ou le détail ouvert,
+  // sinon revient à l'onglet Accueil, sinon quitte l'appli.
+  function goBack() {
+    if (window.Player && Player.isOpen && Player.isOpen()) { Player.close(); return; }
+    var filmDetail = $id('filmDetail');
+    if (filmDetail && filmDetail.style.display !== 'none') { filmDetail.style.display = 'none'; $id('filmsRacine').style.display = ''; return; }
+    var serieDetail = $id('serieDetail');
+    if (serieDetail && serieDetail.style.display !== 'none') { serieDetail.style.display = 'none'; $id('seriesRacine').style.display = ''; return; }
+    var activeTab = document.querySelector('.tab.active');
+    if (activeTab && activeTab.dataset.tab !== 'accueil') { goTab('accueil'); return; }
+    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App && Capacitor.Plugins.App.exitApp) Capacitor.Plugins.App.exitApp();
+  }
+  if (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.Plugins && Capacitor.Plugins.App) {
+    Capacitor.Plugins.App.addListener('backButton', goBack);
+  }
+
   // ---------- chargement de la playlist active ----------
   function xtreamCfg(pl) { return { serveur: pl.serveur, utilisateur: pl.utilisateur, motDePasse: pl.motDePasse }; }
 

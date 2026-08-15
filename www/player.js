@@ -923,5 +923,7 @@
     if (overlay) overlay.classList.remove('show');
   }
 
-  global.Player = { open: open, close: close };
+  function isOpen() { return !!(overlay && overlay.classList.contains('show')); }
+
+  global.Player = { open: open, close: close, isOpen: isOpen };
 })(window);
