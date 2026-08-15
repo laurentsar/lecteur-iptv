@@ -524,7 +524,7 @@
     } else {
       thumb.classList.add('vide');
     }
-    if (!item.logo) thumb.textContent = iconFor(item.kind);
+    if (!item.logo) thumb.textContent = item.icon || iconFor(item.kind);
     if (item.versions && item.versions.length > 1) thumb.appendChild(el('div', 'carte-versions', item.versions.length + ' sources'));
     // Reprise de lecture : barre de progression sur les cartes films dont on
     // a déjà vu une partie (voir Store.setProgress dans player.js).
@@ -571,7 +571,26 @@
     return makeFocusable(card);
   }
 
-  function iconFor(kind) { return kind === 'films' ? '🎬' : kind === 'series' ? '🎞️' : kind === 'bouquet' ? '📦' : kind === 'radio' ? '📻' : '📺'; }
+  function iconFor(kind) { return kind === 'films' ? '🎬' : kind === 'series' ? '🎞️' : kind === 'bouquet' ? '🗂️' : kind === 'radio' ? '📻' : '📺'; }
+
+  // Icône de bouquet inspirée de son thème plutôt qu'un pictogramme
+  // générique — heuristique par mots-clés sur le nom (même esprit que
+  // isAdultGroup/classifyGroup), best-effort et sans prétention d'exhaustivité.
+  function iconForBouquet(label) {
+    var s = String(label || '').toLowerCase();
+    if (/adulte|xxx|18\+|porn/.test(s)) return '🔞';
+    if (/sport|foot|tennis|golf|rugby|basket|f1\b|ufc|boxe|nba|nfl|moto ?gp/.test(s)) return '⚽';
+    if (/cin[ée]|movie|vod/.test(s)) return '🎬';
+    if (/s[ée]rie|show|drama/.test(s)) return '🎞️';
+    if (/jeunesse|kids?\b|enfant|cartoon|disney|nickelodeon|toon/.test(s)) return '🧸';
+    if (/musique|music|clip|mtv|hits?\b/.test(s)) return '🎵';
+    if (/info|news|actu/.test(s)) return '📰';
+    if (/document|discovery|nat ?geo|histoire|science/.test(s)) return '🔭';
+    if (/religio|god|dieu|coran|bible|islam|chr[ée]tien/.test(s)) return '🕊️';
+    if (/r[ée]gion|local/.test(s)) return '📍';
+    if (/g[ée]n[ée]ralist|national/.test(s)) return '📺';
+    return '🗂️';
+  }
 
   // Titre de section (ex. "titre de section" au lieu de carte) : voir
   // looksLikeSeparator(name).
@@ -707,7 +726,7 @@
     container.innerHTML = '';
     if (!filtered.length) { container.appendChild(el('div', 'hint', 'Aucun résultat.')); return; }
     filtered.forEach(function (g) {
-      var item = { key: 'bouquet:' + g.id, kind: 'bouquet', name: g.label, logo: g.logo,
+      var item = { key: 'bouquet:' + g.id, kind: 'bouquet', name: g.label, logo: g.logo, icon: iconForBouquet(g.label),
         group: g.count + ' chaîne' + (g.count > 1 ? 's' : '') };
       container.appendChild(card(item, { onOpen: function () { openBouquet(g); } }));
     });
