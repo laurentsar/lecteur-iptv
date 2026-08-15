@@ -18,10 +18,14 @@
  *
  * Réglages pensés pour un débit faible/instable (connexions mobiles,
  * ADSL...), plutôt que pour la latence minimale : mémoire tampon plus
- * généreuse pour absorber les ralentissements sans décrocher, démarrage
- * systématique sur la qualité la plus basse (évite un premier segment trop
- * gros qui bloque le lancement), remontée en qualité prudente pour éviter
- * les allers-retours HD/SD qui aggravent les coupures. */
+ * généreuse pour absorber les ralentissements sans décrocher, qualité de
+ * départ estimée à partir du débit réseau connu de l'appareil (Network
+ * Information API, sinon repli prudent sur la qualité la plus basse),
+ * plafonnée à la taille d'affichage réelle (capLevelToPlayerSize — inutile
+ * de télécharger de la 4K sur un écran de téléphone), remontée en qualité
+ * prudente ensuite pour éviter les allers-retours HD/SD qui aggravent les
+ * coupures. Un sélecteur manuel (bouton ⚙️) permet de forcer une qualité
+ * précise si l'automatique ne convient pas. */
 (function (global) {
   'use strict';
 
@@ -34,6 +38,7 @@
   var triedNativeFallback = false, triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
   var remoteBtn, remotePanel;
+  var fullscreenBtn;
   var castSdkRequested = false;
   var loadTimeoutId = null;
   var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
@@ -41,23 +46,41 @@
   // restent bloquées indéfiniment sans ce filet de sécurité.
 
   // hls.js : priorité à la stabilité sur un lien faible plutôt qu'à la
-  // qualité ou la latence. startLevel:0 = démarre toujours sur le plus
-  // petit débit disponible (la remontée ABR se fait ensuite si le réseau
-  // le permet) ; abrEwmaDefaultEstimate bas = pas d'hypothèse optimiste
-  // tant qu'aucune mesure réelle n'existe ; abrBandWidthUpFactor bas =
-  // remonter en qualité seulement avec une marge confortable, pour éviter
-  // les allers-retours qui provoquent des coupures ; buffers étendus =
-  // encaisse des ralentissements plus longs avant de décrocher.
+  // qualité ou la latence. startLevel:-1 = choix automatique du premier
+  // palier à partir de abrEwmaDefaultEstimate (voir estimateStartBandwidth,
+  // calculé à l'ouverture depuis le débit réseau connu de l'appareil quand
+  // disponible ; repli prudent sur le palier le plus bas sinon) plutôt que
+  // de forcer systématiquement la qualité la plus basse ; capLevelToPlayerSize
+  // borne le choix automatique à la taille d'affichage réelle (inutile de
+  // télécharger plus que ce que l'écran peut montrer) ; abrBandWidthUpFactor
+  // bas = remonter en qualité seulement avec une marge confortable, pour
+  // éviter les allers-retours qui provoquent des coupures ; buffers étendus
+  // = encaisse des ralentissements plus longs avant de décrocher.
   var HLS_LOW_BANDWIDTH_CONFIG = {
     enableWorker: true,
-    startLevel: 0,
-    abrEwmaDefaultEstimate: 300000,
+    startLevel: -1,
+    capLevelToPlayerSize: true,
     abrBandWidthFactor: 0.9,
     abrBandWidthUpFactor: 0.6,
     maxBufferLength: 60,
     maxMaxBufferLength: 120,
     maxBufferHole: 1
   };
+
+  // Débit de départ estimé pour le choix automatique du premier palier HLS
+  // (abrEwmaDefaultEstimate) : Network Information API si le navigateur/
+  // WebView l'expose (Chrome Android — pas Safari/iOS), sinon repli prudent
+  // identique au comportement précédent (démarrage sur le plus petit débit).
+  function estimateStartBandwidth() {
+    var conn = global.navigator && (navigator.connection || navigator.mozConnection || navigator.webkitConnection);
+    if (conn && conn.downlink) {
+      // downlink en Mbit/s, converti en bit/s avec une marge de sécurité
+      // (60 %) pour ne pas surestimer et provoquer un premier segment trop
+      // gros au lancement.
+      return Math.max(300000, Math.round(conn.downlink * 1000000 * 0.6));
+    }
+    return 300000; // ~300 kb/s : identique à l'ancien réglage fixe.
+  }
 
   // mpegts.js (flux mpeg-ts bruts, débit fixe — pas d'ABR possible) : un
   // tampon initial plus grand absorbe les micro-coupures réseau avant de
@@ -80,10 +103,13 @@
       '  <button id="playerRemote" class="player-cast" aria-label="Télécommande" style="display:none">🕹️</button>' +
       '  <button id="playerPip" class="player-cast" aria-label="Picture-in-Picture" style="display:none">⧉</button>' +
       '  <button id="playerRecord" class="player-cast" aria-label="Enregistrer" style="display:none">⏺</button>' +
-      '  <button id="playerTracks" class="player-cast" aria-label="Langue et sous-titres" style="display:none">🌐</button>' +
+      '  <button id="playerTracks" class="player-cast" aria-label="Qualité, langue et sous-titres" style="display:none">⚙️</button>' +
+      '  <button id="playerFullscreen" class="player-cast" aria-label="Plein écran" style="display:none">⛶</button>' +
       '  <button id="playerClose" class="player-close" aria-label="Fermer">✕</button>' +
       '</div>' +
       '<div id="playerTracksMenu" class="tracks-menu" style="display:none">' +
+      '  <div class="tracks-title">Qualité</div>' +
+      '  <div id="tracksQualityList"></div>' +
       '  <div class="tracks-title">Audio</div>' +
       '  <div id="tracksAudioList"></div>' +
       '  <div class="tracks-title">Sous-titres</div>' +
@@ -121,6 +147,7 @@
     castLauncher = overlay.querySelector('#castLauncher');
     remoteBtn = overlay.querySelector('#playerRemote');
     remotePanel = overlay.querySelector('#remotePanel');
+    fullscreenBtn = overlay.querySelector('#playerFullscreen');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
       clearLoadTimeout();
@@ -134,6 +161,40 @@
     setupRecording();
     setupZapSwipe();
     setupRemote();
+    setupFullscreen();
+  }
+
+  // ---------- Plein écran (masque la barre d'adresse/le système sur PWA ou
+  // navigateur — l'APK Android est déjà en plein écran natif) ----------
+  function fullscreenSupported() { return !!(overlay.requestFullscreen || overlay.webkitRequestFullscreen); }
+  function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+
+  // webkitRequestFullscreen/webkitExitFullscreen (anciens WebKit) ne
+  // renvoient pas de Promise contrairement à la version standard — on ne
+  // chaîne .catch() que si c'en est bien une.
+  function requestFs() {
+    if (overlay.requestFullscreen) return overlay.requestFullscreen();
+    if (overlay.webkitRequestFullscreen) overlay.webkitRequestFullscreen();
+    return null;
+  }
+  function exitFs() {
+    if (document.exitFullscreen) return document.exitFullscreen();
+    if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    return null;
+  }
+
+  function setupFullscreen() {
+    if (!fullscreenSupported()) { fullscreenBtn.style.display = 'none'; return; }
+    fullscreenBtn.style.display = '';
+    fullscreenBtn.addEventListener('click', function () {
+      try {
+        var p = isFullscreen() ? exitFs() : requestFs();
+        if (p && typeof p.catch === 'function') p.catch(function () { setStatus('Plein écran indisponible sur cet appareil.'); });
+      } catch (e) { setStatus('Plein écran indisponible sur cet appareil.'); }
+    });
+    function sync() { fullscreenBtn.classList.toggle('active', isFullscreen()); }
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
   }
 
   // ---------- Télécommande virtuelle (chaînes en direct uniquement) ----------
@@ -351,18 +412,40 @@
     }
   }
 
+  // ---------- Qualité (chaînes/flux HLS uniquement — pas d'ABR pour le
+  // mpeg-ts brut ni la lecture directe, voir MPEGTS_LOW_BANDWIDTH_CONFIG) ----------
+  // Choix manuel en plus de la sélection automatique (voir
+  // estimateStartBandwidth) : utile si l'auto ne convient pas (image figée
+  // en 4G limitée, ou au contraire trop basse sur une bonne connexion).
+  function getQualityLevels() {
+    if (!hls || !hls.levels) return [];
+    return hls.levels.map(function (lvl, i) {
+      var label = lvl.height ? lvl.height + 'p' : 'Palier ' + (i + 1);
+      if (lvl.bitrate) label += ' · ' + Math.round(lvl.bitrate / 1000) + ' kb/s';
+      return { id: i, label: label };
+    });
+  }
+
+  function getCurrentQualityLevel() { return hls ? hls.currentLevel : -1; } // -1 = auto
+
+  function setQualityLevel(id) {
+    if (!hls) return;
+    hls.currentLevel = id;
+    renderTracksMenu();
+  }
+
   function updateTracksVisibility() {
-    var hasChoice = getAudioTracks().length > 1 || getSubtitleTracks().length > 0;
+    var hasChoice = getAudioTracks().length > 1 || getSubtitleTracks().length > 0 || getQualityLevels().length > 1;
     tracksBtn.style.display = hasChoice ? '' : 'none';
     if (!hasChoice) tracksMenu.style.display = 'none';
   }
 
-  function tracksMenuList(container, tracks, current, onOff, onPick) {
+  function tracksMenuList(container, tracks, current, onOff, onPick, offLabel) {
     container.innerHTML = '';
     if (onOff) {
       var off = document.createElement('button');
       off.className = 'tracks-item' + (current === -1 ? ' active' : '');
-      off.textContent = (current === -1 ? '✓ ' : '') + 'Désactivés';
+      off.textContent = (current === -1 ? '✓ ' : '') + (offLabel || 'Désactivés');
       off.addEventListener('click', function () { onPick(-1); });
       container.appendChild(off);
     }
@@ -387,6 +470,7 @@
   }
 
   function renderTracksMenu() {
+    tracksMenuList(overlay.querySelector('#tracksQualityList'), getQualityLevels(), getCurrentQualityLevel(), true, setQualityLevel, 'Auto');
     tracksMenuList(overlay.querySelector('#tracksAudioList'), getAudioTracks(), getCurrentAudioTrack(), false, setAudioTrack);
     tracksMenuList(overlay.querySelector('#tracksSubList'), getSubtitleTracks(), getCurrentSubtitleTrack(), true, setSubtitleTrack);
   }
@@ -566,13 +650,16 @@
       var useNativeLoader = global.Net && global.Net.isNative() && global.CapacitorHttpLoader;
       currentEngine = 'HLS' + (useNativeLoader ? ' natif' : '');
       setStatus('Connexion au flux (HLS)…');
-      var hlsConfig = Object.assign({}, HLS_LOW_BANDWIDTH_CONFIG, useNativeLoader ? { loader: global.CapacitorHttpLoader } : {});
+      var hlsConfig = Object.assign({}, HLS_LOW_BANDWIDTH_CONFIG,
+        { abrEwmaDefaultEstimate: estimateStartBandwidth() },
+        useNativeLoader ? { loader: global.CapacitorHttpLoader } : {});
       hls = new global.Hls(hlsConfig);
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
         if (data && data.fatal) attemptFallbackOrFail('Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
       hls.on(global.Hls.Events.AUDIO_TRACKS_UPDATED, updateTracksVisibility);
       hls.on(global.Hls.Events.SUBTITLE_TRACKS_UPDATED, updateTracksVisibility);
+      hls.on(global.Hls.Events.MANIFEST_PARSED, updateTracksVisibility);
       hls.loadSource(url);
       hls.attachMedia(video);
       video.play().catch(function () {});
