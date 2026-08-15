@@ -33,6 +33,7 @@
   var currentIsLive = false; // PiP proposé uniquement pour le direct
   var triedNativeFallback = false, triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
+  var remoteBtn, remotePanel;
   var castSdkRequested = false;
   var loadTimeoutId = null;
   var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
@@ -76,6 +77,7 @@
       '  <span id="playerTitle" class="player-title"></span>' +
       '  <google-cast-launcher id="castLauncher" class="player-cast" style="display:none"></google-cast-launcher>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
+      '  <button id="playerRemote" class="player-cast" aria-label="Télécommande" style="display:none">🕹️</button>' +
       '  <button id="playerPip" class="player-cast" aria-label="Picture-in-Picture" style="display:none">⧉</button>' +
       '  <button id="playerRecord" class="player-cast" aria-label="Enregistrer" style="display:none">⏺</button>' +
       '  <button id="playerTracks" class="player-cast" aria-label="Langue et sous-titres" style="display:none">🌐</button>' +
@@ -88,7 +90,24 @@
       '  <div id="tracksSubList"></div>' +
       '</div>' +
       '<video id="playerVideo" playsinline controls autoplay></video>' +
-      '<div id="playerStatus" class="player-status"></div>';
+      '<div id="playerStatus" class="player-status"></div>' +
+      '<div id="remotePanel" class="remote-panel" style="display:none">' +
+      '  <div class="remote-panel-card">' +
+      '    <div class="remote-panel-head">' +
+      '      <h3>🕹️ Télécommande</h3>' +
+      '      <button id="remotePanelClose" class="ghost">Fermer</button>' +
+      '    </div>' +
+      '    <div class="remote-zap-row">' +
+      '      <button id="remoteZapPrev" class="ghost">◀ Précédente</button>' +
+      '      <button id="remoteZapNext" class="ghost">Suivante ▶</button>' +
+      '    </div>' +
+      '    <input type="search" id="remoteSearch" placeholder="Rechercher une chaîne…" />' +
+      '    <div class="cat-title">⭐ Favoris</div>' +
+      '    <div id="remoteFavoris"></div>' +
+      '    <div class="cat-title">📺 Chaînes</div>' +
+      '    <div id="remoteChannels"></div>' +
+      '  </div>' +
+      '</div>';
     document.body.appendChild(overlay);
     video = overlay.querySelector('#playerVideo');
     titleEl = overlay.querySelector('#playerTitle');
@@ -100,6 +119,8 @@
     tracksBtn = overlay.querySelector('#playerTracks');
     tracksMenu = overlay.querySelector('#playerTracksMenu');
     castLauncher = overlay.querySelector('#castLauncher');
+    remoteBtn = overlay.querySelector('#playerRemote');
+    remotePanel = overlay.querySelector('#remotePanel');
     closeBtn.addEventListener('click', close);
     video.addEventListener('error', function () {
       clearLoadTimeout();
@@ -112,6 +133,57 @@
     setupTracks();
     setupRecording();
     setupZapSwipe();
+    setupRemote();
+  }
+
+  // ---------- Télécommande virtuelle (chaînes en direct uniquement) ----------
+  // Panneau alternatif au swipe pour changer de chaîne : suivante/précédente,
+  // ou choisir directement dans les favoris ou la liste des chaînes
+  // actuellement connue de l'app (voir AppZap dans app.js).
+  function updateRemoteVisibility() {
+    remoteBtn.style.display = (currentIsLive && !isCasting()) ? '' : 'none';
+    if (!currentIsLive) closeRemote();
+  }
+
+  function closeRemote() { remotePanel.style.display = 'none'; }
+
+  function remoteList(container, items, emptyMsg) {
+    container.innerHTML = '';
+    if (!items.length) { container.appendChild(el('div', 'hint', emptyMsg)); return; }
+    items.forEach(function (it) {
+      var b = document.createElement('button');
+      b.className = 'version-item' + (it.url === originalUrl ? ' active' : '');
+      b.textContent = (it.url === originalUrl ? '▶ ' : '') + it.name;
+      b.addEventListener('click', function () { closeRemote(); open(it.url, it.name, { live: true }); });
+      container.appendChild(b);
+    });
+  }
+
+  function renderRemotePanel() {
+    var favoris = (global.AppZap && global.AppZap.favoris()) || [];
+    var channels = (global.AppZap && global.AppZap.list()) || [];
+    var q = overlay.querySelector('#remoteSearch').value.trim().toLowerCase();
+    if (q) {
+      favoris = favoris.filter(function (it) { return it.name.toLowerCase().indexOf(q) !== -1; });
+      channels = channels.filter(function (it) { return it.name.toLowerCase().indexOf(q) !== -1; });
+    }
+    remoteList(overlay.querySelector('#remoteFavoris'), favoris, 'Aucun favori en direct — touche ☆ sur une chaîne dans l’app.');
+    remoteList(overlay.querySelector('#remoteChannels'), channels,
+      'Ouvre l’onglet Direct ou Guide dans l’app pour lister les chaînes ici.');
+  }
+
+  function setupRemote() {
+    remoteBtn.addEventListener('click', function () {
+      var showing = remotePanel.style.display !== 'none';
+      if (showing) { closeRemote(); return; }
+      renderRemotePanel();
+      remotePanel.style.display = 'flex';
+    });
+    overlay.querySelector('#remotePanelClose').addEventListener('click', closeRemote);
+    remotePanel.addEventListener('click', function (e) { if (e.target === remotePanel) closeRemote(); });
+    overlay.querySelector('#remoteSearch').addEventListener('input', renderRemotePanel);
+    overlay.querySelector('#remoteZapNext').addEventListener('click', function () { zapStep(1); renderRemotePanel(); });
+    overlay.querySelector('#remoteZapPrev').addEventListener('click', function () { zapStep(-1); renderRemotePanel(); });
   }
 
   // ---------- Zapping par swipe (chaînes en direct uniquement) ----------
@@ -361,6 +433,7 @@
           }
           if (pipBtn) updatePipVisibility();
           if (recordBtn) updateRecordVisibility();
+          if (remoteBtn) updateRemoteVisibility();
         }
       );
     };
@@ -538,6 +611,7 @@
     overlay.classList.add('show');
     updatePipVisibility();
     updateRecordVisibility();
+    updateRemoteVisibility();
     startPlayback(url, title);
     syncRecordButtonState();
   }
@@ -548,6 +622,7 @@
     destroyPlayers();
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
     if (tracksMenu) tracksMenu.style.display = 'none';
+    if (remotePanel) closeRemote();
     if (overlay) overlay.classList.remove('show');
   }
 

@@ -33,7 +33,15 @@
       .filter(function (it) { return it.url && !looksLikeSeparator(it.name); })
       .map(function (it) { return { url: it.url, name: it.name }; });
   }
-  window.AppZap = { list: function () { return state.zapList; } };
+  // Chaînes favorites (direct uniquement), pour la section « Favoris » de la
+  // télécommande virtuelle du lecteur — toujours disponible via Store, même
+  // si l'onglet Direct/Guide n'a pas encore été ouvert cette session.
+  function zapFavoris() {
+    return Store.getFavoris()
+      .filter(function (f) { return f.kind === 'direct' || f.kind === 'live'; })
+      .map(function (f) { return { url: f.url, name: f.name }; });
+  }
+  window.AppZap = { list: function () { return state.zapList; }, favoris: zapFavoris };
 
   // ---------- utilitaires ----------
   function $(sel) { return document.querySelector(sel); }

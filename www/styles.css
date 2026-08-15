@@ -298,6 +298,23 @@ button.ghost { background: var(--card2); color: var(--text); }
 .tracks-item:active { background: var(--card2); }
 .tracks-item.active { color: var(--accent); font-weight: 700; }
 
+/* ---------- télécommande virtuelle (chaînes en direct) ---------- */
+.remote-panel {
+  position: absolute; inset: 0; background: rgba(6,10,16,.75); z-index: 40;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.remote-panel-card {
+  width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px 16px 0 0; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  max-height: 80vh; overflow-y: auto;
+}
+.remote-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.remote-panel-head h3 { margin: 0; font-size: 16px; }
+.remote-zap-row { display: flex; gap: 8px; margin: 12px 0; }
+.remote-zap-row button { flex: 1; }
+#remoteSearch { width: 100%; margin-bottom: 4px; }
+.version-item.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+
 /* ---------- guide TV (agenda heure par heure) ---------- */
 .guide-daynav { display: flex; align-items: center; gap: 6px; }
 .daynav-btn {
