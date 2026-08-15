@@ -132,6 +132,31 @@
     updateHeader();
   }
 
+  // Recharge la playlist active depuis le fournisseur : pour le M3U, le
+  // fichier n'est sinon jamais re-téléchargé après le premier ajout (mis en
+  // cache indéfiniment) ; pour le Xtream, les catégories/chaînes ne sont
+  // gardées qu'en mémoire le temps de la session, donc vider ce cache
+  // suffit à forcer un nouvel appel au serveur au prochain affichage.
+  function refreshActivePlaylist() {
+    var pl = state.playlist;
+    if (!pl) return;
+    toast('Actualisation…');
+    var afterRefresh = function () {
+      state.xtreamCats = { direct: null, films: null, series: null };
+      state.xtreamItems = { direct: null, films: null, series: null };
+      state.searchCache = {};
+      state.xtreamAllDirectCache = null;
+      state.shown = { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE, radio: PAGE_SIZE };
+      renderAccueil();
+      toast('Playlist actualisée');
+    };
+    if (pl.type === 'm3u') {
+      ensureM3uLoaded(true).then(afterRefresh).catch(function (err) { toast('Erreur : ' + err.message); });
+    } else {
+      afterRefresh();
+    }
+  }
+
   function updateHeader() {
     $id('activePlaylistLabel').textContent = state.playlist
       ? state.playlist.nom + ' · ' + (state.playlist.type === 'xtream' ? 'Xtream Codes' : 'M3U')
@@ -451,8 +476,9 @@
   }
 
   // Chaînes de bienvenue/pub insérées par certains fournisseurs IPTV, sans
-  // contenu réel — masquées par nom exact (insensible à la casse).
-  var HIDDEN_CHANNEL_NAMES = /^welcome ultimate tv$/i;
+  // contenu réel — masquées par préfixe (insensible à la casse), le
+  // fournisseur faisant varier le suffixe ("... TV", "... IPTV", ...).
+  var HIDDEN_CHANNEL_NAMES = /^welcome ultimate\b/i;
   function isHiddenChannel(name) { return HIDDEN_CHANNEL_NAMES.test(String(name || '').trim()); }
 
   // Beaucoup de playlists (surtout M3U) listent la même chaîne ou le même
@@ -1410,6 +1436,11 @@
         use.title = 'Utiliser cette playlist';
         use.addEventListener('click', function () { setActivePlaylist(p.id); renderPlaylists(); toast('Playlist active : ' + p.nom); });
         row.appendChild(use);
+      } else {
+        var refresh = el('button', null, '🔄');
+        refresh.title = 'Actualiser (recharger les chaînes/films/séries depuis le fournisseur)';
+        refresh.addEventListener('click', function () { refreshActivePlaylist(); });
+        row.appendChild(refresh);
       }
       var del = el('button', null, '🗑️');
       del.title = 'Supprimer';

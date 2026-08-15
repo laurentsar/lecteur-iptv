@@ -23,16 +23,23 @@
     return { serie: m[1].trim().replace(/[\s._-]+$/, ''), saison: parseInt(m[2], 10), episode: parseInt(m[3], 10) };
   }
 
-  var VOD_HINTS = /(film|movie|vod|cinema|ciné)/i;
+  var VOD_HINTS = /(film|movie|vod|cinema|ciné|action ?&? ?adventure|sci-?fi|science fiction|thriller\b|horror\b|romance\b|mystery\b|fantasy\b|western\b|documentary\b|tv movie)/i;
   var SERIES_HINTS = /(s[ée]rie|series|show)/i;
   var RADIO_HINTS = /radio/i;
+  // Beaucoup de catalogues VOD nomment leurs catégories par genre en anglais
+  // (« Action & Adventure », « Sci-Fi & Fantasy »...) sans jamais dire
+  // « film »/« movie » — VOD_HINTS ne peut pas tout couvrir. Repli sur le
+  // titre lui-même : un titre qui se termine par une année entre
+  // parenthèses (« Nom (2025) ») est presque toujours un film, quel que
+  // soit le nom du groupe.
+  var YEAR_SUFFIX = /\(\d{4}\)\s*$/;
 
   function classifyGroup(groupTitle, name) {
     var g = groupTitle || '';
     var serie = detectSeries(name || '');
     if (serie) return 'series';
     if (SERIES_HINTS.test(g)) return 'series';
-    if (VOD_HINTS.test(g)) return 'vod';
+    if (VOD_HINTS.test(g) || YEAR_SUFFIX.test(name || '')) return 'vod';
     if (RADIO_HINTS.test(g)) return 'radio';
     return 'live';
   }
