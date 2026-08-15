@@ -658,10 +658,11 @@
 
   // Beaucoup de playlists agrègent plusieurs pays, avec un marqueur "FR" en
   // début de nom de bouquet ("FR| ...", "FR LIGUE 1 + FR"...) ou le mot
-  // France/français en toutes lettres — sert à n'afficher que les bouquets
-  // français par défaut (voir renderBouquetTiles) et éviter une liste de
-  // centaines de bouquets étrangers au premier affichage.
-  var FR_BOUQUET = /(^|[^a-zàâäéèêëïîôöùûüç])(fr|france|fran[cç]ais)([^a-zàâäéèêëïîôöùûüç]|$)/i;
+  // France/français en toutes lettres, ou encore le nom d'un bouquet/offre
+  // français bien connu (Canal+/CanalSat...) — sert à n'afficher que les
+  // bouquets français par défaut (voir renderBouquetTiles) et éviter une
+  // liste de centaines de bouquets étrangers au premier affichage.
+  var FR_BOUQUET = /(^|[^a-zàâäéèêëïîôöùûüç])(fr|france|fran[cç]ais)([^a-zàâäéèêëïîôöùûüç]|$)|canal ?\+|canal ?sat/i;
   function isFrenchBouquet(label) { return FR_BOUQUET.test(String(label || '')); }
 
   // Titre de section (ex. "titre de section" au lieu de carte) : voir
