@@ -26,16 +26,16 @@
   // Certains fournisseurs nomment leurs catégories VOD par genre en
   // français (« Drame », « Comédie », « Horreur »...) sans jamais dire
   // « film »/« movie » non plus — mêmes mots-clés qu'en anglais, en plus.
-  var VOD_HINTS = /(film|movie|vod|cinema|ciné|action ?&? ?adventure|sci-?fi|science fiction|thriller\b|horror\b|horreur\b|romance\b|mystery\b|fantasy\b|fantastique\b|western\b|documentary\b|documentaire\b|tv movie|drame\b|com[ée]die\b|crime\b|policier\b|guerre\b|catastrophe\b|biopic\b|[ée]pouvante\b|aventure\b|animation\b|incontournable)/i;
+  var VOD_HINTS = /(film|movie|vod|cinema|ciné|action ?&? ?adventure|sci-?fi|science[ -]?fiction|thriller\b|horror\b|horreur\b|romance\b|mystery\b|fantasy\b|fantastique\b|western\b|documentary\b|documentaire\b|tv movie|drame\b|com[ée]die\b|crime\b|policier\b|guerre\b|catastrophe\b|biopic\b|[ée]pouvante\b|aventure\b|animation\b|incontournable)/i;
   var SERIES_HINTS = /(s[ée]rie|series|show)/i;
   var RADIO_HINTS = /radio/i;
   // Beaucoup de catalogues VOD nomment leurs catégories par genre en anglais
   // (« Action & Adventure », « Sci-Fi & Fantasy »...) sans jamais dire
   // « film »/« movie » — VOD_HINTS ne peut pas tout couvrir. Repli sur le
-  // titre lui-même : un titre qui se termine par une année entre
-  // parenthèses (« Nom (2025) ») est presque toujours un film, quel que
-  // soit le nom du groupe.
-  var YEAR_SUFFIX = /\(\d{4}\)\s*$/;
+  // titre lui-même : un titre qui se termine par une année (« Nom (2025) »
+  // ou « Nom - 2025 », les deux formats se rencontrent) est presque
+  // toujours un film, quel que soit le nom du groupe.
+  var YEAR_SUFFIX = /(\(\d{4}\)|[-–—]\s*\d{4})\s*$/;
 
   function classifyGroup(groupTitle, name) {
     var g = groupTitle || '';

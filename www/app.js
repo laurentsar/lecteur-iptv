@@ -18,7 +18,7 @@
     activeCategory: { direct: '', films: '', series: '' },
     shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE, radio: PAGE_SIZE },
     xtreamItems: { direct: null, films: null, series: null }, // chargés à la demande par catégorie
-    directView: 'liste',   // 'liste' | 'bouquets'
+    directView: 'bouquets',   // 'liste' | 'bouquets'
     guideDayOffset: 0,
     unlockedAdult: {}, // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
     zapList: [], // chaînes en direct actuellement listées (Direct + Guide) — pour le swipe/télécommande de zapping dans le lecteur
@@ -919,6 +919,7 @@
     var b = e.target.closest('.view-btn');
     if (!b || b.classList.contains('active')) return;
     state.directView = b.dataset.view;
+    if (state.directView === 'bouquets') state.bouquetsAllCountries = false;
     Array.prototype.forEach.call(document.querySelectorAll('#directViewToggle .view-btn'), function (x) { x.classList.toggle('active', x === b); });
     renderKind('direct');
   });
