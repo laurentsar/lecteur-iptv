@@ -21,8 +21,19 @@
     directView: 'liste',   // 'liste' | 'tuile'
     guideChannelsCache: null, // toutes les chaînes direct (Xtream), indépendant du filtre par catégorie
     guideDayOffset: 0,
-    unlockedAdult: {} // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
+    unlockedAdult: {}, // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
+    zapList: [] // chaînes en direct actuellement listées (Direct + Guide) — pour le swipe de zapping dans le lecteur
   };
+
+  // Liste consultée par player.js pour zapper à la chaîne suivante/précédente
+  // (swipe haut/bas en plein écran) : mise à jour à chaque rendu d'une liste
+  // de chaînes en direct, dans l'ordre affiché.
+  function setZapList(items) {
+    state.zapList = items
+      .filter(function (it) { return it.url && !looksLikeSeparator(it.name); })
+      .map(function (it) { return { url: it.url, name: it.name }; });
+  }
+  window.AppZap = { list: function () { return state.zapList; } };
 
   // ---------- utilitaires ----------
   function $(sel) { return document.querySelector(sel); }
@@ -482,6 +493,7 @@
 
   function renderList(container, moreBtn, items, shownKey, opts) {
     var shown = state.shown[shownKey];
+    if (shownKey === 'direct') setZapList(items);
     container.innerHTML = '';
     if (!items.length) {
       container.appendChild(el('div', 'hint', 'Aucun résultat.'));
@@ -644,6 +656,7 @@
     directChannels().then(function (all) {
       var q = search.value.trim().toLowerCase();
       var list = all.filter(function (it) { return matchesSearch(it, q); });
+      setZapList(list);
       wrap.innerHTML = '';
       if (!list.length) {
         wrap.appendChild(el('div', 'hint', state.epgLoading ? 'Chargement du guide…' : 'Aucun résultat.'));

@@ -111,6 +111,45 @@
     setupPip();
     setupTracks();
     setupRecording();
+    setupZapSwipe();
+  }
+
+  // ---------- Zapping par swipe (chaînes en direct uniquement) ----------
+  // Swipe vertical sur la vidéo = chaîne suivante/précédente, dans l'ordre
+  // de la liste actuellement affichée dans l'app (Direct ou Guide, voir
+  // AppZap dans app.js). Geste volontairement exigeant (distance + rapidité)
+  // pour ne pas se déclencher sur un simple tap qui affiche/masque les
+  // contrôles natifs du <video>.
+  var ZAP_MIN_DISTANCE = 60, ZAP_MAX_DURATION = 600;
+  var zapStartX = 0, zapStartY = 0, zapStartT = 0;
+
+  function setupZapSwipe() {
+    video.addEventListener('touchstart', function (e) {
+      if (!currentIsLive || e.touches.length !== 1) return;
+      zapStartX = e.touches[0].clientX;
+      zapStartY = e.touches[0].clientY;
+      zapStartT = Date.now();
+    }, { passive: true });
+    video.addEventListener('touchend', function (e) {
+      if (!currentIsLive || !zapStartT) return;
+      var t = e.changedTouches[0];
+      var dx = t.clientX - zapStartX, dy = t.clientY - zapStartY;
+      var dt = Date.now() - zapStartT;
+      zapStartT = 0;
+      if (dt > ZAP_MAX_DURATION) return;
+      if (Math.abs(dy) < ZAP_MIN_DISTANCE || Math.abs(dy) < Math.abs(dx) * 1.5) return;
+      zapStep(dy < 0 ? 1 : -1);
+    }, { passive: true });
+  }
+
+  function zapStep(delta) {
+    var list = (global.AppZap && global.AppZap.list()) || [];
+    if (list.length < 2) return;
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) { if (list[i].url === originalUrl) { idx = i; break; } }
+    if (idx === -1) return;
+    var next = list[(idx + delta + list.length) % list.length];
+    open(next.url, next.name, { live: true });
   }
 
   // ---------- Enregistrement (chaînes en direct uniquement, APK Android —
