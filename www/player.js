@@ -228,22 +228,25 @@
   }
 
   // ---------- Plein écran / paysage forcé ----------
-  // Deux mécanismes distincts, volontairement séparés :
-  //  - Fullscreen API du navigateur (Element.requestFullscreen) : masque la
-  //    barre d'adresse/le système. Utile seulement en PWA/navigateur — sur
-  //    l'APK Android, .player-overlay couvre déjà tout le viewport en CSS
-  //    (position:fixed;inset:0), donc ce mécanisme n'apporte rien là-bas.
-  //    Son support dans la WebView Android embarquée par Capacitor est
-  //    inconsistant selon les versions (élément non-vidéo contenant une
-  //    <video> en cours de lecture) et a provoqué des plantages constatés —
-  //    on ne l'utilise donc QUE hors appli native.
-  //  - screen.orientation.lock('landscape') : force la rotation, seul
-  //    élément réellement utile sur l'APK. Fonctionne indépendamment de la
-  //    Fullscreen API (pas besoin d'être en plein écran DOM pour verrouiller
-  //    l'orientation dans une WebView native, contrairement à un navigateur
-  //    classique).
+  // Deux mécanismes distincts selon le contexte :
+  //  - APK Android : plugin natif @capacitor/screen-orientation
+  //    (Activity.setRequestedOrientation côté Android), pas la Fullscreen
+  //    API du navigateur. .player-overlay couvre déjà tout le viewport en
+  //    CSS (position:fixed;inset:0) — il n'y a pas de barre de navigateur à
+  //    masquer sur l'APK — et Element.requestFullscreen() sur un conteneur
+  //    non-vidéo est mal supporté dans la WebView embarquée par Capacitor
+  //    (a provoqué un plantage constaté). screen.orientation.lock() du
+  //    navigateur a aussi été écarté : Chromium exige que le document soit
+  //    déjà en plein écran DOM pour l'accepter (rejeté sinon), ce qui
+  //    recréait le même problème. Le plugin natif ne dépend d'aucun des
+  //    deux et verrouille directement au niveau de l'Activity Android.
+  //  - PWA/navigateur : Fullscreen API standard + screen.orientation.lock()
+  //    (fonctionnent normalement dans un vrai navigateur).
   function isNativeApp() {
     return !!(global.Capacitor && global.Capacitor.isNativePlatform && global.Capacitor.isNativePlatform());
+  }
+  function nativeScreenOrientation() {
+    return (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.ScreenOrientation) || null;
   }
   function fullscreenSupported() { return !!(overlay.requestFullscreen || overlay.webkitRequestFullscreen); }
   function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
@@ -262,9 +265,8 @@
     return null;
   }
 
-  function orientationLockSupported() { return !!(global.screen && screen.orientation && screen.orientation.lock); }
   function lockLandscape() {
-    if (!orientationLockSupported()) return Promise.reject(new Error('non supporté'));
+    if (!(global.screen && screen.orientation && screen.orientation.lock)) return Promise.reject(new Error('non supporté'));
     try { return screen.orientation.lock('landscape'); } catch (e) { return Promise.reject(e); }
   }
   function unlockOrientation() {
@@ -273,20 +275,22 @@
   }
   var nativeLandscapeLocked = false;
 
+  function releaseNativeLandscapeLock() {
+    if (!nativeLandscapeLocked) return;
+    var so = nativeScreenOrientation();
+    if (so) so.unlock().catch(function () {});
+    nativeLandscapeLocked = false;
+    if (fullscreenBtn) fullscreenBtn.classList.remove('active');
+  }
+
   function setupFullscreen() {
     if (isNativeApp()) {
-      // Sur l'APK : uniquement le verrouillage d'orientation, pas la
-      // Fullscreen API DOM (voir note ci-dessus).
-      if (!orientationLockSupported()) { fullscreenBtn.style.display = 'none'; return; }
+      var so = nativeScreenOrientation();
+      if (!so) { fullscreenBtn.style.display = 'none'; return; }
       fullscreenBtn.style.display = '';
       fullscreenBtn.addEventListener('click', function () {
-        if (nativeLandscapeLocked) {
-          unlockOrientation();
-          nativeLandscapeLocked = false;
-          fullscreenBtn.classList.remove('active');
-          return;
-        }
-        lockLandscape().then(function () {
+        if (nativeLandscapeLocked) { releaseNativeLandscapeLock(); return; }
+        so.lock({ orientation: 'landscape' }).then(function () {
           nativeLandscapeLocked = true;
           fullscreenBtn.classList.add('active');
         }).catch(function () { setStatus('Rotation en paysage indisponible sur cet appareil.'); });
@@ -887,7 +891,7 @@
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
     if (tracksMenu) tracksMenu.style.display = 'none';
     if (remotePanel) closeRemote();
-    if (nativeLandscapeLocked) { unlockOrientation(); nativeLandscapeLocked = false; if (fullscreenBtn) fullscreenBtn.classList.remove('active'); }
+    releaseNativeLandscapeLock();
     if (overlay) overlay.classList.remove('show');
   }
 
