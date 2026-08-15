@@ -147,13 +147,15 @@ button.ghost { background: var(--card2); color: var(--text); }
 .grid-cartes.liste .carte-corps { padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; }
 .grid-cartes.liste .carte-nom { -webkit-line-clamp: 1; }
 .grid-cartes.liste .carte-star { top: 50%; transform: translateY(-50%); }
-/* bouquets : une grosse tuile par catégorie, avec un petit descriptif
-   (nombre de chaînes) — pour parcourir par bouquet plutôt que chaîne par
-   chaîne. Cliquer une tuile filtre sur ce bouquet et bascule en mode Liste. */
-.grid-cartes.bouquets { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.grid-cartes.bouquets .carte-thumb { aspect-ratio: 1 / 1; }
-.grid-cartes.bouquets .carte-nom { font-size: 14.5px; }
-.grid-cartes.bouquets .carte-groupe { font-size: 11.5px; }
+/* bouquets : un bouquet par ligne, grosse tuile horizontale (logo à gauche,
+   nom + petit descriptif — nombre de chaînes — à droite). Cliquer une tuile
+   filtre sur ce bouquet et bascule en mode Liste. */
+.grid-cartes.bouquets { grid-template-columns: 1fr; gap: 10px; }
+.grid-cartes.bouquets .carte { flex-direction: row; align-items: stretch; }
+.grid-cartes.bouquets .carte-thumb { width: 120px; flex: none; aspect-ratio: 1 / 1; }
+.grid-cartes.bouquets .carte-corps { padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; }
+.grid-cartes.bouquets .carte-nom { font-size: 15.5px; -webkit-line-clamp: 1; }
+.grid-cartes.bouquets .carte-groupe { font-size: 12px; margin-top: 3px; }
 .carte {
   position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   overflow: hidden; cursor: pointer; display: flex; flex-direction: column;

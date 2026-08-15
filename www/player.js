@@ -37,6 +37,7 @@
   var mpegtsPlayer = null;
   var currentEngine = '';
   var currentUrl = '', currentTitle = '';
+  var currentVersions = null; // [{name,url,...}] quand la chaîne regroupe plusieurs sources — voir opts.versions dans open()
   var originalUrl = '', originalTitle = '';
   var currentIsLive = false; // PiP proposé uniquement pour le direct
   var triedNativeFallback = false, triedM3u8Fallback = false;
@@ -112,6 +113,8 @@
       '  <button id="playerClose" class="player-close" aria-label="Fermer">✕</button>' +
       '</div>' +
       '<div id="playerTracksMenu" class="tracks-menu" style="display:none">' +
+      '  <div class="tracks-title">Sources</div>' +
+      '  <div id="tracksSourcesList"></div>' +
       '  <div class="tracks-title">Qualité</div>' +
       '  <div id="tracksQualityList"></div>' +
       '  <div class="tracks-title">Audio</div>' +
@@ -590,6 +593,27 @@
     }
   }
 
+  // ---------- Sources (chaînes/radios regroupant plusieurs flux sous le
+  // même nom — voir groupChannels dans app.js) ----------
+  // La lecture démarre directement sur la première source dès l'ouverture
+  // (plus de sélecteur bloquant avant lecture, voir openChannelVersions
+  // dans app.js) ; ce menu permet de basculer vers une autre source pendant
+  // que ça joue déjà, sans interrompre la navigation dans l'app.
+  function getSourceVersions() {
+    if (!currentVersions || currentVersions.length < 2) return [];
+    return currentVersions.map(function (v, i) { return { id: i, label: v.name }; });
+  }
+  function getCurrentSourceIndex() {
+    if (!currentVersions) return -1;
+    for (var i = 0; i < currentVersions.length; i++) { if (currentVersions[i].url === originalUrl) return i; }
+    return -1;
+  }
+  function setSourceVersion(id) {
+    if (!currentVersions || !currentVersions[id]) return;
+    var v = currentVersions[id];
+    open(v.url, v.name, { live: currentIsLive, versions: currentVersions, epgKey: v.epgKey, logo: v.logo });
+  }
+
   // ---------- Qualité (chaînes/flux HLS uniquement — pas d'ABR pour le
   // mpeg-ts brut ni la lecture directe, voir MPEGTS_LOW_BANDWIDTH_CONFIG) ----------
   // Choix manuel en plus de la sélection automatique (voir
@@ -613,7 +637,7 @@
   }
 
   function updateTracksVisibility() {
-    var hasChoice = getAudioTracks().length > 1 || getSubtitleTracks().length > 0 || getQualityLevels().length > 1;
+    var hasChoice = getAudioTracks().length > 1 || getSubtitleTracks().length > 0 || getQualityLevels().length > 1 || getSourceVersions().length > 1;
     tracksBtn.style.display = hasChoice ? '' : 'none';
     if (!hasChoice) tracksMenu.style.display = 'none';
   }
@@ -648,6 +672,7 @@
   }
 
   function renderTracksMenu() {
+    tracksMenuList(overlay.querySelector('#tracksSourcesList'), getSourceVersions(), getCurrentSourceIndex(), false, setSourceVersion);
     tracksMenuList(overlay.querySelector('#tracksQualityList'), getQualityLevels(), getCurrentQualityLevel(), true, setQualityLevel, 'Auto');
     tracksMenuList(overlay.querySelector('#tracksAudioList'), getAudioTracks(), getCurrentAudioTrack(), false, setAudioTrack);
     tracksMenuList(overlay.querySelector('#tracksSubList'), getSubtitleTracks(), getCurrentSubtitleTrack(), true, setSubtitleTrack);
@@ -871,6 +896,7 @@
     originalUrl = url;
     originalTitle = title || '';
     currentIsLive = !!(opts && opts.live);
+    currentVersions = (opts && opts.versions) || null;
     triedNativeFallback = false;
     triedM3u8Fallback = false;
     ensureDom();
@@ -880,6 +906,7 @@
     updateRemoteVisibility();
     startPlayback(url, title);
     syncRecordButtonState();
+    updateTracksVisibility();
     if (currentIsLive) showZapBanner(originalTitle, opts && opts.epgKey, opts && opts.logo);
     else if (zapBanner) zapBanner.classList.remove('show');
   }

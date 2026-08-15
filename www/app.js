@@ -250,6 +250,25 @@
     });
   }
 
+  // Menu dépliant (natif <select>) pour choisir un bouquet en mode Liste/
+  // Tuile — plus maniable qu'une rangée de puces quand une playlist compte
+  // des dizaines de catégories. Utilisé pour En direct uniquement (voir
+  // #chipsDirect dans index.html, un <select> plutôt qu'un <div class="chips">).
+  function renderCategorySelect(select, cats, kindKey, onPick) {
+    select.style.display = '';
+    select.innerHTML = '';
+    var optAll = document.createElement('option');
+    optAll.value = ''; optAll.textContent = 'Tous les bouquets';
+    select.appendChild(optAll);
+    (cats || []).forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c.id; o.textContent = c.label || c.id;
+      select.appendChild(o);
+    });
+    select.value = state.activeCategory[kindKey] || '';
+    select.onchange = function () { onPick(select.value); };
+  }
+
   // ---------- code PIN (bouquets/catégories « adulte ») ----------
   // Facultatif : tant qu'aucun code PIN n'est défini, rien n'est masqué.
   // Détection par nom de catégorie (groupe M3U ou catégorie Xtream) —
@@ -458,9 +477,13 @@
     });
   }
 
+  // Lecture directe même quand plusieurs sources sont regroupées sous cette
+  // chaîne : plus de sélecteur bloquant avant lecture — le choix de la
+  // source se fait depuis l'interface du lecteur (bouton ⚙️ → Sources),
+  // pendant que ça joue déjà.
   function openChannelVersions(item) {
-    if (item.versions && item.versions.length > 1) { showVersionPicker(item, true); return; }
-    Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
+    var versions = item.versions && item.versions.length > 1 ? item.versions : null;
+    Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo, versions: versions });
   }
 
   function showVersionPicker(item, isLive) {
@@ -590,9 +613,9 @@
       ensureM3uLoaded().then(function (data) {
         var pool = data.items.filter(function (it) { return it.kind === m3uKind; });
         var groups = uniqueSorted(pool.map(function (it) { return it.groupTitle; }));
-        renderChips(chips, groups.map(function (g) { return { id: g, label: g }; }), kindKey, function (g) {
-          state.activeCategory[kindKey] = g; state.shown[kindKey] = PAGE_SIZE; renderKind(kindKey);
-        });
+        var onPickCat = function (g) { state.activeCategory[kindKey] = g; state.shown[kindKey] = PAGE_SIZE; renderKind(kindKey); };
+        if (kindKey === 'direct') renderCategorySelect(chips, groups.map(function (g) { return { id: g, label: g }; }), kindKey, onPickCat);
+        else renderChips(chips, groups.map(function (g) { return { id: g, label: g }; }), kindKey, onPickCat);
         var cat = state.activeCategory[kindKey];
         var q = search.value.trim().toLowerCase();
         if (kindKey === 'series') {
@@ -630,9 +653,10 @@
 
     // Xtream
     ensureXtreamCats(kindKey).then(function (cats) {
-      renderChips(chips, cats, kindKey, function (id) {
-        state.activeCategory[kindKey] = id; state.shown[kindKey] = PAGE_SIZE; state.xtreamItems[kindKey] = null; renderKind(kindKey);
-      });
+      if (kindKey === 'direct') cats = cats.filter(function (c) { return !/radio/i.test(c.label || ''); });
+      var onPickCatXt = function (id) { state.activeCategory[kindKey] = id; state.shown[kindKey] = PAGE_SIZE; state.xtreamItems[kindKey] = null; renderKind(kindKey); };
+      if (kindKey === 'direct') renderCategorySelect(chips, cats, kindKey, onPickCatXt);
+      else renderChips(chips, cats, kindKey, onPickCatXt);
       var catId = state.activeCategory[kindKey];
       var load = state.xtreamItems[kindKey] ? Promise.resolve(state.xtreamItems[kindKey]) : ensureXtreamItems(kindKey, catId);
       container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Chargement…'));
@@ -688,6 +712,7 @@
     var container = $id('listeDirect'), moreBtn = $id('plusDirect'), chips = $id('chipsDirect'), search = $id('rechDirect');
     moreBtn.style.display = 'none';
     chips.innerHTML = '';
+    chips.style.display = 'none';
     container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Chargement…'));
     var q = search.value.trim().toLowerCase();
 
@@ -740,8 +765,8 @@
       filtered = groupChannels(filtered);
       var lock = filterAdultLocked(filtered);
       renderList(container, moreBtn, lock.visible, 'radio', { onOpen: function (item) {
-        if (item.versions && item.versions.length > 1) { showVersionPicker(item, true); return; }
-        Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
+        var versions = item.versions && item.versions.length > 1 ? item.versions : null;
+        Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo, versions: versions });
       } });
       appendLockedCards(container, lock.locked, renderRadio);
     }
