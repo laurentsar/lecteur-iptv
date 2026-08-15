@@ -100,6 +100,19 @@
     var b = e.target.closest('.tab');
     if (b) goTab(b.dataset.tab);
   });
+  window.AppNav = { goHome: function () { goTab('accueil'); } };
+
+  // Touche « Maison » (clavier physique/Bluetooth, ou télécommande TV quand
+  // le navigateur/WebView la reçoit encore comme un évènement clavier — le
+  // vrai bouton HOME Android est intercepté par le système avant l'appli et
+  // ne peut pas être capté ici) : ramène directement à l'onglet Accueil,
+  // comme le bouton 🏠 du lecteur.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Home') return;
+    if (document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    if (window.Player) Player.close();
+    goTab('accueil');
+  });
 
   // ---------- chargement de la playlist active ----------
   function xtreamCfg(pl) { return { serveur: pl.serveur, utilisateur: pl.utilisateur, motDePasse: pl.motDePasse }; }

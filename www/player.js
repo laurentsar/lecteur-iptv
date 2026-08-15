@@ -38,7 +38,7 @@
   var triedNativeFallback = false, triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
   var remoteBtn, remotePanel;
-  var fullscreenBtn;
+  var fullscreenBtn, homeBtn;
   var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg;
   var zapBannerTimer = null;
   var castSdkRequested = false;
@@ -107,6 +107,7 @@
       '  <button id="playerRecord" class="player-cast" aria-label="Enregistrer" style="display:none">⏺</button>' +
       '  <button id="playerTracks" class="player-cast" aria-label="Qualité, langue et sous-titres" style="display:none">⚙️</button>' +
       '  <button id="playerFullscreen" class="player-cast" aria-label="Plein écran" style="display:none">⛶</button>' +
+      '  <button id="playerHome" class="player-cast" aria-label="Accueil">🏠</button>' +
       '  <button id="playerClose" class="player-close" aria-label="Fermer">✕</button>' +
       '</div>' +
       '<div id="playerTracksMenu" class="tracks-menu" style="display:none">' +
@@ -159,7 +160,12 @@
     zapBannerLogo = overlay.querySelector('#zapBannerLogo');
     zapBannerName = overlay.querySelector('#zapBannerName');
     zapBannerProg = overlay.querySelector('#zapBannerProg');
+    homeBtn = overlay.querySelector('#playerHome');
     closeBtn.addEventListener('click', close);
+    homeBtn.addEventListener('click', function () {
+      close();
+      if (global.AppNav) global.AppNav.goHome();
+    });
     video.addEventListener('error', function () {
       clearLoadTimeout();
       attemptFallbackOrFail('Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error));
