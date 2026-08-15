@@ -21,11 +21,15 @@
  * généreuse pour absorber les ralentissements sans décrocher, qualité de
  * départ estimée à partir du débit réseau connu de l'appareil (Network
  * Information API, sinon repli prudent sur la qualité la plus basse),
- * plafonnée à la taille d'affichage réelle (capLevelToPlayerSize — inutile
- * de télécharger de la 4K sur un écran de téléphone), remontée en qualité
- * prudente ensuite pour éviter les allers-retours HD/SD qui aggravent les
- * coupures. Un sélecteur manuel (bouton ⚙️) permet de forcer une qualité
- * précise si l'automatique ne convient pas. */
+ * remontée en qualité prudente ensuite pour éviter les allers-retours HD/SD
+ * qui aggravent les coupures. Un sélecteur manuel (bouton ⚙️) permet de
+ * forcer une qualité précise si l'automatique ne convient pas.
+ *
+ * Note : capLevelToPlayerSize (plafonner l'auto au format d'affichage) a été
+ * essayé puis retiré — il dépend de la taille réelle du <video> au moment où
+ * hls.js l'évalue, pas toujours fiable dans la WebView Android au bon
+ * moment, et pouvait bloquer le choix automatique sur une qualité trop
+ * basse indépendamment du débit réel disponible. */
 (function (global) {
   'use strict';
 
@@ -52,16 +56,13 @@
   // palier à partir de abrEwmaDefaultEstimate (voir estimateStartBandwidth,
   // calculé à l'ouverture depuis le débit réseau connu de l'appareil quand
   // disponible ; repli prudent sur le palier le plus bas sinon) plutôt que
-  // de forcer systématiquement la qualité la plus basse ; capLevelToPlayerSize
-  // borne le choix automatique à la taille d'affichage réelle (inutile de
-  // télécharger plus que ce que l'écran peut montrer) ; abrBandWidthUpFactor
+  // de forcer systématiquement la qualité la plus basse ; abrBandWidthUpFactor
   // bas = remonter en qualité seulement avec une marge confortable, pour
   // éviter les allers-retours qui provoquent des coupures ; buffers étendus
   // = encaisse des ralentissements plus longs avant de décrocher.
   var HLS_LOW_BANDWIDTH_CONFIG = {
     enableWorker: true,
     startLevel: -1,
-    capLevelToPlayerSize: true,
     abrBandWidthFactor: 0.9,
     abrBandWidthUpFactor: 0.6,
     maxBufferLength: 60,
