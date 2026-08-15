@@ -120,7 +120,7 @@ button.ghost { background: var(--card2); color: var(--text); }
 }
 .chip.active { background: var(--accent); color: #06181c; border-color: var(--accent); }
 
-/* ---------- bascule de vue (liste / tuile / bouquets) ---------- */
+/* ---------- bascule de vue (liste / bouquets) ---------- */
 .view-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
 .view-btn {
   flex: none; background: var(--card2); color: var(--muted); border: 1px solid var(--line);
@@ -130,15 +130,6 @@ button.ghost { background: var(--card2); color: var(--text); }
 
 /* ---------- grille de cartes (chaînes / films / séries / favoris) ---------- */
 .grid-cartes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
-/* tuile : cases carrées focalisées sur le logo + le programme en cours
-   plutôt que sur le nom du groupe, mais assez grandes pour garder le nom
-   de la chaîne lisible sous le logo. */
-.grid-cartes.tuile { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
-.grid-cartes.tuile .carte-thumb { aspect-ratio: 1 / 1; }
-.grid-cartes.tuile .carte-groupe { display: none; }
-.grid-cartes.tuile .carte-corps { padding: 8px 8px 10px; }
-.grid-cartes.tuile .carte-nom { font-size: 12.5px; -webkit-line-clamp: 2; }
-.grid-cartes.tuile .carte-epg { font-size: 10.5px; margin-top: 4px; }
 /* liste : une chaîne par ligne, tuile horizontale (logo à gauche, texte à
    droite) — plus rapide à parcourir verticalement qu'une grille à colonnes. */
 .grid-cartes.liste { grid-template-columns: 1fr; gap: 8px; }

@@ -18,12 +18,12 @@
     activeCategory: { direct: '', films: '', series: '' },
     shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE, radio: PAGE_SIZE },
     xtreamItems: { direct: null, films: null, series: null }, // chargés à la demande par catégorie
-    directView: 'liste',   // 'liste' | 'tuile'
-    guideChannelsCache: null, // toutes les chaînes direct (Xtream), indépendant du filtre par catégorie
+    directView: 'liste',   // 'liste' | 'bouquets'
     guideDayOffset: 0,
     unlockedAdult: {}, // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
     zapList: [], // chaînes en direct actuellement listées (Direct + Guide) — pour le swipe/télécommande de zapping dans le lecteur
-    searchCache: {} // pools chargés pour la recherche universelle (Accueil), par kindKey — voir searchPool()
+    searchCache: {}, // pools chargés pour la recherche universelle (Accueil), par kindKey — voir searchPool()
+    xtreamAllDirectCache: null // Promise mémorisée du fetch « toutes les chaînes » (Xtream), voir ensureAllDirectItems()
   };
 
   // Liste consultée par player.js pour zapper à la chaîne suivante/précédente
@@ -126,8 +126,9 @@
     state.xtreamItems = { direct: null, films: null, series: null };
     state.activeCategory = { direct: '', films: '', series: '' };
     state.shown = { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE, radio: PAGE_SIZE };
-    state.guideChannelsCache = null; state.guideDayOffset = 0;
+    state.guideDayOffset = 0;
     state.searchCache = {};
+    state.xtreamAllDirectCache = null;
     updateHeader();
   }
 
@@ -229,6 +230,20 @@
           logo: s.cover, group: catLabel[s.category_id] || '', seriesId: s.series_id };
       });
     });
+  }
+
+  // Fetch « toutes les chaînes » (Xtream, sans filtre de catégorie) partagé
+  // et mémorisé pour toute la session (jusqu'au changement de playlist) —
+  // sinon chaque usage (sélection « Tous les bouquets », vue Bouquets,
+  // Guide, recherche universelle) déclenchait son propre appel réseau
+  // complet, lent sur une grosse playlist. Attend d'abord les catégories
+  // (mémorisées elles aussi) pour que les libellés de groupe/la détection
+  // radio soient correctement renseignés.
+  function ensureAllDirectItems() {
+    if (!state.xtreamAllDirectCache) {
+      state.xtreamAllDirectCache = ensureXtreamCats('direct').then(function () { return ensureXtreamItems('direct', ''); });
+    }
+    return state.xtreamAllDirectCache;
   }
 
   // ---------- rendu générique d'une grille ----------
@@ -623,7 +638,6 @@
     var searchId = kindKey === 'direct' ? 'rechDirect' : kindKey === 'films' ? 'rechFilms' : 'rechSeries';
     var container = $id(listId), moreBtn = $id(moreId), chips = $id(chipsId), search = $id(searchId);
     if (kindKey === 'direct') {
-      container.classList.toggle('tuile', state.directView === 'tuile');
       container.classList.toggle('liste', state.directView === 'liste');
       container.classList.toggle('bouquets', state.directView === 'bouquets');
       kickEpg();
@@ -683,7 +697,9 @@
       if (kindKey === 'direct') renderCategorySelect(chips, cats, kindKey, onPickCatXt);
       else renderChips(chips, cats, kindKey, onPickCatXt);
       var catId = state.activeCategory[kindKey];
-      var load = state.xtreamItems[kindKey] ? Promise.resolve(state.xtreamItems[kindKey]) : ensureXtreamItems(kindKey, catId);
+      var load = state.xtreamItems[kindKey] ? Promise.resolve(state.xtreamItems[kindKey])
+        : (kindKey === 'direct' && !catId) ? ensureAllDirectItems()
+        : ensureXtreamItems(kindKey, catId);
       container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Chargement…'));
       load.then(function (items) {
         state.xtreamItems[kindKey] = items;
@@ -755,7 +771,7 @@
         renderBouquetTiles(container, groups, q);
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); });
     } else {
-      Promise.all([ensureXtreamCats('direct'), ensureXtreamItems('direct', '')]).then(function (r) {
+      Promise.all([ensureXtreamCats('direct'), ensureAllDirectItems()]).then(function (r) {
         var cats = r[0].filter(function (c) { return !/radio/i.test(c.label || ''); }), items = excludeHidden(excludeRadio(r[1]));
         var countByLabel = {}, logoByLabel = {};
         items.forEach(function (it) {
@@ -854,7 +870,7 @@
         return (kindKey === 'direct' || kindKey === 'films') ? groupChannels(items) : items;
       });
     } else {
-      p = ensureXtreamItems(kindKey, '');
+      p = kindKey === 'direct' ? ensureAllDirectItems() : ensureXtreamItems(kindKey, '');
       if (kindKey === 'direct') p = p.then(excludeRadio).then(excludeHidden);
       if (kindKey === 'direct' || kindKey === 'films') p = p.then(groupChannels);
     }
@@ -914,11 +930,7 @@
           .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, logo: it.tvgLogo, chno: it.tvgChno || '' }); });
       });
     }
-    if (state.guideChannelsCache) return Promise.resolve(excludeHidden(excludeRadio(state.guideChannelsCache)));
-    return ensureXtreamItems('direct', '').then(function (items) {
-      state.guideChannelsCache = items;
-      return excludeHidden(excludeRadio(items));
-    });
+    return ensureAllDirectItems().then(function (items) { return excludeHidden(excludeRadio(items)); });
   }
 
   function renderGuide(resetScroll) {

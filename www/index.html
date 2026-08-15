@@ -47,7 +47,6 @@
         <input type="search" id="rechDirect" placeholder="Rechercher une chaîne…" />
         <div class="view-toggle" id="directViewToggle">
           <button class="view-btn active" data-view="liste">🔳 Liste</button>
-          <button class="view-btn" data-view="tuile">🔲 Tuile</button>
           <button class="view-btn" data-view="bouquets">🗂️ Bouquets</button>
         </div>
         <select id="chipsDirect" class="wide"></select>
@@ -196,9 +195,9 @@
       </div>
 
       <details class="saison">
-        <summary class="saison-titre">🔲 Tuile &amp; 🗓️ Guide TV</summary>
+        <summary class="saison-titre">🗂️ Bouquets &amp; 🗓️ Guide TV</summary>
         <div class="accordion-body">
-          <p class="hint">Dans <strong>En direct</strong>, un bouton bascule entre la liste habituelle et une vue en <strong>tuile</strong> : cases carrées plus grandes, centrées sur le logo, avec le nom de la chaîne et le programme en cours toujours visibles dessous. L'onglet <strong>Guide</strong> affiche un agenda heure par heure de toutes les chaînes en direct (une ligne par chaîne, défilement horizontal dans le temps, ligne rouge = maintenant, navigation jour précédent/suivant). Nécessite un EPG XMLTV (playlist M3U avec url-tvg, ou export xmltv.php automatique pour les comptes Xtream Codes) — sans EPG disponible, les chaînes s'affichent sans programme.</p>
+          <p class="hint">Dans <strong>En direct</strong>, la vue <strong>Liste</strong> affiche une chaîne par ligne (logo à gauche, nom et programme en cours à droite) ; la vue <strong>Bouquets</strong> affiche une grosse tuile par catégorie (avec une icône selon son thème et le nombre de chaînes), toucher un bouquet filtre dessus. Un menu déroulant permet aussi de choisir un bouquet directement en vue Liste. L'onglet <strong>Guide</strong> affiche un agenda heure par heure de toutes les chaînes en direct (une ligne par chaîne, défilement horizontal dans le temps, ligne rouge = maintenant, navigation jour précédent/suivant). Nécessite un EPG XMLTV (playlist M3U avec url-tvg, ou export xmltv.php automatique pour les comptes Xtream Codes) — sans EPG disponible, les chaînes s'affichent sans programme.</p>
         </div>
       </details>
 
@@ -363,7 +362,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.39';
+    window.APP_VERSION = '1.40';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
