@@ -23,7 +23,10 @@
     return { serie: m[1].trim().replace(/[\s._-]+$/, ''), saison: parseInt(m[2], 10), episode: parseInt(m[3], 10) };
   }
 
-  var VOD_HINTS = /(film|movie|vod|cinema|ciné|action ?&? ?adventure|sci-?fi|science fiction|thriller\b|horror\b|romance\b|mystery\b|fantasy\b|western\b|documentary\b|tv movie)/i;
+  // Certains fournisseurs nomment leurs catégories VOD par genre en
+  // français (« Drame », « Comédie », « Horreur »...) sans jamais dire
+  // « film »/« movie » non plus — mêmes mots-clés qu'en anglais, en plus.
+  var VOD_HINTS = /(film|movie|vod|cinema|ciné|action ?&? ?adventure|sci-?fi|science fiction|thriller\b|horror\b|horreur\b|romance\b|mystery\b|fantasy\b|fantastique\b|western\b|documentary\b|documentaire\b|tv movie|drame\b|com[ée]die\b|crime\b|policier\b|guerre\b|catastrophe\b|biopic\b|[ée]pouvante\b|aventure\b|animation\b|incontournable)/i;
   var SERIES_HINTS = /(s[ée]rie|series|show)/i;
   var RADIO_HINTS = /radio/i;
   // Beaucoup de catalogues VOD nomment leurs catégories par genre en anglais

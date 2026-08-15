@@ -23,7 +23,8 @@
     unlockedAdult: {}, // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
     zapList: [], // chaînes en direct actuellement listées (Direct + Guide) — pour le swipe/télécommande de zapping dans le lecteur
     searchCache: {}, // pools chargés pour la recherche universelle (Accueil), par kindKey — voir searchPool()
-    xtreamAllDirectCache: null // Promise mémorisée du fetch « toutes les chaînes » (Xtream), voir ensureAllDirectItems()
+    xtreamAllDirectCache: null, // Promise mémorisée du fetch « toutes les chaînes » (Xtream), voir ensureAllDirectItems()
+    bouquetsAllCountries: false // vue Bouquets : false = seulement les bouquets français par défaut (voir renderBouquetTiles)
   };
 
   // Liste consultée par player.js pour zapper à la chaîne suivante/précédente
@@ -129,6 +130,7 @@
     state.guideDayOffset = 0;
     state.searchCache = {};
     state.xtreamAllDirectCache = null;
+    state.bouquetsAllCountries = false;
     updateHeader();
   }
 
@@ -654,6 +656,14 @@
     return '🗂️';
   }
 
+  // Beaucoup de playlists agrègent plusieurs pays, avec un marqueur "FR" en
+  // début de nom de bouquet ("FR| ...", "FR LIGUE 1 + FR"...) ou le mot
+  // France/français en toutes lettres — sert à n'afficher que les bouquets
+  // français par défaut (voir renderBouquetTiles) et éviter une liste de
+  // centaines de bouquets étrangers au premier affichage.
+  var FR_BOUQUET = /(^|[^a-zàâäéèêëïîôöùûüç])(fr|france|fran[cç]ais)([^a-zàâäéèêëïîôöùûüç]|$)/i;
+  function isFrenchBouquet(label) { return FR_BOUQUET.test(String(label || '')); }
+
   // Titre de section (ex. "titre de section" au lieu de carte) : voir
   // looksLikeSeparator(name).
   function sectionTitle(name) {
@@ -784,15 +794,30 @@
     renderKind('direct');
   }
 
-  function renderBouquetTiles(container, groups, q) {
+  function renderBouquetTiles(container, moreBtn, groups, q) {
     var filtered = groups.filter(function (g) { return !q || g.label.toLowerCase().indexOf(q) !== -1; });
+    // Par défaut (pas de recherche en cours), on n'affiche que les bouquets
+    // français pour éviter une liste de centaines de bouquets étrangers —
+    // le bouton « Charger plus » révèle le reste.
+    var hiddenOthers = 0;
+    if (!q && !state.bouquetsAllCountries) {
+      var fr = filtered.filter(function (g) { return isFrenchBouquet(g.label); });
+      if (fr.length) { hiddenOthers = filtered.length - fr.length; filtered = fr; }
+    }
     container.innerHTML = '';
-    if (!filtered.length) { container.appendChild(el('div', 'hint', 'Aucun résultat.')); return; }
+    if (!filtered.length) { container.appendChild(el('div', 'hint', 'Aucun résultat.')); moreBtn.style.display = 'none'; return; }
     filtered.forEach(function (g) {
       var item = { key: 'bouquet:' + g.id, kind: 'bouquet', name: g.label, logo: g.logo, icon: iconForBouquet(g.label),
         group: g.count + ' chaîne' + (g.count > 1 ? 's' : '') };
       container.appendChild(card(item, { onOpen: function () { openBouquet(g); } }));
     });
+    if (hiddenOthers > 0) {
+      moreBtn.textContent = 'Charger plus (' + hiddenOthers + ' autres bouquets)';
+      moreBtn.style.display = '';
+    } else {
+      moreBtn.textContent = 'Charger plus';
+      moreBtn.style.display = 'none';
+    }
   }
 
   function renderBouquets() {
@@ -815,7 +840,7 @@
           if (!byGroup[g].logo && it.tvgLogo) byGroup[g].logo = it.tvgLogo;
         });
         var groups = Object.keys(byGroup).sort(function (a, b) { return a.localeCompare(b); }).map(function (k) { return byGroup[k]; });
-        renderBouquetTiles(container, groups, q);
+        renderBouquetTiles(container, moreBtn, groups, q);
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); });
     } else {
       Promise.all([ensureXtreamCats('direct'), ensureAllDirectItems()]).then(function (r) {
@@ -829,7 +854,7 @@
         var groups = cats.map(function (c) {
           return { id: c.id, label: c.label, count: countByLabel[c.label] || 0, logo: logoByLabel[c.label] || null };
         });
-        renderBouquetTiles(container, groups, q);
+        renderBouquetTiles(container, moreBtn, groups, q);
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); });
     }
   }
@@ -882,7 +907,11 @@
   $id('rechDirect').addEventListener('input', function () { state.shown.direct = PAGE_SIZE; renderKind('direct'); });
   $id('rechFilms').addEventListener('input', function () { state.shown.films = PAGE_SIZE; renderKind('films'); });
   $id('rechSeries').addEventListener('input', function () { state.shown.series = PAGE_SIZE; renderKind('series'); });
-  $id('plusDirect').addEventListener('click', function () { state.shown.direct += PAGE_SIZE; renderKind('direct'); });
+  $id('plusDirect').addEventListener('click', function () {
+    if (state.directView === 'bouquets') state.bouquetsAllCountries = true;
+    else state.shown.direct += PAGE_SIZE;
+    renderKind('direct');
+  });
   $id('plusFilms').addEventListener('click', function () { state.shown.films += PAGE_SIZE; renderKind('films'); });
   $id('plusSeries').addEventListener('click', function () { state.shown.series += PAGE_SIZE; renderKind('series'); });
 
