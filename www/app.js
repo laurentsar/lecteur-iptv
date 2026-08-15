@@ -565,7 +565,11 @@
     var chipsId = kindKey === 'direct' ? 'chipsDirect' : kindKey === 'films' ? 'chipsFilms' : 'chipsSeries';
     var searchId = kindKey === 'direct' ? 'rechDirect' : kindKey === 'films' ? 'rechFilms' : 'rechSeries';
     var container = $id(listId), moreBtn = $id(moreId), chips = $id(chipsId), search = $id(searchId);
-    if (kindKey === 'direct') { container.classList.toggle('tuile', state.directView === 'tuile'); kickEpg(); }
+    if (kindKey === 'direct') {
+      container.classList.toggle('tuile', state.directView === 'tuile');
+      container.classList.toggle('liste', state.directView === 'liste');
+      kickEpg();
+    }
 
     if (!pl) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.')); moreBtn.style.display = 'none'; chips.innerHTML = ''; return; }
 
