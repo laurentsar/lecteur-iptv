@@ -183,6 +183,7 @@
     setupZapSwipe();
     setupRemote();
     setupFullscreen();
+    setupTapFullscreen();
     setupResume();
     setupChnoKeys();
   }
@@ -287,29 +288,40 @@
     if (fullscreenBtn) fullscreenBtn.classList.remove('active');
   }
 
+  // Bascule plein écran / mode classique — partagée entre le bouton ⛶ et un
+  // simple tap sur la vidéo en cours de lecture (voir setupTapFullscreen),
+  // pour tous les contenus (direct, films, séries, radio) puisque c'est le
+  // même lecteur partagé qui s'ouvre depuis tous les onglets.
+  function toggleFullscreen() {
+    if (isNativeApp()) {
+      var so = nativeScreenOrientation();
+      if (!so) return;
+      if (nativeLandscapeLocked) { releaseNativeLandscapeLock(); return; }
+      so.lock({ orientation: 'landscape' }).then(function () {
+        nativeLandscapeLocked = true;
+        fullscreenBtn.classList.add('active');
+      }).catch(function () { setStatus('Rotation en paysage indisponible sur cet appareil.'); });
+      return;
+    }
+    if (!fullscreenSupported()) return;
+    try {
+      var p = isFullscreen() ? exitFs() : requestFs();
+      if (p && typeof p.catch === 'function') p.catch(function () { setStatus('Plein écran indisponible sur cet appareil.'); });
+    } catch (e) { setStatus('Plein écran indisponible sur cet appareil.'); }
+  }
+
   function setupFullscreen() {
     if (isNativeApp()) {
       var so = nativeScreenOrientation();
       if (!so) { fullscreenBtn.style.display = 'none'; return; }
       fullscreenBtn.style.display = '';
-      fullscreenBtn.addEventListener('click', function () {
-        if (nativeLandscapeLocked) { releaseNativeLandscapeLock(); return; }
-        so.lock({ orientation: 'landscape' }).then(function () {
-          nativeLandscapeLocked = true;
-          fullscreenBtn.classList.add('active');
-        }).catch(function () { setStatus('Rotation en paysage indisponible sur cet appareil.'); });
-      });
+      fullscreenBtn.addEventListener('click', toggleFullscreen);
       return;
     }
 
     if (!fullscreenSupported()) { fullscreenBtn.style.display = 'none'; return; }
     fullscreenBtn.style.display = '';
-    fullscreenBtn.addEventListener('click', function () {
-      try {
-        var p = isFullscreen() ? exitFs() : requestFs();
-        if (p && typeof p.catch === 'function') p.catch(function () { setStatus('Plein écran indisponible sur cet appareil.'); });
-      } catch (e) { setStatus('Plein écran indisponible sur cet appareil.'); }
-    });
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
     function sync() {
       var fs = isFullscreen();
       fullscreenBtn.classList.toggle('active', fs);
@@ -317,6 +329,17 @@
     }
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
+  }
+
+  // Tap simple sur la vidéo en cours de lecture = bascule plein écran /
+  // mode classique, en plus du bouton ⛶ — un tap sur les contrôles natifs
+  // du <video> (lecture/pause, barre de progression...) n'atteint jamais ce
+  // gestionnaire (ils ne remontent pas de "click" jusqu'à l'élément vidéo),
+  // seul un tap sur l'image elle-même le déclenche. setupZapSwipe() gère
+  // séparément le swipe vertical (chaînes), avec un seuil de distance qui
+  // l'empêche de se confondre avec ce simple tap.
+  function setupTapFullscreen() {
+    video.addEventListener('click', function () { toggleFullscreen(); });
   }
 
   // ---------- Télécommande virtuelle (chaînes en direct uniquement) ----------
