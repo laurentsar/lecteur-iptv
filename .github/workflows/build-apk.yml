@@ -63,6 +63,12 @@ jobs:
       - name: Add background recorder (DVR)
         run: python3 ci/patch_recorder.py
 
+      # Radio en fond sonore (écran verrouillé, appli en arrière-plan) —
+      # service en avant-plan avec notification lecture/pause, même schéma
+      # que le DVR ci-dessus.
+      - name: Add radio background playback
+        run: python3 ci/patch_radio_background.py
+
       # x86/x86_64 ne servent qu'aux émulateurs : les exclure réduit
       # sensiblement la taille de l'APK (libs natives ExoPlayer/Cast/FFmpeg
       # en 2 ABI au lieu de 4).

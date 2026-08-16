@@ -35,6 +35,27 @@
     });
   }
 
+  // Octets bruts (pour l'EPG XMLTV, potentiellement gzip — voir epg.js) :
+  // sur natif, CapacitorHttp ne peut renvoyer un binaire qu'encodé en
+  // base64 à travers le pont JS (pas d'ArrayBuffer direct possible),
+  // décodé ici avec atob().
+  function fetchBytes(url) {
+    var http = nativeHttp();
+    if (http) {
+      return http.request({ url: url, method: 'GET', responseType: 'arraybuffer' }).then(function (res) {
+        if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
+        var bin = atob(res.data);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return bytes.buffer;
+      });
+    }
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    });
+  }
+
   function fetchJson(url) {
     var http = nativeHttp();
     if (http) {
@@ -49,5 +70,5 @@
     });
   }
 
-  global.Net = { fetchText: fetchText, fetchJson: fetchJson, isNative: function () { return !!nativeHttp(); } };
+  global.Net = { fetchText: fetchText, fetchJson: fetchJson, fetchBytes: fetchBytes, isNative: function () { return !!nativeHttp(); } };
 })(window);

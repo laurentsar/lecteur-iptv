@@ -14,6 +14,8 @@
     m3uData: null,        // { epgUrl, items }
     epgMap: null,          // XMLTV : { channelId: [{start,stop,titre}] }
     epgLoading: false,
+    epgError: null,        // message si le chargement du guide TV a échoué (voir kickEpg), affiché dans l'onglet Guide
+    epgFailedUrl: null,    // dernière URL EPG en échec, pour ne pas la retenter à chaque rendu du Guide
     xtreamCats: { direct: null, films: null, series: null }, // [{id,label}]
     activeCategory: { direct: '', films: '', series: '' },
     shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE, radio: PAGE_SIZE },
@@ -142,7 +144,7 @@
   function setActivePlaylist(id) {
     Store.setActivePlaylistId(id);
     state.playlist = Store.getPlaylists().find(function (p) { return p.id === id; }) || null;
-    state.m3uData = null; state.epgMap = null; state.epgLoading = false;
+    state.m3uData = null; state.epgMap = null; state.epgLoading = false; state.epgError = null; state.epgFailedUrl = null;
     state.xtreamCats = { direct: null, films: null, series: null };
     state.xtreamItems = { direct: null, films: null, series: null };
     state.activeCategory = { direct: '', films: '', series: '' };
@@ -235,15 +237,37 @@
     var pl = state.playlist;
     if (!pl || state.epgMap || state.epgLoading) return;
     var url = pl.type === 'm3u'
+      // state.m3uData peut encore être vide à ce stade (kickEpg est appelé
+      // au tout début de renderGuide(), avant même que ensureM3uLoaded()
+      // n'ait fini de parser la playlist) : dans ce cas rien à faire ici,
+      // ensureM3uLoaded() rappelle kickEpg() lui-même une fois les données
+      // (et l'éventuelle URL EPG déclarée en tête de M3U) disponibles.
       ? ((state.m3uData && state.m3uData.epgUrl) || pl.epgUrl)
       : Xtream.xmltvUrl(xtreamCfg(pl));
-    if (!url) return;
+    if (!url) {
+      state.epgError = (pl.type === 'm3u' && !state.m3uData) ? null // pas encore su, pas la peine d'inquiéter pour rien
+        : pl.type === 'm3u' ? 'Aucune URL de guide TV (EPG) trouvée — ni dans la playlist, ni renseignée dans Réglages.'
+        : 'Guide TV indisponible sur ce compte Xtream.';
+      return;
+    }
+    // Une URL déjà tentée et en échec n'est pas retentée à chaque rendu
+    // (renderGuide() appelle kickEpg() à chaque affichage, et le
+    // gestionnaire d'échec ci-dessous rappelle lui-même renderGuide() pour
+    // afficher le message) — seulement si l'URL change réellement.
+    if (state.epgFailedUrl === url) return;
     state.epgLoading = true;
+    state.epgError = null;
     Epg.fetchXmltv(url).then(function (map) {
-      state.epgMap = map; state.epgLoading = false;
+      state.epgMap = map; state.epgLoading = false; state.epgFailedUrl = null;
       if (isTabActive('direct')) renderKind('direct');
       if (isTabActive('guide')) renderGuide(false);
-    }).catch(function (err) { state.epgLoading = false; console.warn('EPG', err.message); });
+    }).catch(function (err) {
+      state.epgLoading = false;
+      state.epgFailedUrl = url;
+      state.epgError = 'Chargement du guide TV impossible : ' + err.message;
+      console.warn('EPG', err.message);
+      if (isTabActive('guide')) renderGuide(false);
+    });
   }
 
   function nowNextFor(item) {
@@ -650,7 +674,7 @@
     card.addEventListener('click', function () {
       if (opts.onOpen) { opts.onOpen(item); return; }
       var isLive = item.kind === 'direct' || item.kind === 'live' || item.kind === 'radio';
-      Player.open(item.url, item.name, { live: isLive, epgKey: item.epgKey, logo: item.logo });
+      Player.open(item.url, item.name, { live: isLive, radio: item.kind === 'radio', epgKey: item.epgKey, logo: item.logo });
     });
     return makeFocusable(card);
   }
@@ -900,7 +924,7 @@
       var lock = filterAdultLocked(filtered);
       renderList(container, moreBtn, lock.visible, 'radio', { onOpen: function (item) {
         var versions = item.versions && item.versions.length > 1 ? item.versions : null;
-        Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo, versions: versions });
+        Player.open(item.url, item.name, { live: true, radio: true, epgKey: item.epgKey, logo: item.logo, versions: versions });
       } });
       appendLockedCards(container, lock.locked, renderRadio);
     }
@@ -1057,6 +1081,9 @@
       var list = all.filter(function (it) { return matchesSearch(it, q); });
       setZapList(list);
       wrap.innerHTML = '';
+      if (state.epgError) {
+        wrap.appendChild(el('div', 'hint', '⚠️ ' + state.epgError + ' — les chaînes restent utilisables, sans programme affiché.'));
+      }
       if (!list.length) {
         wrap.appendChild(el('div', 'hint', state.epgLoading ? 'Chargement du guide…' : 'Aucun résultat.'));
         moreBtn.style.display = 'none';

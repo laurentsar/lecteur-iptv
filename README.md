@@ -140,6 +140,23 @@ en arrière-plan).
 - Non disponible sur la PWA/navigateur/iPhone : aucune exécution en
   arrière-plan fiable n'y existe.
 
+## Radio en fond sonore (APK Android uniquement)
+
+Contrairement à la TV, une radio continue à jouer quand l'app passe en
+arrière-plan (écran verrouillé, autre appli au premier plan) — comme
+n'importe quelle appli radio, via le même principe de service Android en
+avant-plan que le DVR ci-dessus.
+
+- Se déclenche automatiquement à la mise en arrière-plan pendant l'écoute
+  d'une radio, et s'arrête au retour au premier plan (relais transparent
+  avec le lecteur de l'app, pas de double lecture).
+- Notification permanente avec Lecture/Pause et Arrêter pendant l'écoute
+  en arrière-plan.
+- Continue même si l'app est ensuite fermée depuis les tâches récentes,
+  jusqu'à l'arrêt explicite (notification) ou le retour dans l'app.
+- Mêmes limites que le DVR : gestion de batterie agressive de certains
+  constructeurs, non disponible sur la PWA/navigateur/iPhone.
+
 ## Picture-in-Picture (direct uniquement)
 
 Un bouton ⧉ dans le lecteur réduit la chaîne en cours en mini-fenêtre pour
@@ -314,8 +331,10 @@ serveurs IPTV en `http://` (`ci/patch_manifest.py`), le lecteur vidéo natif
 (`ci/patch_native_player.py` — injecte `NativePlayerPlugin` / Media3
 ExoPlayer, voir plus bas), l'enregistreur DVR (`ci/patch_recorder.py` —
 injecte `RecorderPlugin` / `RecordingService`, voir « Enregistrement »
-plus haut) et la restriction aux ABI de vrais téléphones (`ci/patch_abi.py`
-— voir « Taille de l'APK » plus bas).
+plus haut), la radio en fond sonore (`ci/patch_radio_background.py` —
+injecte `RadioPlayerPlugin` / `RadioPlaybackService`, voir « Radio en fond
+sonore » plus haut) et la restriction aux ABI de vrais téléphones
+(`ci/patch_abi.py` — voir « Taille de l'APK » plus bas).
 
 La clé de signature (`signing/release.keystore`) **est** versionnée dans ce
 dépôt — un choix inhabituel, expliqué avec ses implications dans

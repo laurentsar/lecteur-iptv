@@ -45,22 +45,37 @@
     return byChannel;
   }
 
-  // Sur l'APK Android, on passe par le réseau natif (Net.fetchText) pour
-  // éviter les blocages CORS des panels IPTV — comme pour les playlists et
-  // l'API Xtream. La détection de fichier .gz (magic bytes) nécessite les
-  // octets bruts, donc uniquement possible sur le chemin fetch() navigateur.
-  function fetchXmltv(url) {
-    if (global.Net && global.Net.isNative()) {
-      return global.Net.fetchText(url).then(parseXmltvText);
+  // Beaucoup de fournisseurs servent leur XMLTV compressé (epg.xml.gz),
+  // parfois sans l'en-tête HTTP Content-Encoding qui permettrait une
+  // décompression transparente par le client réseau — d'où la
+  // décompression manuelle ici, via l'API standard DecompressionStream
+  // (supportée par la WebView Android comme par les navigateurs récents,
+  // aucune dépendance externe nécessaire).
+  function gunzipToText(buf) {
+    if (typeof global.DecompressionStream !== 'function') {
+      return Promise.reject(new Error('EPG compressé (.gz) : décompression non supportée par cette WebView/ce navigateur.'));
     }
-    return fetch(url).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.arrayBuffer();
-    }).then(function (buf) {
-      if (looksGzip(buf)) throw new Error('EPG compressé (.gz) non pris en charge — utilise un lien XMLTV non compressé.');
-      var text = new TextDecoder('utf-8').decode(buf);
-      return parseXmltvText(text);
+    var stream = new Response(buf).body.pipeThrough(new global.DecompressionStream('gzip'));
+    return new Response(stream).arrayBuffer().then(function (decompressed) {
+      return new TextDecoder('utf-8').decode(decompressed);
     });
+  }
+
+  // Octets bruts dans tous les cas (natif ou navigateur) : nécessaire pour
+  // détecter un éventuel gzip par ses magic bytes avant de décoder en
+  // texte — sur l'APK Android, on passe par le réseau natif (Net) pour
+  // éviter les blocages CORS des panels IPTV, comme pour les playlists et
+  // l'API Xtream.
+  function fetchXmltv(url) {
+    var bytesPromise = (global.Net && global.Net.isNative())
+      ? global.Net.fetchBytes(url)
+      : fetch(url).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.arrayBuffer();
+        });
+    return bytesPromise.then(function (buf) {
+      return looksGzip(buf) ? gunzipToText(buf) : new TextDecoder('utf-8').decode(buf);
+    }).then(parseXmltvText);
   }
 
   function nowNext(byChannel, channelId, at) {

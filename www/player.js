@@ -40,6 +40,8 @@
   var currentVersions = null; // [{name,url,...}] quand la chaîne regroupe plusieurs sources — voir opts.versions dans open()
   var originalUrl = '', originalTitle = '';
   var currentIsLive = false; // PiP proposé uniquement pour le direct
+  var currentIsRadio = false; // lecture en fond sonore natif quand l'appli passe en arrière-plan, voir setupRadioBackground()
+  var currentLogo = '';
   var triedNativeFallback = false, triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
   var remoteBtn, remotePanel;
@@ -185,6 +187,7 @@
     setupFullscreen();
     setupTapFullscreen();
     setupSelectFullscreen();
+    setupRadioBackground();
     setupResume();
     setupChnoKeys();
   }
@@ -359,6 +362,37 @@
       if (onOwnControl) return;
       e.preventDefault();
       toggleFullscreen();
+    });
+  }
+
+  // ---------- Radio en fond sonore (APK Android uniquement) ----------
+  // Contrairement à la TV, une radio doit continuer à jouer quand l'appli
+  // passe en arrière-plan (écran verrouillé, autre appli au premier plan)
+  // — comme n'importe quelle appli radio. La WebView elle-même est
+  // suspendue dans ce cas (le <video> s'arrête), donc on relaie la
+  // lecture le temps que l'appli n'est pas au premier plan à un service
+  // Android en avant-plan (RadioPlayerPlugin/RadioPlaybackService, natif —
+  // voir ci/patch_radio_background.py), avec notification et contrôles
+  // lecture/pause/arrêt. Ce service tourne indépendamment de la WebView :
+  // il continue même si l'appli est ensuite fermée depuis les tâches
+  // récentes, jusqu'à l'arrêt explicite (notification) ou le retour au
+  // premier plan.
+  function radioPlayerPlugin() {
+    return (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.RadioPlayer) || null;
+  }
+
+  function setupRadioBackground() {
+    if (!(isNativeApp() && global.Capacitor.Plugins && global.Capacitor.Plugins.App)) return;
+    global.Capacitor.Plugins.App.addListener('appStateChange', function (state) {
+      var rp = radioPlayerPlugin();
+      if (!rp || !overlay || !overlay.classList.contains('show') || !currentIsRadio) return;
+      if (!state.isActive) {
+        video.pause();
+        rp.play({ url: originalUrl, title: originalTitle, logo: currentLogo }).catch(function () {});
+      } else {
+        rp.stop().catch(function () {});
+        video.play().catch(function () {});
+      }
     });
   }
 
@@ -953,6 +987,8 @@
     originalUrl = url;
     originalTitle = title || '';
     currentIsLive = !!(opts && opts.live);
+    currentIsRadio = !!(opts && opts.radio);
+    currentLogo = (opts && opts.logo) || '';
     currentVersions = (opts && opts.versions) || null;
     triedNativeFallback = false;
     triedM3u8Fallback = false;
@@ -977,6 +1013,7 @@
     if (tracksMenu) tracksMenu.style.display = 'none';
     if (remotePanel) closeRemote();
     releaseNativeLandscapeLock();
+    if (currentIsRadio) { var rp = radioPlayerPlugin(); if (rp) rp.stop().catch(function () {}); }
     if (overlay) overlay.classList.remove('show');
   }
 
