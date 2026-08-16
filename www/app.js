@@ -131,6 +131,11 @@
     var serieDetail = $id('serieDetail');
     if (serieDetail && serieDetail.style.display !== 'none') { serieDetail.style.display = 'none'; $id('seriesRacine').style.display = ''; return; }
     var activeTab = document.querySelector('.tab.active');
+    // Depuis la liste des chaînes d'un bouquet (onglet Direct), un premier
+    // retour ramène à la grille des bouquets — l'étape de navigation
+    // intermédiaire équivalente aux fiches film/série ci-dessus — avant de
+    // quitter l'onglet au retour suivant.
+    if (activeTab && activeTab.dataset.tab === 'direct' && state.directView === 'liste') { switchDirectView('bouquets'); return; }
     if (activeTab && activeTab.dataset.tab !== 'accueil') { goTab('accueil'); return; }
     if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App && Capacitor.Plugins.App.exitApp) Capacitor.Plugins.App.exitApp();
   }
@@ -980,13 +985,16 @@
   $id('plusFilms').addEventListener('click', function () { state.shown.films += PAGE_SIZE; renderKind('films'); });
   $id('plusSeries').addEventListener('click', function () { state.shown.series += PAGE_SIZE; renderKind('series'); });
 
+  function switchDirectView(view) {
+    state.directView = view;
+    if (view === 'bouquets') state.bouquetsAllCountries = false;
+    Array.prototype.forEach.call(document.querySelectorAll('#directViewToggle .view-btn'), function (x) { x.classList.toggle('active', x.dataset.view === view); });
+    renderKind('direct');
+  }
   $id('directViewToggle').addEventListener('click', function (e) {
     var b = e.target.closest('.view-btn');
     if (!b || b.classList.contains('active')) return;
-    state.directView = b.dataset.view;
-    if (state.directView === 'bouquets') state.bouquetsAllCountries = false;
-    Array.prototype.forEach.call(document.querySelectorAll('#directViewToggle .view-btn'), function (x) { x.classList.toggle('active', x === b); });
-    renderKind('direct');
+    switchDirectView(b.dataset.view);
   });
 
   // ---------- Recherche universelle (Accueil) ----------
