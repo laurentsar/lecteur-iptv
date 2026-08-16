@@ -16,6 +16,7 @@
     epgLoading: false,
     epgError: null,        // message si le chargement du guide TV a échoué (voir kickEpg), affiché dans l'onglet Guide
     epgFailedUrl: null,    // dernière URL EPG en échec, pour ne pas la retenter à chaque rendu du Guide
+    epgDebug: null,        // { url, channelCount } — diagnostic affiché dans le Guide (chargement réussi mais sans correspondance)
     xtreamCats: { direct: null, films: null, series: null }, // [{id,label}]
     activeCategory: { direct: '', films: '', series: '' },
     shown: { direct: PAGE_SIZE, films: PAGE_SIZE, series: PAGE_SIZE, guide: GUIDE_PAGE, radio: PAGE_SIZE },
@@ -169,7 +170,7 @@
   function setActivePlaylist(id) {
     Store.setActivePlaylistId(id);
     state.playlist = Store.getPlaylists().find(function (p) { return p.id === id; }) || null;
-    state.m3uData = null; state.epgMap = null; state.epgLoading = false; state.epgError = null; state.epgFailedUrl = null;
+    state.m3uData = null; state.epgMap = null; state.epgLoading = false; state.epgError = null; state.epgFailedUrl = null; state.epgDebug = null;
     state.xtreamCats = { direct: null, films: null, series: null };
     state.xtreamItems = { direct: null, films: null, series: null };
     state.activeCategory = { direct: '', films: '', series: '' };
@@ -284,6 +285,13 @@
     state.epgError = null;
     Epg.fetchXmltv(url).then(function (map) {
       state.epgMap = map; state.epgLoading = false; state.epgFailedUrl = null;
+      // Diagnostic affiché dans le Guide (voir renderGuide) : le
+      // chargement peut réussir (pas d'erreur réseau/XML) tout en ne
+      // contenant aucun programme exploitable pour ces chaînes
+      // précisément (identifiants/noms qui ne concordent pas avec la
+      // source EPG) — sans ce chiffre, ce cas est indiscernable d'un
+      // guide qui n'a simplement pas encore chargé.
+      state.epgDebug = { url: url, channelCount: Object.keys(map).length };
       if (isTabActive('direct')) renderKind('direct');
       if (isTabActive('guide')) renderGuide(false);
     }).catch(function (err) {
@@ -1155,6 +1163,18 @@
       wrap.innerHTML = '';
       if (state.epgError) {
         wrap.appendChild(el('div', 'hint', '⚠️ ' + state.epgError + ' — les chaînes restent utilisables, sans programme affiché.'));
+      } else if (state.epgDebug && state.epgMap) {
+        // Diagnostic : le chargement peut réussir (pas d'erreur) tout en
+        // ne contenant aucun programme exploitable pour CES chaînes
+        // précisément (identifiants/noms qui ne concordent pas avec la
+        // source EPG) — sans ce chiffre, indiscernable d'un guide qui n'a
+        // simplement pas encore chargé.
+        var matched = list.filter(function (it) { return (Epg.progsFor(state.epgMap, it.epgKey, it.name) || []).length > 0; }).length;
+        if (matched === 0 && list.length > 0) {
+          wrap.appendChild(el('div', 'hint',
+            'ℹ️ Guide chargé (' + state.epgDebug.channelCount + ' chaîne(s) dans le flux EPG) mais aucun programme ne correspond à tes ' +
+            list.length + ' chaîne(s) — identifiants/noms différents entre la playlist et la source EPG.'));
+        }
       }
       if (!list.length) {
         wrap.appendChild(el('div', 'hint', state.epgLoading ? 'Chargement du guide…' : 'Aucun résultat.'));
