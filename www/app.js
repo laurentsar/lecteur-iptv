@@ -621,8 +621,16 @@
   // Chaînes de bienvenue/pub insérées par certains fournisseurs IPTV, sans
   // contenu réel — masquées par préfixe (insensible à la casse), le
   // fournisseur faisant varier le suffixe ("... TV", "... IPTV", ...).
-  var HIDDEN_CHANNEL_NAMES = /^welcome ultimate\b/i;
-  function isHiddenChannel(name) { return HIDDEN_CHANNEL_NAMES.test(String(name || '').trim()); }
+  // Ni ancré en début de chaîne (^) ni sensible aux caractères invisibles
+  // (espace insécable, marqueurs de sens d'écriture...) que certains
+  // exports de playlist ajoutent parfois avant le nom — un ancrage strict
+  // ratait silencieusement ces variantes malgré un nom visuellement
+  // identique.
+  var HIDDEN_CHANNEL_NAMES = /welcome ultimate\b/i;
+  function isHiddenChannel(name) {
+    var clean = String(name || '').replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, '').trim();
+    return HIDDEN_CHANNEL_NAMES.test(clean);
+  }
 
   // Beaucoup de playlists (surtout M3U) listent la même chaîne ou le même
   // film plusieurs fois sous des noms voisins — sources de secours,
@@ -1287,9 +1295,19 @@
       wrap.appendChild(grid);
       moreBtn.style.display = list.length > shown ? '' : 'none';
 
+      // wrap.innerHTML a été entièrement vidé et reconstruit ci-dessus : la
+      // position de défilement verticale d'avant (ex. si l'utilisateur avait
+      // un peu scrollé pendant que l'EPG finissait de charger en arrière-
+      // plan, voir kickEpg) n'a plus de sens contre ce nouveau contenu — sans
+      // ce reset, les messages ⚠️/ℹ️/🔧 ajoutés en tête peuvent se retrouver
+      // scrollés hors champ, invisibles, alors même que kickEpg() a bien mis
+      // à jour l'état et rappelé renderGuide(false). Toujours réinitialisé,
+      // pas seulement quand resetScroll (qui ne contrôle que le défilement
+      // horizontal, pour garder l'heure affichée stable lors d'un simple
+      // rafraîchissement de données).
+      wrap.scrollTop = 0;
       if (resetScroll) {
         wrap.scrollLeft = state.guideDayOffset === 0 ? Math.max(0, (now - dayStart) / 60000 * PX_PER_MIN - 80) : 0;
-        wrap.scrollTop = 0;
       }
     }).catch(function (err) {
       wrap.innerHTML = '';
