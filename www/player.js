@@ -184,6 +184,7 @@
     setupRemote();
     setupFullscreen();
     setupTapFullscreen();
+    setupSelectFullscreen();
     setupResume();
     setupChnoKeys();
   }
@@ -340,6 +341,27 @@
   // l'empêche de se confondre avec ce simple tap.
   function setupTapFullscreen() {
     video.addEventListener('click', function () { toggleFullscreen(); });
+  }
+
+  // Équivalent télécommande du tap ci-dessus : la touche OK/Sélection d'une
+  // télécommande (physique, Bluetooth, ou boîtier TV) arrive comme un
+  // évènement clavier "Enter" (parfois " ") dans la WebView, exactement
+  // comme un clic simple sur la vidéo — sauf quand le focus est sur un
+  // contrôle qui doit garder son propre sens pour cette touche (bouton,
+  // champ, chaîne de la télécommande virtuelle rendue focusable par
+  // makeFocusable() dans app.js) : dans ce cas on la laisse faire son
+  // travail normal plutôt que de basculer le plein écran à sa place.
+  function setupSelectFullscreen() {
+    document.addEventListener('keydown', function (e) {
+      if (!overlay || !overlay.classList.contains('show')) return;
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      var a = document.activeElement;
+      var onOwnControl = a && a !== video && a !== overlay && a !== document.body &&
+        (/^(BUTTON|A|INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.tabIndex >= 0);
+      if (onOwnControl) return;
+      e.preventDefault();
+      toggleFullscreen();
+    });
   }
 
   // ---------- Télécommande virtuelle (chaînes en direct uniquement) ----------
