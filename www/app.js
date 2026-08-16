@@ -48,7 +48,7 @@
   window.AppZap = {
     list: function () { return state.zapList; },
     favoris: zapFavoris,
-    epgNow: function (epgKey) { return epgKey ? Epg.nowNext(state.epgMap, epgKey) : null; },
+    epgNow: function (epgKey, name) { return (epgKey || name) ? Epg.nowNext(state.epgMap, epgKey, name) : null; },
     byNumber: function (num) {
       num = String(num).replace(/^0+(?=\d)/, '');
       return state.zapList.filter(function (it) { return it.chno; })
@@ -271,8 +271,8 @@
   }
 
   function nowNextFor(item) {
-    if (!item.epgKey || !state.epgMap) return null;
-    return Epg.nowNext(state.epgMap, item.epgKey);
+    if (!state.epgMap || (!item.epgKey && !item.name)) return null;
+    return Epg.nowNext(state.epgMap, item.epgKey, item.name);
   }
 
   function epgBadge(item) {
@@ -910,6 +910,26 @@
   // voir ensureXtreamItems) — pas de distinction native dans l'API Xtream
   // classique entre chaînes TV et radios, donc heuristique comme pour le
   // reste (VOD/séries).
+
+  // Beaucoup d'abonnements IPTV ne proposent aucune radio (l'onglet reste
+  // alors vide) : quelques grandes stations françaises en flux public,
+  // toujours disponibles en plus de celles éventuellement fournies par la
+  // playlist active — mêmes flux que ceux utilisés par les lecteurs web
+  // officiels de ces stations, vérifiés joignables.
+  var DEFAULT_RADIOS = [
+    { name: 'France Inter', url: 'https://icecast.radiofrance.fr/franceinter-midfi.mp3' },
+    { name: 'France Info', url: 'https://icecast.radiofrance.fr/franceinfo-midfi.mp3' },
+    { name: 'France Culture', url: 'https://icecast.radiofrance.fr/franceculture-midfi.mp3' },
+    { name: 'France Musique', url: 'https://icecast.radiofrance.fr/francemusique-midfi.mp3' },
+    { name: 'FIP', url: 'https://icecast.radiofrance.fr/fip-midfi.mp3' },
+    { name: 'Europe 1', url: 'https://europe1.lmn.fm/europe1.mp3' },
+    { name: 'RMC', url: 'https://audio.bfmtv.com/rmcradio_128.mp3' },
+    { name: 'NRJ', url: 'https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3' },
+    { name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k' }
+  ].map(function (r) {
+    return { key: 'default-radio:' + r.url, kind: 'radio', name: r.name, url: r.url, logo: null, group: 'Stations par défaut' };
+  });
+
   function renderRadio() {
     var pl = state.playlist;
     var container = $id('listeRadio'), moreBtn = $id('plusRadio'), search = $id('rechRadio');
@@ -919,7 +939,7 @@
     var q = search.value.trim().toLowerCase();
 
     function finish(items) {
-      var filtered = items.filter(function (it) { return matchesSearch(it, q) && !isHiddenChannel(it.name); });
+      var filtered = items.concat(DEFAULT_RADIOS).filter(function (it) { return matchesSearch(it, q) && !isHiddenChannel(it.name); });
       filtered = groupChannels(filtered);
       var lock = filterAdultLocked(filtered);
       renderList(container, moreBtn, lock.visible, 'radio', { onOpen: function (item) {
@@ -1119,7 +1139,7 @@
         grid.appendChild(makeFocusable(chan));
 
         var timeline = el('div', 'guide-timeline');
-        var progs = (item.epgKey && state.epgMap && state.epgMap[item.epgKey]) || [];
+        var progs = Epg.progsFor(state.epgMap, item.epgKey, item.name) || [];
         var visible = progs.filter(function (p) { return p.start != null && p.stop != null && p.stop > dayStart && p.start < dayEnd; });
         if (!visible.length) {
           timeline.appendChild(el('div', 'guide-empty', 'Pas de programme disponible'));

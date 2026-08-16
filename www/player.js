@@ -542,7 +542,7 @@
   function showZapBanner(name, epgKey, logo) {
     clearTimeout(zapBannerTimer);
     zapBannerName.textContent = name || '';
-    var info = (global.AppZap && global.AppZap.epgNow) ? global.AppZap.epgNow(epgKey) : null;
+    var info = (global.AppZap && global.AppZap.epgNow) ? global.AppZap.epgNow(epgKey, name) : null;
     zapBannerProg.textContent = info && info.now
       ? '▶ ' + info.now.titre + (info.next ? ' · ensuite : ' + info.next.titre : '')
       : '';

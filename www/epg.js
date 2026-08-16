@@ -24,6 +24,17 @@
     return b[0] === 0x1f && b[1] === 0x8b;
   }
 
+  // Nom de chaîne réduit à ses lettres/chiffres, sans accents ni casse —
+  // pour comparer un nom de chaîne M3U/Xtream à un <display-name> XMLTV
+  // sans se soucier de la ponctuation/espacement (« TF1 HD » vs « TF1 »
+  // restent différents volontairement, seule l'égalité stricte réduite
+  // compte, voir progsFor()).
+  function normalizeChanName(s) {
+    return String(s || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '');
+  }
+
   function parseXmltvText(text) {
     var xml = new DOMParser().parseFromString(text, 'text/xml');
     if (xml.querySelector('parsererror')) throw new Error('XMLTV invalide (ou EPG compressé .gz non pris en charge)');
@@ -42,7 +53,32 @@
     Object.keys(byChannel).forEach(function (ch) {
       byChannel[ch].sort(function (a, b) { return (a.start || 0) - (b.start || 0); });
     });
+    // Alias par nom d'affichage XMLTV (<channel id="X"><display-name>) : le
+    // tvg-id d'une playlist M3U ne correspond pas toujours à l'identifiant
+    // XMLTV du fournisseur EPG (souvent un tiers, distinct du fournisseur
+    // de la playlist) — c'est la cause la plus fréquente d'un Guide sans
+    // aucun programme alors que l'EPG s'est bien chargé. Repli par nom de
+    // chaîne normalisé si la recherche par identifiant échoue, voir
+    // progsFor() plus bas.
+    xml.querySelectorAll('channel').forEach(function (c) {
+      var id = c.getAttribute('id');
+      if (!id || !byChannel[id]) return;
+      c.querySelectorAll('display-name').forEach(function (dn) {
+        var norm = normalizeChanName(dn.textContent);
+        if (norm) byChannel['name:' + norm] = byChannel[id];
+      });
+    });
     return byChannel;
+  }
+
+  // Programmes d'une chaîne : par identifiant EPG (tvg-id / stream_id)
+  // d'abord, par nom de chaîne normalisé ensuite si l'identifiant ne
+  // correspond à rien (voir alias construits dans parseXmltvText).
+  function progsFor(byChannel, channelId, name) {
+    if (!byChannel) return null;
+    if (channelId && byChannel[channelId]) return byChannel[channelId];
+    var norm = normalizeChanName(name);
+    return (norm && byChannel['name:' + norm]) || null;
   }
 
   // Beaucoup de fournisseurs servent leur XMLTV compressé (epg.xml.gz),
@@ -78,8 +114,8 @@
     }).then(parseXmltvText);
   }
 
-  function nowNext(byChannel, channelId, at) {
-    var list = byChannel && byChannel[channelId];
+  function nowNext(byChannel, channelId, name, at) {
+    var list = progsFor(byChannel, channelId, name);
     if (!list || !list.length) return null;
     var t = at || Date.now();
     var now = null, next = null;
@@ -91,5 +127,5 @@
     return (now || next) ? { now: now, next: next } : null;
   }
 
-  global.Epg = { fetchXmltv: fetchXmltv, nowNext: nowNext, parseXmltvDate: parseXmltvDate };
+  global.Epg = { fetchXmltv: fetchXmltv, nowNext: nowNext, parseXmltvDate: parseXmltvDate, progsFor: progsFor, normalizeChanName: normalizeChanName };
 })(window);
