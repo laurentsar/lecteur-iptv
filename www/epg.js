@@ -24,13 +24,19 @@
     return b[0] === 0x1f && b[1] === 0x8b;
   }
 
-  // Nom de chaîne réduit à ses lettres/chiffres, sans accents ni casse —
-  // pour comparer un nom de chaîne M3U/Xtream à un <display-name> XMLTV
-  // sans se soucier de la ponctuation/espacement (« TF1 HD » vs « TF1 »
-  // restent différents volontairement, seule l'égalité stricte réduite
-  // compte, voir progsFor()).
+  // Nom de chaîne réduit à ses lettres/chiffres, sans accents/casse/
+  // décorations courantes de fournisseur, pour comparer un nom M3U/Xtream
+  // à un <display-name> XMLTV en restant sur une égalité stricte (pas de
+  // correspondance partielle, qui confondrait par exemple « France 2 » et
+  // « France 24 ») : « |FR|| FRANCE 3 FHD » et « France 3 » doivent tous
+  // les deux réduire à « france3 » pour matcher, voir progsFor() plus bas.
+  var CHAN_PREFIX = /^\s*[[|]?\s*[a-z]{2,3}\s*[\]|]+\s*/i; // "|FR|| ", "[FR] "...
+  var CHAN_SUFFIX = /\s*(\b(?:fhd|uhd|hd|sd|4k|hevc)\b|\+\d+)\s*$/i; // "FHD", "+1"...
   function normalizeChanName(s) {
-    return String(s || '').toLowerCase()
+    var n = String(s || '').replace(CHAN_PREFIX, '');
+    var prev;
+    do { prev = n; n = n.replace(CHAN_SUFFIX, ''); } while (n !== prev);
+    return n.toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '');
   }
