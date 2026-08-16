@@ -332,13 +332,11 @@
     document.addEventListener('webkitfullscreenchange', sync);
   }
 
-  // Tap simple sur la vidéo en cours de lecture = bascule plein écran /
-  // mode classique, en plus du bouton ⛶ — un tap sur les contrôles natifs
-  // du <video> (lecture/pause, barre de progression...) n'atteint jamais ce
-  // gestionnaire (ils ne remontent pas de "click" jusqu'à l'élément vidéo),
-  // seul un tap sur l'image elle-même le déclenche. setupZapSwipe() gère
-  // séparément le swipe vertical (chaînes), avec un seuil de distance qui
-  // l'empêche de se confondre avec ce simple tap.
+  // Clic souris sur la vidéo = bascule plein écran, pour la souris/PWA
+  // desktop uniquement (le tap tactile est géré dans setupZapSwipe ci-
+  // dessus, plus fiable sur mobile — voir le commentaire à cet endroit ;
+  // sur un appareil tactile ce clic synthétique est étouffé par le
+  // preventDefault() du tap, donc jamais atteint ici).
   function setupTapFullscreen() {
     video.addEventListener('click', function () { toggleFullscreen(); });
   }
@@ -445,32 +443,46 @@
     });
   }
 
-  // ---------- Zapping par swipe (chaînes en direct uniquement) ----------
-  // Swipe vertical sur la vidéo = chaîne suivante/précédente, dans l'ordre
-  // de la liste actuellement affichée dans l'app (Direct ou Guide, voir
-  // AppZap dans app.js). Geste volontairement exigeant (distance + rapidité)
-  // pour ne pas se déclencher sur un simple tap qui affiche/masque les
-  // contrôles natifs du <video>.
+  // ---------- Swipe (zapping) et tap (plein écran) sur la vidéo ----------
+  // Un seul et même couple touchstart/touchend distingue les deux gestes :
+  // un tap bref sans déplacement bascule le plein écran (voir
+  // toggleFullscreen), un swipe vertical net change de chaîne (direct
+  // uniquement). Volontairement PAS un simple "click" sur la vidéo pour le
+  // tap : avec l'attribut controls natif, le clic issu du tap tactile n'est
+  // pas fiable dans la WebView Android (contrôles natifs superposés qui
+  // interceptent le geste) — touchstart/touchend, déjà utilisés et fiables
+  // pour le swipe, le sont aussi pour ça. preventDefault() sur le touchend
+  // d'un tap étouffe le clic de souris synthétique qui suivrait sinon,
+  // pour ne pas basculer deux fois (une fois ici, une fois via le
+  // gestionnaire "click" ci-dessous qui ne sert alors qu'à la souris/PWA
+  // desktop, jamais atteint sur un appareil tactile).
   var ZAP_MIN_DISTANCE = 60, ZAP_MAX_DURATION = 600;
+  var TAP_MAX_MOVEMENT = 12, TAP_MAX_DURATION = 300;
   var zapStartX = 0, zapStartY = 0, zapStartT = 0;
 
   function setupZapSwipe() {
     video.addEventListener('touchstart', function (e) {
-      if (!currentIsLive || e.touches.length !== 1) return;
+      if (e.touches.length !== 1) return;
       zapStartX = e.touches[0].clientX;
       zapStartY = e.touches[0].clientY;
       zapStartT = Date.now();
     }, { passive: true });
     video.addEventListener('touchend', function (e) {
-      if (!currentIsLive || !zapStartT) return;
+      if (!zapStartT) return;
       var t = e.changedTouches[0];
       var dx = t.clientX - zapStartX, dy = t.clientY - zapStartY;
       var dt = Date.now() - zapStartT;
       zapStartT = 0;
+      if (dt <= TAP_MAX_DURATION && Math.abs(dx) <= TAP_MAX_MOVEMENT && Math.abs(dy) <= TAP_MAX_MOVEMENT) {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+      if (!currentIsLive) return;
       if (dt > ZAP_MAX_DURATION) return;
       if (Math.abs(dy) < ZAP_MIN_DISTANCE || Math.abs(dy) < Math.abs(dx) * 1.5) return;
       zapStep(dy < 0 ? 1 : -1);
-    }, { passive: true });
+    }, { passive: false });
   }
 
   function zapStep(delta) {
