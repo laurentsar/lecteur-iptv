@@ -283,7 +283,24 @@
     if (state.epgFailedUrl === url) return;
     state.epgLoading = true;
     state.epgError = null;
+    // Filet de sécurité : sans délai maximum, un serveur EPG qui ne répond
+    // jamais (fréquent chez certains fournisseurs IPTV) laisse epgLoading
+    // bloqué à true pour toujours — la garde en tête de fonction
+    // ci-dessus court-circuite alors silencieusement tous les appels
+    // suivants, sans jamais afficher ni erreur ni diagnostic (le guide
+    // reste vide sans aucune explication visible).
+    var EPG_TIMEOUT_MS = 15000;
+    var timedOut = false;
+    var timeoutId = setTimeout(function () {
+      timedOut = true;
+      state.epgLoading = false;
+      state.epgFailedUrl = url;
+      state.epgError = 'Chargement du guide TV impossible : le serveur ne répond pas (délai dépassé).';
+      if (isTabActive('guide')) renderGuide(false);
+    }, EPG_TIMEOUT_MS);
     Epg.fetchXmltv(url).then(function (map) {
+      if (timedOut) return; // réponse arrivée après coup — l'échec par délai a déjà été traité
+      clearTimeout(timeoutId);
       state.epgMap = map; state.epgLoading = false; state.epgFailedUrl = null;
       // Diagnostic affiché dans le Guide (voir renderGuide) : le
       // chargement peut réussir (pas d'erreur réseau/XML) tout en ne
@@ -295,6 +312,8 @@
       if (isTabActive('direct')) renderKind('direct');
       if (isTabActive('guide')) renderGuide(false);
     }).catch(function (err) {
+      if (timedOut) return; // délai déjà traité
+      clearTimeout(timeoutId);
       state.epgLoading = false;
       state.epgFailedUrl = url;
       state.epgError = 'Chargement du guide TV impossible : ' + err.message;
