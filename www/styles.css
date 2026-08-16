@@ -396,7 +396,12 @@ button.ghost { background: var(--card2); color: var(--text); }
   text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
 }
 .guide-prog.now { background: var(--accent-dim); border-color: var(--accent); color: #06181c; font-weight: 700; }
-.guide-empty { position: absolute; top: 4px; left: 6px; font-size: 11px; color: var(--muted); }
+/* sticky (pas absolute) : la timeline fait 2880px (24h) et le Guide se
+   scrolle automatiquement jusqu'à l'heure courante à l'ouverture — un
+   positionnement absolu ancré au tout début de journée serait scrollé
+   hors champ pour la quasi-totalité des lignes, indiscernable d'une
+   cellule vide qui n'a simplement pas fini de charger. */
+.guide-empty { position: sticky; left: 126px; top: 4px; font-size: 11px; color: var(--muted); display: table; }
 .guide-rec-btn {
   position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; line-height: 14px;
   background: rgba(10,16,24,.7); border: none; border-radius: 50%; color: var(--bad);

@@ -1795,8 +1795,38 @@
     var activeId = Store.getActivePlaylistId();
     if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
     renderAccueil();
+    // Le service worker (cache-first du shell applicatif) n'a de sens que
+    // pour la PWA/le web (GitHub Pages), où il permet un fonctionnement
+    // hors-ligne. Sur l'APK Android, les fichiers sont déjà à jour à chaque
+    // installation (npx cap sync copie www/ dans l'APK au moment du build) —
+    // un SW y est redondant et activement nuisible : une mise à jour Android
+    // installée par-dessus l'existante conserve les données de l'appli (donc
+    // tout SW déjà enregistré), qui continue alors de servir depuis SON
+    // ancien cache pendant toute la session en cours, malgré des fichiers
+    // fraîchement installés sur le disque — jusqu'à une réouverture
+    // ultérieure de l'appli, où le nouveau SW (installé en tâche de fond
+    // entre-temps) prend enfin le contrôle. D'où des correctifs qui
+    // « n'apparaissent jamais » juste après une mise à jour, symptôme observé
+    // sur plusieurs versions consécutives malgré un numéro de version déjà à
+    // jour (lui bien lu directement du HTML, jamais mis en cache par le SW
+    // au moment où celui-ci active son contrôle). Sur natif, on désenregistre
+    // plutôt tout SW déjà présent (résidu d'une version antérieure, avant ce
+    // correctif) et on vide son cache, pour repartir sur des fichiers
+    // toujours lus directement depuis l'APK.
+    var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
+      if (isNative) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) { r.unregister(); });
+        }).catch(function () {});
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (k) { caches.delete(k); });
+          }).catch(function () {});
+        }
+      } else {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      }
     }
   }
   init();
