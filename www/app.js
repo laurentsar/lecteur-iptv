@@ -1188,23 +1188,6 @@
       var list = all.filter(function (it) { return matchesSearch(it, q); });
       setZapList(list);
       wrap.innerHTML = '';
-      // Diagnostic brut temporaire, toujours affiché quel que soit l'état
-      // (contrairement aux messages ci-dessous, chacun conditionnel à un
-      // état précis) : sept correctifs successifs sur la détection EPG
-      // sans que le moindre message n'apparaisse jamais côté utilisateur
-      // — plus de suppositions, ces valeurs lèvent le doute directement.
-      try {
-        var dbgUrl = pl.type === 'm3u' ? ((state.m3uData && state.m3uData.epgUrl) || pl.epgUrl) : Xtream.xmltvUrl(xtreamCfg(pl));
-        wrap.appendChild(el('div', 'hint',
-          '🔧 debug — url=' + (dbgUrl || 'aucune') +
-          ' · m3uData=' + (state.m3uData ? 'oui' : 'non') +
-          ' · epgLoading=' + state.epgLoading +
-          ' · epgError=' + (state.epgError || 'aucune') +
-          ' · epgMap=' + (state.epgMap ? Object.keys(state.epgMap).length + ' entrée(s)' : 'non chargé') +
-          ' · epgDebug=' + (state.epgDebug ? JSON.stringify(state.epgDebug) : 'aucun')));
-      } catch (dbgErr) {
-        wrap.appendChild(el('div', 'hint', '🔧 debug erreur : ' + dbgErr.message));
-      }
       if (state.epgError) {
         wrap.appendChild(el('div', 'hint', '⚠️ ' + state.epgError + ' — les chaînes restent utilisables, sans programme affiché.'));
       } else if (state.epgDebug && state.epgMap) {
