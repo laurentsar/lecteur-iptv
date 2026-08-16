@@ -47,6 +47,8 @@
   var remoteBtn, remotePanel;
   var fullscreenBtn, homeBtn;
   var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg;
+  var progBar;
+  var progBarTimer = null;
   var zapBannerTimer = null;
   var castSdkRequested = false;
   var loadTimeoutId = null;
@@ -126,6 +128,7 @@
       '</div>' +
       '<video id="playerVideo" playsinline controls autoplay></video>' +
       '<div id="playerStatus" class="player-status"></div>' +
+      '<div id="playerProgBar" class="prog-bar" style="display:none"></div>' +
       '<div id="zapBanner" class="zap-banner">' +
       '  <img id="zapBannerLogo" class="zap-banner-logo" alt="" style="display:none" />' +
       '  <div class="zap-banner-txt">' +
@@ -166,6 +169,7 @@
     zapBannerLogo = overlay.querySelector('#zapBannerLogo');
     zapBannerName = overlay.querySelector('#zapBannerName');
     zapBannerProg = overlay.querySelector('#zapBannerProg');
+    progBar = overlay.querySelector('#playerProgBar');
     homeBtn = overlay.querySelector('#playerHome');
     closeBtn.addEventListener('click', close);
     homeBtn.addEventListener('click', function () {
@@ -555,6 +559,30 @@
     }
     zapBanner.classList.add('show');
     zapBannerTimer = setTimeout(function () { zapBanner.classList.remove('show'); }, 3000);
+  }
+
+  // Bandeau en bas de l'écran, contrairement au bandeau de zapping
+  // ci-dessus (en haut, temporaire) : le nom du programme en cours reste
+  // affiché en permanence tant que la chaîne joue, pas seulement au
+  // moment du zapping — rafraîchi périodiquement (setupProgBarRefresh)
+  // puisque le programme change au fil du temps sans que l'utilisateur ne
+  // fasse rien.
+  function updateProgBar(name, epgKey) {
+    if (!progBar) return;
+    var info = (global.AppZap && global.AppZap.epgNow) ? global.AppZap.epgNow(epgKey, name) : null;
+    if (info && info.now) {
+      progBar.textContent = '▶ ' + info.now.titre;
+      progBar.style.display = '';
+    } else {
+      progBar.style.display = 'none';
+    }
+  }
+
+  function setupProgBarRefresh(name, epgKey) {
+    clearInterval(progBarTimer);
+    if (!currentIsLive) { if (progBar) progBar.style.display = 'none'; return; }
+    updateProgBar(name, epgKey);
+    progBarTimer = setInterval(function () { updateProgBar(name, epgKey); }, 60000);
   }
 
   // ---------- Enregistrement (chaînes en direct uniquement, APK Android —
@@ -1002,10 +1030,12 @@
     updateTracksVisibility();
     if (currentIsLive) showZapBanner(originalTitle, opts && opts.epgKey, opts && opts.logo);
     else if (zapBanner) zapBanner.classList.remove('show');
+    setupProgBarRefresh(originalTitle, opts && opts.epgKey);
   }
 
   function close() {
     clearLoadTimeout();
+    clearInterval(progBarTimer);
     saveProgress(true);
     if (document.pictureInPictureElement === video) { document.exitPictureInPicture().catch(function () {}); }
     destroyPlayers();

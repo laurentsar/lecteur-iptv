@@ -294,6 +294,14 @@ button.ghost { background: var(--card2); color: var(--text); }
 .player-close { background: rgba(255,255,255,.12); border: none; color: #fff; font-size: 18px; border-radius: 8px; padding: 6px 11px; cursor: pointer; flex: none; }
 #playerVideo { flex: 1; width: 100%; background: #000; }
 
+/* ---------- bandeau permanent du programme en cours (bas d'écran) ---------- */
+.prog-bar {
+  color: #fff; font-size: 12.5px; text-align: center; padding: 6px 12px;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+  background: rgba(10,16,24,.85); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; flex: none;
+}
+
 /* ---------- bandeau au zapping (nom + programme EPG en cours) ---------- */
 .zap-banner {
   position: absolute; left: 10px; top: calc(56px + env(safe-area-inset-top)); z-index: 41;
