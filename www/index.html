@@ -304,6 +304,17 @@
     </div>
   </div>
 
+  <div id="confirmModal" class="version-picker" style="display:none">
+    <div class="version-picker-card">
+      <h3 id="confirmModalTitle">Confirmer</h3>
+      <p class="hint" id="confirmModalMsg"></p>
+      <div class="row" style="margin-top:4px">
+        <button id="confirmModalCancel" class="ghost">Annuler</button>
+        <button id="confirmModalOk" class="primary">Confirmer</button>
+      </div>
+    </div>
+  </div>
+
   <div id="pinModal" class="version-picker" style="display:none">
     <div class="version-picker-card">
       <h3>🔒 Code PIN requis</h3>
@@ -362,7 +373,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.57';
+    window.APP_VERSION = '1.58';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

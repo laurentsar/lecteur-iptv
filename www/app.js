@@ -132,6 +132,8 @@
   // pour rester correct même si plusieurs éléments se retrouvaient
   // ouverts en même temps.
   function goBack() {
+    var confirmModal = $id('confirmModal');
+    if (confirmModal && confirmModal.style.display !== 'none') { closeConfirmModal(false); return; }
     var pinModal = $id('pinModal');
     if (pinModal && pinModal.style.display !== 'none') { closePinModal(false); return; }
     var versionPicker = $id('versionPicker');
@@ -465,6 +467,30 @@
     else { $id('pinError').textContent = 'Code incorrect.'; }
   });
   $id('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') $id('pinConfirm').click(); });
+
+  // Modale de confirmation maison plutôt que window.confirm() : dans la
+  // WebView Android de Capacitor, confirm()/alert()/prompt() ne montrent
+  // souvent aucune boîte de dialogue (pas de gestionnaire onJsConfirm natif)
+  // et la promesse implicite se résout silencieusement à false — le bouton
+  // de suppression semble alors ne rien faire, alors que le clic est bien
+  // reçu. Même modale que pour le code PIN (askPin ci-dessus).
+  var confirmResolveCallback = null;
+  function askConfirm(message, title) {
+    return new Promise(function (resolve) {
+      $id('confirmModalTitle').textContent = title || 'Confirmer';
+      $id('confirmModalMsg').textContent = message;
+      $id('confirmModal').style.display = 'flex';
+      confirmResolveCallback = resolve;
+    });
+  }
+  function closeConfirmModal(result) {
+    $id('confirmModal').style.display = 'none';
+    var cb = confirmResolveCallback;
+    confirmResolveCallback = null;
+    if (cb) cb(result);
+  }
+  $id('confirmModalCancel').addEventListener('click', function () { closeConfirmModal(false); });
+  $id('confirmModalOk').addEventListener('click', function () { closeConfirmModal(true); });
 
   // ---------- Export / import de config (sauvegarde, transfert vers un
   // autre appareil — ex. navigateur Tesla) ----------
@@ -1487,8 +1513,10 @@
         var del = el('button', null, '🗑️');
         del.title = 'Supprimer';
         del.addEventListener('click', function () {
-          if (!confirm('Supprimer l’enregistrement « ' + it.title + ' » ?')) return;
-          Recorder.deleteRecording(it.id).then(renderEnregistrements);
+          askConfirm('Supprimer l’enregistrement « ' + it.title + ' » ?').then(function (ok) {
+            if (!ok) return;
+            Recorder.deleteRecording(it.id).then(renderEnregistrements);
+          });
         });
         row.appendChild(del);
         container.appendChild(row);
@@ -1590,10 +1618,12 @@
       var del = el('button', null, '🗑️');
       del.title = 'Supprimer';
       del.addEventListener('click', function () {
-        if (!confirm('Supprimer la playlist « ' + p.nom + ' » ?')) return;
-        Store.removePlaylist(p.id);
-        if (Store.getActivePlaylistId()) setActivePlaylist(Store.getActivePlaylistId()); else { state.playlist = null; updateHeader(); }
-        renderPlaylists();
+        askConfirm('Supprimer la playlist « ' + p.nom + ' » ?').then(function (ok) {
+          if (!ok) return;
+          Store.removePlaylist(p.id);
+          if (Store.getActivePlaylistId()) setActivePlaylist(Store.getActivePlaylistId()); else { state.playlist = null; updateHeader(); }
+          renderPlaylists();
+        });
       });
       row.appendChild(del);
       container.appendChild(row);
