@@ -76,7 +76,7 @@
           <input type="search" id="rechFilms" placeholder="Rechercher un film…" />
           <div id="chipsFilms" class="chips"></div>
         </div>
-        <div id="listeFilms" class="grid-cartes"></div>
+        <div id="listeFilms" class="grid-cartes liste"></div>
         <div class="row"><button id="plusFilms" class="ghost" style="display:none">Charger plus</button></div>
       </div>
       <div id="filmDetail" style="display:none"></div>
@@ -89,7 +89,7 @@
           <input type="search" id="rechSeries" placeholder="Rechercher une série…" />
           <div id="chipsSeries" class="chips"></div>
         </div>
-        <div id="listeSeries" class="grid-cartes"></div>
+        <div id="listeSeries" class="grid-cartes liste"></div>
         <div class="row"><button id="plusSeries" class="ghost" style="display:none">Charger plus</button></div>
       </div>
       <div id="serieDetail" style="display:none"></div>
@@ -107,7 +107,7 @@
     <!-- ================= MA LISTE (favoris + enregistrements) ================= -->
     <section class="panel" id="tab-maliste">
       <div class="cat-title">⭐ Favoris</div>
-      <div id="listeFavoris" class="grid-cartes"></div>
+      <div id="listeFavoris" class="grid-cartes liste"></div>
 
       <div class="cat-title" style="margin-top:22px">📼 Enregistrements</div>
       <div id="enregNonDispo" class="card warn" style="display:none">
@@ -362,7 +362,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.54';
+    window.APP_VERSION = '1.55';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

@@ -1044,7 +1044,7 @@
         var label = section[0], items = section[1], onOpen = section[2];
         if (!items.length) return;
         out.appendChild(el('div', 'cat-title', label));
-        var grid = el('div', 'grid-cartes');
+        var grid = el('div', 'grid-cartes liste');
         items.forEach(function (it) { grid.appendChild(card(it, { onOpen: onOpen })); });
         out.appendChild(grid);
       });
