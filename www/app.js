@@ -124,8 +124,26 @@
   // « App » (contrairement à Maison ci-dessus, jamais reçu comme un simple
   // évènement clavier) : ferme d'abord le lecteur ou le détail ouvert,
   // sinon revient à l'onglet Accueil, sinon quitte l'appli.
+  // Ordre du plus « au-dessus » au plus « en dessous » : chaque étape ne
+  // referme QUE l'élément le plus haut actuellement visible, jamais deux
+  // d'un coup — un retour = un pas en arrière, jamais un saut qui
+  // surprend l'utilisateur. Chaque cas est vérifié par sa propre
+  // condition de visibilité plutôt que supposé à partir d'un autre état,
+  // pour rester correct même si plusieurs éléments se retrouvaient
+  // ouverts en même temps.
   function goBack() {
-    if (window.Player && Player.isOpen && Player.isOpen()) { Player.close(); return; }
+    var pinModal = $id('pinModal');
+    if (pinModal && pinModal.style.display !== 'none') { closePinModal(false); return; }
+    var versionPicker = $id('versionPicker');
+    if (versionPicker && versionPicker.style.display !== 'none') { hideVersionPicker(); return; }
+    if (window.Player && Player.isOpen && Player.isOpen()) {
+      // Sous-panneaux internes au lecteur (télécommande, menu Sources/
+      // Qualité/Audio/Sous-titres) : un premier retour les referme sans
+      // quitter la lecture, un second ferme le lecteur lui-même.
+      if (Player.closeTopOverlay && Player.closeTopOverlay()) return;
+      Player.close();
+      return;
+    }
     var filmDetail = $id('filmDetail');
     if (filmDetail && filmDetail.style.display !== 'none') { filmDetail.style.display = 'none'; $id('filmsRacine').style.display = ''; return; }
     var serieDetail = $id('serieDetail');

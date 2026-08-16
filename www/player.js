@@ -1019,5 +1019,16 @@
 
   function isOpen() { return !!(overlay && overlay.classList.contains('show')); }
 
-  global.Player = { open: open, close: close, isOpen: isOpen };
+  // Utilisé par le bouton retour (goBack() dans app.js) : referme le
+  // sous-panneau du lecteur le plus visible (télécommande, menu Sources/
+  // Qualité/Audio/Sous-titres) au lieu de fermer tout le lecteur d'un
+  // coup — renvoie true si quelque chose a effectivement été refermé,
+  // pour que l'appelant sache s'il doit fermer le lecteur à la place.
+  function closeTopOverlay() {
+    if (remotePanel && remotePanel.style.display !== 'none') { closeRemote(); return true; }
+    if (tracksMenu && tracksMenu.style.display !== 'none') { tracksMenu.style.display = 'none'; return true; }
+    return false;
+  }
+
+  global.Player = { open: open, close: close, isOpen: isOpen, closeTopOverlay: closeTopOverlay };
 })(window);
