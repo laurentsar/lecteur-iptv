@@ -621,15 +621,17 @@
   // Chaînes de bienvenue/pub insérées par certains fournisseurs IPTV, sans
   // contenu réel — masquées par préfixe (insensible à la casse), le
   // fournisseur faisant varier le suffixe ("... TV", "... IPTV", ...).
-  // Ni ancré en début de chaîne (^) ni sensible aux caractères invisibles
-  // (espace insécable, marqueurs de sens d'écriture...) que certains
-  // exports de playlist ajoutent parfois avant le nom — un ancrage strict
-  // ratait silencieusement ces variantes malgré un nom visuellement
-  // identique.
-  var HIDDEN_CHANNEL_NAMES = /welcome ultimate\b/i;
+  // Un premier correctif (caractères invisibles retirés) n'a pas suffi :
+  // encore visible sur le terrain avec le JS pourtant à jour (donc pas un
+  // problème de cache) — un espace insécable ou une autre décoration entre
+  // "welcome" et "ultimate" (espace multiple, tiret...) faisait toujours
+  // échouer le \s littéral du motif. Repli sur la même normalisation que
+  // l'appariement EPG par nom (Epg.normalizeChanName, voir epg.js) :
+  // accents/casse retirés, tout caractère non alphanumérique supprimé — un
+  // simple test de sous-chaîne ne peut alors plus être mis en échec par la
+  // ponctuation ou l'espacement, quels qu'ils soient.
   function isHiddenChannel(name) {
-    var clean = String(name || '').replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, '').trim();
-    return HIDDEN_CHANNEL_NAMES.test(clean);
+    return Epg.normalizeChanName(name).indexOf('welcomeultimate') !== -1;
   }
 
   // Beaucoup de playlists (surtout M3U) listent la même chaîne ou le même
@@ -1164,11 +1166,12 @@
 
   function renderGuide(resetScroll) {
     var pl = state.playlist;
-    var wrap = $id('guideWrap'), moreBtn = $id('plusGuide'), search = $id('rechGuide'), dayLabel = $id('guideDayLabel');
+    var wrap = $id('guideWrap'), moreBtn = $id('plusGuide'), search = $id('rechGuide'), dayLabel = $id('guideDayLabel'), hintEl = $id('guideHint');
 
     if (!pl) {
       wrap.innerHTML = '';
-      wrap.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.'));
+      hintEl.innerHTML = '';
+      hintEl.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.'));
       moreBtn.style.display = 'none';
       return;
     }
@@ -1188,8 +1191,18 @@
       var list = all.filter(function (it) { return matchesSearch(it, q); });
       setZapList(list);
       wrap.innerHTML = '';
+      // Messages de statut rendus hors de #guideWrap : ce conteneur se
+      // scrolle horizontalement pour amener l'heure courante en vue (voir
+      // wrap.scrollLeft plus bas), y compris pour tout son contenu — un
+      // message ⚠️/ℹ️ ajouté DANS wrap (comme avant) démarre au bord gauche
+      // de cette zone scrollable large de 3000px (24h) et se retrouve donc
+      // entraîné hors champ par ce même scroll horizontal, laissant un
+      // vide visuel à sa place — pas un texte invisible, un texte présent
+      // dans le DOM mais scrollé hors de l'écran. D'où #guideHint, une
+      // zone dédiée et non scrollable, juste au-dessus.
+      hintEl.innerHTML = '';
       if (state.epgError) {
-        wrap.appendChild(el('div', 'hint', '⚠️ ' + state.epgError + ' — les chaînes restent utilisables, sans programme affiché.'));
+        hintEl.appendChild(el('div', 'hint', '⚠️ ' + state.epgError + ' — les chaînes restent utilisables, sans programme affiché.'));
       } else if (state.epgDebug && state.epgMap) {
         // Diagnostic : le chargement peut réussir (pas d'erreur) tout en
         // ne contenant aucun programme exploitable pour CES chaînes
@@ -1198,13 +1211,13 @@
         // simplement pas encore chargé.
         var matched = list.filter(function (it) { return (Epg.progsFor(state.epgMap, it.epgKey, it.name) || []).length > 0; }).length;
         if (matched === 0 && list.length > 0) {
-          wrap.appendChild(el('div', 'hint',
+          hintEl.appendChild(el('div', 'hint',
             'ℹ️ Guide chargé (' + state.epgDebug.channelCount + ' chaîne(s) dans le flux EPG) mais aucun programme ne correspond à tes ' +
             list.length + ' chaîne(s) — identifiants/noms différents entre la playlist et la source EPG.'));
         }
       }
       if (!list.length) {
-        wrap.appendChild(el('div', 'hint', state.epgLoading ? 'Chargement du guide…' : 'Aucun résultat.'));
+        hintEl.appendChild(el('div', 'hint', state.epgLoading ? 'Chargement du guide…' : 'Aucun résultat.'));
         moreBtn.style.display = 'none';
         return;
       }
@@ -1294,7 +1307,8 @@
       }
     }).catch(function (err) {
       wrap.innerHTML = '';
-      wrap.appendChild(el('div', 'hint', 'Impossible de charger les chaînes : ' + err.message));
+      hintEl.innerHTML = '';
+      hintEl.appendChild(el('div', 'hint', 'Impossible de charger les chaînes : ' + err.message));
       moreBtn.style.display = 'none';
     });
   }
