@@ -24,6 +24,7 @@
   var K_FAVORIS = 'iptv:favoris';
   var K_TMDB = 'iptv:tmdbKey';
   var K_PIN = 'iptv:parentalPin';
+  var K_VPN_WARN = 'iptv:vpnWarn';
 
   function getPlaylists() { return lsGet(K_PLAYLISTS, []); }
   function savePlaylists(list) { return lsSet(K_PLAYLISTS, list); }
@@ -64,6 +65,12 @@
   // facultatif, aucune catégorie n'est masquée tant qu'il n'est pas défini.
   function getParentalPin() { return lsGet(K_PIN, null); }
   function setParentalPin(pin) { return lsSet(K_PIN, pin || null); }
+
+  // Rappel VPN avant lecture d'une chaîne en direct (voir vpn.js) — activé
+  // par défaut : c'est le but de la fonctionnalité, désactivable dans
+  // Réglages ou via « Ne plus avertir » sur le rappel lui-même.
+  function getVpnWarnEnabled() { return lsGet(K_VPN_WARN, true); }
+  function setVpnWarnEnabled(enabled) { return lsSet(K_VPN_WARN, !!enabled); }
 
   // Export/import de config (sauvegarde, transfert vers un autre appareil —
   // ex. le navigateur embarqué d'une Tesla, où retaper un compte Xtream au
@@ -183,6 +190,7 @@
     getActivePlaylistId: getActivePlaylistId, setActivePlaylistId: setActivePlaylistId,
     getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
     getParentalPin: getParentalPin, setParentalPin: setParentalPin,
+    getVpnWarnEnabled: getVpnWarnEnabled, setVpnWarnEnabled: setVpnWarnEnabled,
     getFavoris: getFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
     getProgress: getProgress, setProgress: setProgress, clearProgress: clearProgress,
     exportConfig: exportConfig, importConfig: importConfig,

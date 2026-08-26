@@ -171,6 +171,24 @@ pas de contrôles lecture/pause utiles depuis une mini-fenêtre pour de la VOD).
   le navigateur) : PiP système Android (Media3 ExoPlayer), avec réduction
   automatique en appuyant sur le bouton Accueil pendant une lecture en direct.
 
+## Rappel VPN avant lecture (direct, APK Android uniquement)
+
+Sans VPN actif, le réseau utilisé (FAI, box, wifi public) peut voir
+l'adresse du flux vidéo consulté en direct — pas son contenu, mais la
+chaîne regardée reste déductible. L'app n'embarque **aucun tunnel VPN** :
+elle s'appuie sur un VPN système déjà installé (WireGuard ou autre), qui
+prend alors en charge tout son trafic automatiquement, sans rien à
+configurer dans l'app une fois activé.
+
+- Réglages → **Confidentialité** affiche si un VPN système est actif, et
+  propose un raccourci vers les réglages VPN de l'appareil.
+- Rappel optionnel (activé par défaut) avant de lancer une chaîne en
+  direct si aucun VPN n'est détecté, avec le choix d'activer un VPN ou de
+  continuer sans ; désactivable définitivement depuis ce rappel ou
+  Réglages.
+- Non disponible sur la PWA/navigateur/iPhone : aucune API web ne permet
+  de détecter un VPN actif.
+
 ## Langue audio et sous-titres
 
 Un bouton 🌐 dans le lecteur ouvre la liste des pistes audio et sous-titres
@@ -302,7 +320,9 @@ Playlists, identifiants et favoris restent **uniquement sur l'appareil**
 (stockage local / IndexedDB). Rien n'est envoyé ailleurs qu'au serveur IPTV
 que tu as toi-même renseigné — seule exception, opt-in : si tu actives
 l'enrichissement TMDB (voir plus haut), le titre des films consultés est
-envoyé à TMDB pour compléter leur fiche.
+envoyé à TMDB pour compléter leur fiche. Pour masquer le flux vidéo
+lui-même au réseau local/FAI, voir [Rappel VPN avant lecture](#rappel-vpn-avant-lecture-direct-apk-android-uniquement)
+ci-dessus.
 
 ## Installation
 

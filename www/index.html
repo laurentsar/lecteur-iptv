@@ -287,6 +287,15 @@
         <h2>Confidentialité</h2>
         <p class="hint">Tes playlists, identifiants et favoris restent uniquement sur cet appareil (stockage local). Rien n'est envoyé ailleurs qu'au serveur IPTV que tu as toi-même renseigné.</p>
       </div>
+      <div class="card" id="vpnCard">
+        <h2>🔒 Masquer le flux vidéo (VPN)</h2>
+        <p class="hint">Sans VPN actif, ton réseau (FAI, box, wifi public) peut voir l'adresse du flux vidéo consulté en direct — pas son contenu, mais la chaîne regardée reste déductible. Active un VPN sur l'appareil (WireGuard ou autre) pour le masquer : une fois activé, tout le trafic de l'appli y passe automatiquement, rien d'autre à faire ici.</p>
+        <p class="hint" id="vpnStatus"></p>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="vpnWarnToggle" /> Avertir avant de lancer une chaîne en direct si aucun VPN n'est actif</label>
+        <div class="row" style="margin-top:8px">
+          <button id="btnOpenVpnSettings" class="ghost">Ouvrir les réglages VPN</button>
+        </div>
+      </div>
       <div class="card">
         <h2>À propos</h2>
         <p class="hint">Lecteur IPTV — version <span id="verText"></span>. Lecture HLS assurée par <a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a> (licence Apache-2.0).</p>
@@ -312,6 +321,18 @@
       <div class="row" style="margin-top:4px">
         <button id="confirmModalCancel" class="ghost">Annuler</button>
         <button id="confirmModalOk" class="primary">Confirmer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="vpnWarnModal" class="version-picker" style="display:none">
+    <div class="version-picker-card">
+      <h3>Aucun VPN actif</h3>
+      <p class="hint">Ton réseau (FAI, box, wifi public) peut voir l'adresse du flux vidéo de cette chaîne. Active un VPN pour la masquer.</p>
+      <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="vpnWarnDismiss" /> Ne plus avertir</label>
+      <div class="row" style="margin-top:8px">
+        <button id="vpnWarnSettings" class="ghost">Activer un VPN</button>
+        <button id="vpnWarnContinue" class="primary">Regarder quand même</button>
       </div>
     </div>
   </div>
@@ -374,7 +395,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.68';
+    window.APP_VERSION = '1.69';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
@@ -382,6 +403,7 @@
   <script src="net.js"></script>
   <script src="hls-native-loader.js"></script>
   <script src="store.js"></script>
+  <script src="vpn.js"></script>
   <script src="crypto.js"></script>
   <script src="m3u.js"></script>
   <script src="xtream.js"></script>

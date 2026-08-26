@@ -1010,7 +1010,23 @@
     }
   }
 
+  // Rappel VPN (vpn.js) avant une chaîne en direct — pas pour la radio (flux
+  // audio, même logique que le direct côté fournisseur mais hors du besoin
+  // exprimé) ni pour la VOD/les séries. Passe par un aller-retour async
+  // uniquement quand c'est pertinent (natif + réglage activé) pour ne rien
+  // changer au chemin synchrone existant dans les autres cas.
   function open(url, title, opts) {
+    var isLiveVideo = !!(opts && opts.live) && !(opts && opts.radio);
+    if (isLiveVideo && global.Vpn && global.Vpn.isAvailable()) {
+      global.Vpn.confirmBeforePlay().then(function (proceed) {
+        if (proceed) doOpen(url, title, opts);
+      });
+      return;
+    }
+    doOpen(url, title, opts);
+  }
+
+  function doOpen(url, title, opts) {
     if (overlay) saveProgress(true); // mémorise la position du contenu quitté avant de basculer
     originalUrl = url;
     originalTitle = title || '';

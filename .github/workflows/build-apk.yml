@@ -69,6 +69,11 @@ jobs:
       - name: Add radio background playback
         run: python3 ci/patch_radio_background.py
 
+      # Statut VPN (Réglages + rappel avant lecture d'une chaîne en direct) —
+      # lit juste si un VPN système est actif, ne fait tourner aucun tunnel.
+      - name: Add VPN status plugin
+        run: python3 ci/patch_vpn_check.py
+
       # x86/x86_64 ne servent qu'aux émulateurs : les exclure réduit
       # sensiblement la taille de l'APK (libs natives ExoPlayer/Cast/FFmpeg
       # en 2 ABI au lieu de 4).
