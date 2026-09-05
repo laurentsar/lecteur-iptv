@@ -12,6 +12,12 @@ on:
 # compte, patch_signing.py doit passer avant que Gradle lise sa configuration.
 jobs:
   build:
+    # Un workflow appelé ne peut pas s'octroyer plus de droits que son
+    # appelant : sans ce bloc, la publication de la release échoue au parsing
+    # (« nested job is requesting contents: write, but is only allowed
+    # contents: read »), car le jeton par défaut du dépôt est en lecture seule.
+    permissions:
+      contents: write
     uses: laurentsar/app-kit/.github/workflows/build-apk.yml@v1
     with:
       apk_name: lecteur-iptv
