@@ -100,7 +100,34 @@
     else if (name === 'radio') renderRadio();
     else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
     else if (name === 'reglages') renderPlaylists();
+    focusActiveTab();
   }
+  // Télécommande TV : livré à lui-même, le WebView place le curseur dans le
+  // premier champ de recherche de la page au démarrage. Le clavier virtuel
+  // s'ouvre alors par-dessus l'interface, et le D-pad n'en sort qu'au prix de
+  // plusieurs pressions — l'appli paraît bloquée dans la barre de recherche.
+  // On ramène donc le focus sur l'onglet actif (un <button> : jamais de
+  // clavier virtuel), point de départ naturel de la navigation D-pad, au
+  // démarrage puis après chaque changement d'onglet.
+  //
+  // Le focus n'est jamais volé à autre chose qu'un champ de recherche ou au
+  // néant : un champ de saisie ouvert dans une fenêtre (phrase secrète
+  // d'import, code PIN) garde le sien, et le rattrapage du démarrage cesse
+  // dès que l'utilisateur a agi lui-même — il peut vouloir chercher aussitôt.
+  var userActed = false;
+  ['pointerdown', 'keydown'].forEach(function (evt) {
+    document.addEventListener(evt, function () { userActed = true; }, true);
+  });
+  function focusActiveTab() {
+    var tab = document.querySelector('.tab.active');
+    if (!tab) return;
+    var ae = document.activeElement;
+    var estRecherche = ae && ae.tagName === 'INPUT' && ae.type === 'search';
+    if (ae && ae !== document.body && !estRecherche) return;
+    if (estRecherche) ae.blur();
+    tab.focus();
+  }
+
   document.getElementById('tabs').addEventListener('click', function (e) {
     var b = e.target.closest('.tab');
     if (b) goTab(b.dataset.tab);
@@ -1809,6 +1836,13 @@
     var activeId = Store.getActivePlaylistId();
     if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
     renderAccueil();
+    // Démarrage : voir focusActiveTab(). Le WebView peut placer le curseur
+    // dans un champ de recherche après le premier rendu, parfois après le
+    // chargement des listes — d'où plusieurs tentatives espacées plutôt
+    // qu'une seule, abandonnées dès le premier geste de l'utilisateur.
+    [0, 200, 600, 1200].forEach(function (d) {
+      setTimeout(function () { if (!userActed) focusActiveTab(); }, d);
+    });
     // Le service worker (cache-first du shell applicatif) n'a de sens que
     // pour la PWA/le web (GitHub Pages), où il permet un fonctionnement
     // hors-ligne. Sur l'APK Android, les fichiers sont déjà à jour à chaque

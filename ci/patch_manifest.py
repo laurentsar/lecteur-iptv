@@ -54,10 +54,9 @@ else:
 
 # Compatibilité TV Android : sans ces déclarations, le Play Store et certains
 # lanceurs TV considèrent l'appli incompatible avec les appareils sans écran
-# tactile (Android TV, boîtiers IPTV). required="false" pour les deux : on ne
-# fournit pas de lanceur Leanback dédié, seulement une installation/lecture
-# correcte via l'activité standard, navigable au D-pad (voir makeFocusable()
-# dans app.js).
+# tactile (Android TV, boîtiers IPTV). required="false" pour les deux :
+# l'activité standard, navigable au D-pad (voir makeFocusable() dans app.js),
+# sert aussi bien le téléphone que la télévision.
 s = open(mf).read()
 if "android.software.leanback" not in s:
     features = (
@@ -69,3 +68,32 @@ if "android.software.leanback" not in s:
     print("TV Android : uses-feature leanback/touchscreen ajoutés")
 else:
     print("uses-feature leanback déjà présent")
+
+# Visibilité sur l'accueil Google TV : le lanceur de Google TV / Android TV
+# n'affiche QUE les activités déclarant la catégorie LEANBACK_LAUNCHER —
+# LAUNCHER seule (celle que génère Capacitor) suffit à installer et à lancer
+# l'appli, mais elle reste alors introuvable depuis l'écran d'accueil, visible
+# uniquement via Paramètres > Applications > Voir toutes les applications.
+# On ajoute donc la catégorie à l'intent-filter existant de MainActivity, plus
+# la bannière 320x180 exigée par ces lanceurs (produite par ci/set_icons.py) :
+# sans android:banner, l'entrée s'affiche vide ou est ignorée.
+s = open(mf).read()
+if "LEANBACK_LAUNCHER" not in s:
+    s2, n = re.subn(r'(<category android:name="android\.intent\.category\.LAUNCHER"\s*/>)',
+                    r'\1\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />',
+                    s, count=1)
+    if n:
+        open(mf, "w").write(s2)
+        print("TV Android : LEANBACK_LAUNCHER ajouté (visible sur l'accueil Google TV)")
+    else:
+        print("ATTENTION : category LAUNCHER introuvable — LEANBACK_LAUNCHER non ajouté")
+else:
+    print("LEANBACK_LAUNCHER déjà présent")
+
+s = open(mf).read()
+if "android:banner" not in s:
+    s = re.sub(r"(<application\b)", r'\1\n        android:banner="@drawable/tv_banner"', s, count=1)
+    open(mf, "w").write(s)
+    print("TV Android : bannière @drawable/tv_banner déclarée")
+else:
+    print("android:banner déjà présent")

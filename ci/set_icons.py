@@ -42,4 +42,19 @@ COLOR_XML = f'''<?xml version="1.0" encoding="utf-8"?>
 '''
 open(f'{RES}/values/ic_launcher_background.xml', 'w').write(COLOR_XML)
 
+# Bannière Android TV (android:banner, déclarée par ci/patch_manifest.py) :
+# le lanceur Google TV représente chaque appli par cette image 320x180 et non
+# par l'icône carrée. Logo centré sur le fond sombre de l'appli — la même
+# identité que l'icône, sans texte : le nom de l'appli est déjà affiché sous
+# la vignette par le lanceur.
+import os
+
+BANNER_W, BANNER_H = 320, 180
+banner = Image.new('RGBA', (BANNER_W, BANNER_H), BG_COLOR)
+logo = MARK.resize((140, 140), Image.LANCZOS)
+banner.paste(logo, ((BANNER_W - 140) // 2, (BANNER_H - 140) // 2), logo)
+os.makedirs(f'{RES}/drawable-xhdpi', exist_ok=True)
+banner.convert('RGB').save(f'{RES}/drawable-xhdpi/tv_banner.png')
+
 print('Icônes Android remplacées par le logo du Lecteur IPTV')
+print('Bannière Android TV générée (drawable-xhdpi/tv_banner.png)')
