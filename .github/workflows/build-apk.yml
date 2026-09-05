@@ -5,130 +5,27 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+# La chaîne de build est mutualisée avec les autres applications Capacitor
+# (laurentsar/app-kit) : seules les particularités de cette app restent ici.
+# NDK/CMake pour l'extension FFmpeg (décodage AC3/E-AC3/DTS/TrueHD), Pillow
+# pour les icônes et la bannière TV, et la liste ordonnée des patches — l'ordre
+# compte, patch_signing.py doit passer avant que Gradle lise sa configuration.
 jobs:
   build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    # Le mot de passe du keystore n'a pas de valeur de confidentialité propre
-    # ici : la clé privée elle-même est déjà versionnée en clair dans
-    # signing/release.keystore (voir signing/README.md). Il n'y a donc rien
-    # à protéger de plus en le gardant dans un secret GitHub.
-    env:
-      SIGNING_PASSWORD: 7aacb228133ae3fb38becdb695d2391a
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      # Nécessaires à la compilation native de l'extension FFmpeg
-      # (native/decoder-ffmpeg/, décodage audio AC3/E-AC3/DTS/TrueHD).
-      - name: Install NDK and CMake
-        run: yes | sdkmanager "cmake;3.22.1" "ndk;25.1.8937393"
-
-      - name: Install JS deps
-        run: npm install --no-audit --no-fund
-
-      # android/ n'est pas versionné : on le régénère à chaque build, ce qui
-      # évite de maintenir à la main un dossier généré de 400 fichiers.
-      - name: Regenerate Android platform
-        run: |
-          rm -rf android
-          npx cap add android
-
-      - name: Configure release signing
-        run: python3 ci/patch_signing.py
-
-      - name: Allow local HTTP (serveurs IPTV en http://)
-        run: python3 ci/patch_manifest.py
-
-      - name: Add native video player (ExoPlayer)
-        run: python3 ci/patch_native_player.py
-
-      # Enregistrement DVR (service en avant-plan, manuel ou programmé
-      # depuis le Guide) — doit tourner appli fermée, donc natif.
-      - name: Add background recorder (DVR)
-        run: python3 ci/patch_recorder.py
-
-      # Radio en fond sonore (écran verrouillé, appli en arrière-plan) —
-      # service en avant-plan avec notification lecture/pause, même schéma
-      # que le DVR ci-dessus.
-      - name: Add radio background playback
-        run: python3 ci/patch_radio_background.py
-
-      # x86/x86_64 ne servent qu'aux émulateurs : les exclure réduit
-      # sensiblement la taille de l'APK (libs natives ExoPlayer/Cast/FFmpeg
-      # en 2 ABI au lieu de 4).
-      - name: Restrict to real-device ABIs (smaller APK)
-        run: python3 ci/patch_abi.py
-
-      - name: Sync versionName from www/version.json
-        run: python3 ci/set_version.py
-
-      - name: Set launcher icons
-        run: |
-          pip install --quiet Pillow
-          python3 ci/set_icons.py
-
-      - name: Sync Capacitor (Android)
-        run: npx cap sync android
-
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
-
-      # La clé de signature est versionnée dans signing/release.keystore (voir
-      # signing/README.md pour l'explication du choix). Elle assure une
-      # identité de signature stable d'une release à l'autre, ce qui permet
-      # à la bannière de mise à jour de l'app d'installer par-dessus
-      # l'existant sans désinstallation manuelle.
-      - name: Restore signing keystore
-        run: |
-          mkdir -p android/app
-          cp signing/release.keystore android/app/signing.p12
-
-      - name: Build release APK (signed)
-        working-directory: android
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ env.SIGNING_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon
-
-      - name: Read app version
-        id: version
-        run: |
-          VERSION=$(grep -oP 'versionName\s+"\K[^"]+' android/app/build.gradle)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version détectée : $VERSION"
-
-      - name: Rename APK with version
-        run: cp android/app/build/outputs/apk/release/app-release.apk lecteur-iptv-${{ steps.version.outputs.version }}.apk
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lecteur-iptv-release-apk
-          path: lecteur-iptv-${{ steps.version.outputs.version }}.apk
-          if-no-files-found: error
-
-      - name: Create / update GitHub Release
-        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Lecteur IPTV v${{ steps.version.outputs.version }}
-          files: lecteur-iptv-${{ steps.version.outputs.version }}.apk
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    uses: laurentsar/app-kit/.github/workflows/build-apk.yml@v1
+    with:
+      apk-name: lecteur-iptv
+      release-name: Lecteur IPTV
+      regen-android: true
+      ndk: true
+      pillow: true
+      ci-scripts: >-
+        ci/patch_signing.py
+        ci/patch_manifest.py
+        ci/patch_native_player.py
+        ci/patch_recorder.py
+        ci/patch_radio_background.py
+        ci/patch_abi.py
+        ci/set_version.py
+        ci/set_icons.py
+    secrets: inherit

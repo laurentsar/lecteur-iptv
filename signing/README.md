@@ -1,43 +1,34 @@
 # Clé de signature
 
-`release.keystore` est un keystore PKCS12 auto-signé, généré pour cette
-app uniquement, alias `app`. Il est **volontairement versionné** dans ce
-dépôt, ce qui est un choix inhabituel — voici pourquoi.
+La clé de signature Android de cette app vit désormais **hors du dépôt**, dans
+les secrets GitHub Actions `ANDROID_KEYSTORE_B64` et
+`ANDROID_KEYSTORE_PASSWORD`, restaurés au moment du build par le workflow
+partagé (`laurentsar/app-kit`). Copie locale de référence : `~/app-kit/keys`.
 
-## Pourquoi une clé versionnée plutôt qu'un secret GitHub
+## Ce qui a changé (2026-09-05)
 
-Normalement une clé de signature Android va dans un secret GitHub Actions
-chiffré (`ANDROID_KEYSTORE_B64`), jamais dans le dépôt. Ici, aucun outil
-disponible ne permettait de créer ce secret par programme, et la session
-n'a pas non plus les droits nécessaires pour le faire à la place de
-l'utilisateur. Deux options restaient :
+`release.keystore` était volontairement versionné ici, faute d'outil pour créer
+un secret GitHub par programme au moment où l'app a été créée. Le dépôt étant
+public, la clé privée **et** son mot de passe (écrit en clair dans le workflow)
+étaient téléchargeables par n'importe qui : un tiers pouvait signer un APK qui
+s'installe par-dessus l'app légitime, comme une mise à jour. C'est le même trou
+que la rotation de juillet 2026 a bouché sur les autres apps.
 
-1. **Pas de clé stable du tout** (build debug à chaque fois) : chaque
-   nouvelle version aurait une signature différente, et Android refuse
-   d'installer une mise à jour signée différemment de la précédente — la
-   bannière « nouvelle version disponible » de l'app aurait cessé de
-   fonctionner (désinstallation manuelle nécessaire à chaque mise à jour).
-2. **Une clé versionnée** : la signature reste stable d'une release à
-   l'autre, les mises à jour s'installent normalement par-dessus. En
-   contrepartie, la clé privée est visible par quiconque peut lire ce
-   dépôt.
+La clé a été déplacée telle quelle, sans rotation : la signature reste
+identique, donc les installations existantes (téléphone, TV TCL, Freebox Player
+POP) continuent de recevoir les mises à jour sans désinstallation.
 
-Le choix retenu est le n°2, pour garder les mises à jour fonctionnelles.
+Empreinte attendue des APK publiés :
 
-## Ce que ça implique concrètement
+    sha256 AB:9B:9A:1C:BD:8B:00:91:20:9F:B5:76:EA:6E:25:FB:E4:FA:5B:6C:59:F9:CC:BA:25:7C:9F:72:88:B0:63:21
+    subject C=FR, O=laurentsar, OU=Perso, CN=Lecteur IPTV
 
-- Ce dépôt est **public** : n'importe qui peut donc récupérer cette clé et
-  signer un APK qu'Android acceptera comme « mise à jour » de cette app
-  s'il arrive à le faire installer sur ton téléphone (ce qui demande déjà
-  d'accepter une installation manuelle — Android ne l'installe jamais tout
-  seul). Ce n'est pas un risque nul, mais il reste limité pour une app
-  perso sideloadée, sans compte, sans données sensibles, et absente du
-  Play Store.
-- Pour supprimer ce risque : passer le dépôt en privé, ou régénérer une
-  vraie clé stockée uniquement dans un secret GitHub Actions
-  (`ANDROID_KEYSTORE_B64` / `ANDROID_KEYSTORE_PASSWORD`) et adapter le
-  workflow (`.github/workflows/build-apk.yml`) pour revenir à ce
-  fonctionnement — auquel cas ce dossier `signing/` peut être supprimé.
-- Le mot de passe du keystore est dans le workflow en clair : il n'a pas
-  de valeur de confidentialité propre puisque la clé privée elle-même est
-  déjà publique.
+Vérifier un APK téléchargé : `python3 ~/app-kit/tools/verify_apk_cert.py`.
+
+## Rotation éventuelle
+
+La clé reste exposée dans l'historique git. La roter fermerait définitivement
+le sujet, mais Android refuse une mise à jour signée différemment : il faudrait
+désinstaller puis réinstaller l'app sur **tous** les appareils, en perdant les
+données locales non exportées. À décider séparément, pas à l'occasion d'un
+build.
