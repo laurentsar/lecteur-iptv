@@ -14,12 +14,12 @@ jobs:
   build:
     uses: laurentsar/app-kit/.github/workflows/build-apk.yml@v1
     with:
-      apk-name: lecteur-iptv
-      release-name: Lecteur IPTV
-      regen-android: true
+      apk_name: lecteur-iptv
+      release_name: Lecteur IPTV
+      regen_android: true
       ndk: true
       pillow: true
-      ci-scripts: >-
+      ci_scripts: >-
         ci/patch_signing.py
         ci/patch_manifest.py
         ci/patch_native_player.py
