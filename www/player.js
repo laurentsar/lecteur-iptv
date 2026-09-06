@@ -44,7 +44,7 @@
   var currentLogo = '';
   var triedNativeFallback = false, triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
-  var remoteBtn, remotePanel;
+  var remoteBtn, remotePanel, castTvBtn;
   var fullscreenBtn, homeBtn;
   var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg;
   var progBar;
@@ -109,6 +109,7 @@
       '  <span id="playerTitle" class="player-title"></span>' +
       '  <google-cast-launcher id="castLauncher" class="player-cast" style="display:none"></google-cast-launcher>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
+      '  <button id="playerCastTv" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📺</button>' +
       '  <button id="playerRemote" class="player-cast" aria-label="Télécommande" style="display:none">🕹️</button>' +
       '  <button id="playerPip" class="player-cast" aria-label="Picture-in-Picture" style="display:none">⧉</button>' +
       '  <button id="playerRecord" class="player-cast" aria-label="Enregistrer" style="display:none">⏺</button>' +
@@ -163,6 +164,7 @@
     tracksBtn = overlay.querySelector('#playerTracks');
     tracksMenu = overlay.querySelector('#playerTracksMenu');
     castLauncher = overlay.querySelector('#castLauncher');
+    castTvBtn = overlay.querySelector('#playerCastTv');
     remoteBtn = overlay.querySelector('#playerRemote');
     remotePanel = overlay.querySelector('#remotePanel');
     fullscreenBtn = overlay.querySelector('#playerFullscreen');
@@ -185,6 +187,7 @@
     setupAirplay();
     setupChromecast();
     updateCastAvailability();
+    setupCastTv();
     setupPip();
     setupTracks();
     setupRecording();
@@ -1037,11 +1040,29 @@
   // (Media3 ExoPlayer, hors WebView). Décode souvent des flux que le
   // navigateur refuse (codec, CORS). Renvoie false si indisponible (PWA,
   // ou plugin absent) pour laisser la suite de la chaîne de repli agir.
-  function tryNativePlayer(url, title) {
-    var nativePlayer = global.Capacitor && global.Capacitor.isNativePlatform && global.Capacitor.isNativePlatform() &&
-      global.Capacitor.Plugins && global.Capacitor.Plugins.NativePlayer;
+  function nativePlayerPlugin() {
+    return (global.Capacitor && global.Capacitor.isNativePlatform && global.Capacitor.isNativePlatform() &&
+      global.Capacitor.Plugins && global.Capacitor.Plugins.NativePlayer) || null;
+  }
+
+  // Diffusion vers la TV depuis l'APK : le SDK Cast web (google-cast-launcher)
+  // n'existe que dans Chrome, pas dans la WebView d'une application Android —
+  // le bouton de l'en-tête reste donc invisible sur téléphone. Le bouton Cast
+  // *natif* (MediaRouteButton + Media3 CastPlayer, voir
+  // ci/patch_native_player.py) vit, lui, dans l'écran de lecture natif : on y
+  // bascule sur demande, sans attendre un échec de lecture.
+  function setupCastTv() {
+    if (!nativePlayerPlugin()) return; // PWA : le launcher Cast web suffit
+    castTvBtn.style.display = '';
+    castTvBtn.addEventListener('click', function () {
+      tryNativePlayer(originalUrl, originalTitle, 'Ouverture du lecteur natif (diffusion TV)…');
+    });
+  }
+
+  function tryNativePlayer(url, title, message) {
+    var nativePlayer = nativePlayerPlugin();
     if (!nativePlayer) return false;
-    setStatus('Échec — nouvelle tentative avec le lecteur vidéo natif de l’appareil…');
+    setStatus(message || 'Échec — nouvelle tentative avec le lecteur vidéo natif de l’appareil…');
     nativePlayer.open({ url: url, title: title || '', live: currentIsLive }).then(function () {
       close();
     }).catch(function () {
