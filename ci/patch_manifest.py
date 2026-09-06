@@ -97,3 +97,24 @@ if "android:banner" not in s:
     print("TV Android : bannière @drawable/tv_banner déclarée")
 else:
     print("android:banner déjà présent")
+
+# Sauvegarde/restauration automatique Android (android:allowBackup) : laissée à
+# "true" par défaut, elle autorise le système à REMETTRE une ancienne copie des
+# données de l'app après une installation — y compris une copie vide faite juste
+# après une première ouverture. Sur une app dont toute la configuration vit dans
+# le localStorage de la WebView, ça se traduit par « l'appli est repartie de
+# zéro » sans que rien n'ait été désinstallé. La sauvegarde utile est celle de
+# l'app elle-même, vers Home Assistant (www/autobackup.js) : on coupe donc celle
+# du système, qui n'apporte rien ici et peut écraser les données en place.
+s = open(mf).read()
+if 'android:allowBackup="false"' not in s:
+    if 'android:allowBackup' in s:
+        s = re.sub(r'android:allowBackup="[^"]*"', 'android:allowBackup="false"', s, count=1)
+    else:
+        s = re.sub(r"(<application\b)", r'\1\n        android:allowBackup="false"', s, count=1)
+    if 'android:dataExtractionRules' not in s and 'android:fullBackupContent' not in s:
+        s = re.sub(r"(<application\b)", r'\1\n        android:fullBackupContent="false"', s, count=1)
+    open(mf, "w").write(s)
+    print("AndroidManifest.xml : sauvegarde système désactivée (allowBackup=false)")
+else:
+    print("AndroidManifest.xml : allowBackup déjà désactivé")
