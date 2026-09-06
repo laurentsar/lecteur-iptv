@@ -97,10 +97,35 @@
     return !!(c.url && c.token);
   }
 
+  // Dans la WebView Capacitor, l'origine est https://localhost : Home Assistant
+  // refuse ce CORS (« Failed to fetch »). On passe donc par la requête native.
+  function nativeHttp() {
+    var cap = global.Capacitor;
+    if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
+    return (cap.Plugins && cap.Plugins.CapacitorHttp) || null;
+  }
+
   function req(path, opt) {
     var c = cfg();
     if (!enabled()) return Promise.reject(new Error('Home Assistant non configuré'));
     opt = opt || {};
+    var http = nativeHttp();
+    if (http) {
+      return http.request({
+        url: c.url + path,
+        method: opt.method || 'GET',
+        headers: {
+          Authorization: 'Bearer ' + c.token,
+          'Content-Type': 'application/json'
+        },
+        data: opt.body || undefined,
+        responseType: 'json'
+      }).then(function (res) {
+        if (res.status < 200 || res.status >= 300) throw new Error('HTTP ' + res.status);
+        if (res.status === 204 || res.data == null || res.data === '') return null;
+        return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      });
+    }
     return fetch(c.url + path, {
       method: opt.method || 'GET',
       headers: {
