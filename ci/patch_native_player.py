@@ -83,6 +83,8 @@ import androidx.media3.cast.SessionAvailabilityListener;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.TrackGroup;
@@ -109,6 +111,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private View topBar;
     private ImageButton tracksBtn;
     private String mediaUrl;
+    private String mediaTitle;
     private boolean isLive; // Picture-in-Picture : proposé et auto-activé au
     // bouton Accueil uniquement pour le direct (pas d'intérêt pour la VOD,
     // pas de contrôles lecture/pause depuis la mini-fenêtre système).
@@ -145,6 +148,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         mediaUrl = getIntent().getStringExtra("url");
         String title = getIntent().getStringExtra("title");
+        mediaTitle = title == null ? "" : title;
         isLive = getIntent().getBooleanExtra("live", false);
 
         TextView titleView = findViewById(R.id.playerTitle);
@@ -271,7 +275,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         timeoutHandler.removeCallbacks(timeoutRunnable);
         if (mediaUrl != null && !mediaUrl.isEmpty()) {
-            newPlayer.setMediaItem(MediaItem.fromUri(mediaUrl), position);
+            newPlayer.setMediaItem(buildMediaItem(newPlayer == castPlayer), position);
             newPlayer.prepare();
             newPlayer.setPlayWhenReady(playWhenReady);
             timeoutHandler.postDelayed(timeoutRunnable, LOAD_TIMEOUT_MS);
@@ -279,6 +283,55 @@ public class NativePlayerActivity extends AppCompatActivity {
             statusView.setText("Lecture impossible : URL manquante.");
             statusView.setVisibility(View.VISIBLE);
         }
+    }
+
+    // ExoPlayer devine le format d'après l'URL et le contenu ; CastPlayer, non :
+    // Media3 exige un mimeType explicite sur le MediaItem, sinon la diffusion
+    // échoue sans rien afficher sur la télé. Et le Chromecast ne sait pas lire
+    // du MPEG-TS brut (le format habituel des liens IPTV en direct) : on lui
+    // demande donc la variante HLS de la même chaîne, celle que le lecteur web
+    // utilise déjà comme repli.
+    private MediaItem buildMediaItem(boolean forCast) {
+        if (!forCast) {
+            return MediaItem.fromUri(mediaUrl);
+        }
+        String url = castUrl(mediaUrl);
+        String mime = castMimeType(url);
+        MediaItem.Builder b = new MediaItem.Builder()
+                .setUri(url)
+                .setMediaMetadata(new MediaMetadata.Builder().setTitle(mediaTitle).build());
+        if (mime != null) {
+            b.setMimeType(mime);
+        }
+        return b.build();
+    }
+
+    private String castUrl(String url) {
+        String sansQuery = url;
+        int coupe = sansQuery.indexOf('?');
+        String query = "";
+        if (coupe >= 0) {
+            query = sansQuery.substring(coupe);
+            sansQuery = sansQuery.substring(0, coupe);
+        }
+        String bas = sansQuery.toLowerCase();
+        if (bas.endsWith(".m3u8") || bas.endsWith(".mpd") || bas.endsWith(".mp4") || bas.endsWith(".webm")) {
+            return url;
+        }
+        // .ts, .mkv ou pas d'extension du tout (Xtream sert souvent le direct
+        // sans suffixe) : le même flux existe presque toujours en .m3u8.
+        int point = sansQuery.lastIndexOf('.');
+        int slash = sansQuery.lastIndexOf('/');
+        String base = (point > slash) ? sansQuery.substring(0, point) : sansQuery;
+        return base + ".m3u8" + query;
+    }
+
+    private String castMimeType(String url) {
+        String bas = url.toLowerCase();
+        if (bas.contains(".m3u8")) return MimeTypes.APPLICATION_M3U8;
+        if (bas.contains(".mpd")) return MimeTypes.APPLICATION_MPD;
+        if (bas.contains(".webm")) return MimeTypes.VIDEO_WEBM;
+        return MimeTypes.VIDEO_MP4;
     }
 
     private boolean pipAvailable() {

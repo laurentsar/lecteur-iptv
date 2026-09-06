@@ -957,8 +957,15 @@
   function castMimeType(url) {
     if (isM3u8(url)) return 'application/x-mpegurl';
     if (/\.mkv(\?|#|$)/i.test(url)) return 'video/x-matroska';
-    if (isDirectFile(url)) return 'video/mp4';
-    return 'video/mp2t'; // mpeg-ts brut : support variable selon le récepteur Cast
+    return 'video/mp4';
+  }
+
+  // Le récepteur Cast par défaut ne lit pas le MPEG-TS brut, format habituel
+  // des liens IPTV en direct : on lui envoie la variante HLS de la même
+  // chaîne (même bascule que le repli de lecture, voir swapExtToM3u8).
+  function castUrl(url) {
+    if (isM3u8(url) || isDirectFile(url)) return url;
+    return swapExtToM3u8(url);
   }
 
   function castCurrentMedia() {
@@ -967,7 +974,8 @@
     clearLoadTimeout();
     destroyPlayers();
     video.pause();
-    var mediaInfo = new chrome.cast.media.MediaInfo(currentUrl, castMimeType(currentUrl));
+    var urlCast = castUrl(currentUrl);
+    var mediaInfo = new chrome.cast.media.MediaInfo(urlCast, castMimeType(urlCast));
     mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
     mediaInfo.metadata.title = currentTitle || '';
     var request = new chrome.cast.media.LoadRequest(mediaInfo);
