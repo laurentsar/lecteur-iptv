@@ -314,10 +314,17 @@
   // playlist », comme si l'import avait échoué. On en active donc une
   // d'office, sauf si l'utilisateur en avait déjà choisi une.
   function activerPremierePlaylist() {
-    if (Store.getActivePlaylistId()) return;
+    // Store.addPlaylist() désigne déjà la première playlist comme active en
+    // mémoire persistante, mais l'état de l'appli (state.playlist), lui, reste
+    // vide : l'en-tête affiche « Aucune playlist » et les onglets sont vides
+    // jusqu'au prochain démarrage. C'est donc state.playlist — et pas
+    // l'identifiant stocké — qui dit s'il reste quelque chose à faire.
+    if (state.playlist) return;
     var pls = Store.getPlaylists();
     if (!pls.length) return;
-    setActivePlaylist(pls[0].id);
+    var id = Store.getActivePlaylistId();
+    if (!pls.some(function (p) { return p.id === id; })) id = pls[0].id;
+    setActivePlaylist(id);
     refreshOnOpen();
     renderPlaylists();
     renderAccueil();
