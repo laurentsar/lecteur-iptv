@@ -159,7 +159,7 @@
     else if (name === 'guide') renderGuide(true);
     else if (name === 'radio') renderRadio();
     else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
-    else if (name === 'reglages') { renderPlaylists(); if (global.HaSync) HaSync.mount($id('haSyncPanel')); }
+    else if (name === 'reglages') { renderPlaylists(); if (window.HaSync) HaSync.mount($id('haSyncPanel')); }
     scheduleStartFocus();
   }
   // Télécommande TV : livré à lui-même, le WebView place le curseur dans le
@@ -920,7 +920,7 @@
         star.textContent = justAdded ? '★' : '☆';
         toast(justAdded ? '★ ' + item.name + ' ajouté aux favoris' : '☆ ' + item.name + ' retiré des favoris');
         if (isTabActive('maliste')) renderFavoris();
-        if (global.HaSync) HaSync.sync(true);
+        if (window.HaSync) HaSync.sync(true);
       }
       star.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -2003,7 +2003,7 @@
 
   function init() {
     startSplash();
-    if (global.HaSync) HaSync.start();
+    if (window.HaSync) HaSync.start();
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');
     $id('verText').textContent = window.APP_VERSION || '';
     pruneHiddenFavoris();
@@ -2055,6 +2055,10 @@
   // localStorage (voir store.js), les playlists sont relues depuis les
   // Preferences natives AVANT que l'interface conclue « aucune playlist » —
   // et surtout avant qu'une écriture ultérieure ne fige ce vide.
-  if (global.Store && Store.hydrate) Store.hydrate().then(init, init);
+  // window.Store, pas global.Store : cette IIFE est `(function () { ... })()`,
+  // sans paramètre `global` — s'y référer levait une ReferenceError ici même,
+  // et init() n'était alors JAMAIS appelée (en-tête bloqué sur « Aucune
+  // playlist », onglets vides, alors que les données étaient bien là).
+  if (window.Store && Store.hydrate) Store.hydrate().then(init, init);
   else init();
 })();
