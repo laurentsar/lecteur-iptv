@@ -99,6 +99,9 @@
   }
 
   function getFavoris() { return lsGet(K_FAVORIS, []); }
+  // Remplace toute la liste d'un coup — utilisé par la synchronisation Home
+  // Assistant (hasync.js), qui fusionne local et distant avant d'écrire.
+  function setFavoris(list) { lsSet(K_FAVORIS, list || []); }
   function isFavori(key) { return getFavoris().some(function (f) { return f.key === key; }); }
   function toggleFavori(item) {
     var list = getFavoris();
@@ -183,7 +186,7 @@
     getActivePlaylistId: getActivePlaylistId, setActivePlaylistId: setActivePlaylistId,
     getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
     getParentalPin: getParentalPin, setParentalPin: setParentalPin,
-    getFavoris: getFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
+    getFavoris: getFavoris, setFavoris: setFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
     getProgress: getProgress, setProgress: setProgress, clearProgress: clearProgress,
     exportConfig: exportConfig, importConfig: importConfig,
     cacheGet: function (playlistId) { return idbGet('cache:' + playlistId); },

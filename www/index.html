@@ -151,6 +151,12 @@
 
     <!-- ================= RÉGLAGES (playlists + infos) ================= -->
     <section class="panel" id="tab-reglages">
+      <div class="cat-title">🔄 Synchronisation</div>
+      <div class="card">
+        <h2>Favoris synchronisés (Home Assistant)</h2>
+        <p class="hint">Les favoris sont partagés entre le téléphone et les télés via l'entité <code>sensor.lecteur_iptv_favoris</code> de Home Assistant. Fusion dans les deux sens : un ajout ou une suppression faite sur un appareil se retrouve sur les autres. Le jeton se crée dans HA : profil → Jetons d'accès longue durée.</p>
+        <div id="haSyncPanel"></div>
+      </div>
       <div class="cat-title">🗂️ Playlists</div>
       <div class="card">
         <h2>Mes playlists</h2>
@@ -396,7 +402,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.81';
+    window.APP_VERSION = '1.82';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
@@ -404,6 +410,7 @@
   <script src="net.js"></script>
   <script src="hls-native-loader.js"></script>
   <script src="store.js"></script>
+  <script src="hasync.js"></script>
   <script src="crypto.js"></script>
   <script src="m3u.js"></script>
   <script src="xtream.js"></script>

@@ -46,6 +46,17 @@
       .filter(function (f) { return (f.kind === 'direct' || f.kind === 'live') && !isHiddenChannel(f.name); })
       .map(function (f) { return { url: f.url, name: f.name, logo: f.logo || null }; });
   }
+  // Utilisés par hasync.js (synchronisation des favoris via Home Assistant) :
+  // il tourne en tâche de fond et doit pouvoir prévenir l'utilisateur et
+  // rafraîchir la liste quand la fusion change quelque chose.
+  window.AppToast = toast;
+  window.AppFavoris = {
+    refresh: function () {
+      if (isTabActive('maliste')) renderFavoris();
+      renderAccueil();
+    }
+  };
+
   window.AppZap = {
     list: function () { return state.zapList; },
     favoris: zapFavoris,
@@ -148,7 +159,7 @@
     else if (name === 'guide') renderGuide(true);
     else if (name === 'radio') renderRadio();
     else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
-    else if (name === 'reglages') renderPlaylists();
+    else if (name === 'reglages') { renderPlaylists(); if (global.HaSync) HaSync.mount($id('haSyncPanel')); }
     scheduleStartFocus();
   }
   // Télécommande TV : livré à lui-même, le WebView place le curseur dans le
@@ -887,6 +898,7 @@
         star.textContent = justAdded ? '★' : '☆';
         toast(justAdded ? '★ ' + item.name + ' ajouté aux favoris' : '☆ ' + item.name + ' retiré des favoris');
         if (isTabActive('maliste')) renderFavoris();
+        if (global.HaSync) HaSync.sync(true);
       }
       star.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -1969,6 +1981,7 @@
 
   function init() {
     startSplash();
+    if (global.HaSync) HaSync.start();
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');
     $id('verText').textContent = window.APP_VERSION || '';
     pruneHiddenFavoris();
