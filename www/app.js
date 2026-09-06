@@ -149,32 +149,67 @@
     else if (name === 'radio') renderRadio();
     else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
     else if (name === 'reglages') renderPlaylists();
-    focusActiveTab();
+    scheduleStartFocus();
   }
   // Télécommande TV : livré à lui-même, le WebView place le curseur dans le
   // premier champ de recherche de la page au démarrage. Le clavier virtuel
   // s'ouvre alors par-dessus l'interface, et le D-pad n'en sort qu'au prix de
   // plusieurs pressions — l'appli paraît bloquée dans la barre de recherche.
-  // On ramène donc le focus sur l'onglet actif (un <button> : jamais de
-  // clavier virtuel), point de départ naturel de la navigation D-pad, au
-  // démarrage puis après chaque changement d'onglet.
-  //
-  // Le focus n'est jamais volé à autre chose qu'un champ de recherche ou au
-  // néant : un champ de saisie ouvert dans une fenêtre (phrase secrète
-  // d'import, code PIN) garde le sien, et le rattrapage du démarrage cesse
-  // dès que l'utilisateur a agi lui-même — il peut vouloir chercher aussitôt.
+  // On place donc le focus sur la première tuile du panneau (bouquet ou
+  // chaîne), à défaut sur l'onglet actif (un <button> : jamais de clavier
+  // virtuel), au démarrage puis après chaque changement d'onglet. Le
+  // rattrapage du démarrage cesse dès que l'utilisateur a agi lui-même — il
+  // peut vouloir chercher aussitôt.
   var userActed = false;
   ['pointerdown', 'keydown'].forEach(function (evt) {
     document.addEventListener(evt, function () { userActed = true; }, true);
   });
-  function focusActiveTab() {
-    var tab = document.querySelector('.tab.active');
-    if (!tab) return;
+
+  // Première tuile réellement utile du panneau affiché : un bouquet ou une
+  // chaîne plutôt que la barre de recherche (qui ouvre le clavier virtuel)
+  // ou un onglet (qui demande une descente de plus au D-pad).
+  function firstContentItem() {
+    var panel = document.querySelector('.panel.active');
+    if (!panel) return null;
+    // Une tuile d'abord ; à défaut seulement (liste encore vide), un filtre.
+    var found = pick(panel.querySelectorAll('.carte')) || pick(panel.querySelectorAll('.chip, .version-item'));
+    return found;
+
+    function pick(nodes) {
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.tabIndex < 0 || n.disabled || !n.offsetParent) continue;
+        return n;
+      }
+      return null;
+    }
+  }
+
+  // Le focus n'est jamais volé à autre chose qu'un champ de recherche, un
+  // onglet ou le néant : un champ de saisie ouvert dans une fenêtre (phrase
+  // secrète d'import, code PIN) garde le sien.
+  function focusStart() {
     var ae = document.activeElement;
     var estRecherche = ae && ae.tagName === 'INPUT' && ae.type === 'search';
-    if (ae && ae !== document.body && !estRecherche) return;
+    var estOnglet = !!(ae && ae.classList && ae.classList.contains('tab'));
+    if (ae && ae !== document.body && !estRecherche && !estOnglet) return;
     if (estRecherche) ae.blur();
-    tab.focus();
+    var cible = firstContentItem() || document.querySelector('.tab.active');
+    if (cible && cible !== ae) cible.focus();
+  }
+
+  // Les listes arrivent après coup (playlist M3U chargée en tâche de fond) :
+  // on retente le placement du focus quelques fois plutôt qu'une seule, et on
+  // abandonne dès que l'utilisateur navigue lui-même.
+  var focusToken = 0;
+  ['pointerdown', 'keydown'].forEach(function (evt) {
+    document.addEventListener(evt, function () { focusToken++; }, true);
+  });
+  function scheduleStartFocus() {
+    var jeton = ++focusToken;
+    [0, 150, 400, 900, 1600].forEach(function (d) {
+      setTimeout(function () { if (jeton === focusToken) focusStart(); }, d);
+    });
   }
 
   document.getElementById('tabs').addEventListener('click', function (e) {
@@ -1895,12 +1930,12 @@
     var activeId = Store.getActivePlaylistId();
     if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
     renderAccueil();
-    // Démarrage : voir focusActiveTab(). Le WebView peut placer le curseur
+    // Démarrage : voir focusStart(). Le WebView peut placer le curseur
     // dans un champ de recherche après le premier rendu, parfois après le
     // chargement des listes — d'où plusieurs tentatives espacées plutôt
     // qu'une seule, abandonnées dès le premier geste de l'utilisateur.
-    [0, 200, 600, 1200].forEach(function (d) {
-      setTimeout(function () { if (!userActed) focusActiveTab(); }, d);
+    [0, 200, 600, 1200, 2000].forEach(function (d) {
+      setTimeout(function () { if (!userActed) focusStart(); }, d);
     });
     // Le service worker (cache-first du shell applicatif) n'a de sens que
     // pour la PWA/le web (GitHub Pages), où il permet un fonctionnement
