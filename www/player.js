@@ -44,7 +44,7 @@
   var currentLogo = '';
   var triedNativeFallback = false, triedM3u8Fallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
-  var remoteBtn, remotePanel, castTvBtn;
+  var remoteBtn, remotePanel, castTvBtn, vrBtn;
   var fullscreenBtn, homeBtn;
   var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg;
   var progBar;
@@ -110,6 +110,7 @@
       '  <google-cast-launcher id="castLauncher" class="player-cast" style="display:none"></google-cast-launcher>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
       '  <button id="playerCastTv" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📺</button>' +
+      '  <button id="playerVr" class="player-cast" aria-label="Cinéma VR" style="display:none">🥽</button>' +
       '  <button id="playerRemote" class="player-cast" aria-label="Télécommande" style="display:none">🕹️</button>' +
       '  <button id="playerPip" class="player-cast" aria-label="Picture-in-Picture" style="display:none">⧉</button>' +
       '  <button id="playerRecord" class="player-cast" aria-label="Enregistrer" style="display:none">⏺</button>' +
@@ -165,6 +166,7 @@
     tracksMenu = overlay.querySelector('#playerTracksMenu');
     castLauncher = overlay.querySelector('#castLauncher');
     castTvBtn = overlay.querySelector('#playerCastTv');
+    vrBtn = overlay.querySelector('#playerVr');
     remoteBtn = overlay.querySelector('#playerRemote');
     remotePanel = overlay.querySelector('#remotePanel');
     fullscreenBtn = overlay.querySelector('#playerFullscreen');
@@ -188,6 +190,7 @@
     setupChromecast();
     updateCastAvailability();
     setupCastTv();
+    setupVr();
     setupPip();
     setupTracks();
     setupRecording();
@@ -1056,6 +1059,25 @@
     castTvBtn.style.display = '';
     castTvBtn.addEventListener('click', function () {
       tryNativePlayer(originalUrl, originalTitle, 'Ouverture du lecteur natif (diffusion TV)…');
+    });
+  }
+
+  // ---------- Cinéma VR (casque, navigateur du Quest) ----------
+  // Ouvre www/vr.html, qui projette le flux sur un grand écran incurvé en
+  // WebXR. Le bouton n'apparaît que là où WebXR peut exister (navigateur /
+  // PWA) : dans l'APK, la WebView Android n'expose pas navigator.xr. La liste
+  // de zapping passe par sessionStorage — même origine, donc lisible tel quel
+  // par la page VR, sans la ré-encoder dans l'URL.
+  function setupVr() {
+    if (nativePlayerPlugin() || !global.navigator || !navigator.xr) return;
+    vrBtn.style.display = '';
+    vrBtn.addEventListener('click', function () {
+      try {
+        var liste = (global.AppZap && global.AppZap.list()) || [];
+        sessionStorage.setItem('vrZapList', JSON.stringify(liste));
+      } catch (e) { /* quota ou mode privé : la page VR marchera sans liste */ }
+      global.open('vr.html?url=' + encodeURIComponent(originalUrl) +
+        '&title=' + encodeURIComponent(originalTitle || ''), '_blank');
     });
   }
 

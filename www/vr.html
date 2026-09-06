@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lecteur IPTV — Cinéma VR</title>
+  <!-- Mode cinéma pour casque VR (Meta Quest) : la chaîne en cours est
+       projetée sur un grand écran incurvé dans une salle sombre, avec la
+       liste des chaînes du bouquet à gauche, pointable à la manette.
+       S'ouvre depuis le bouton 🥽 du lecteur (player.js), qui passe l'URL du
+       flux et dépose la liste de zapping dans sessionStorage (même origine).
+       Le rendu VR passe par WebXR : à ouvrir dans le navigateur du casque. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.7.0/aframe.min.js"></script>
+  <script src="vendor/hls.min.js"></script>
+  <script src="vendor/mpegts.min.js"></script>
+  <style>
+    body { margin: 0; background: #05080e; color: #e7eef7; font: 14px system-ui, sans-serif; }
+    #demarrer {
+      position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px;
+      background: radial-gradient(circle at 50% 40%, #123043, #05080e 70%);
+    }
+    #demarrer h1 { font-size: 20px; margin: 0; }
+    #demarrer p { color: #92a5ba; max-width: 460px; margin: 0; line-height: 1.5; }
+    #demarrer button {
+      background: #3fc7c7; color: #06181c; border: none; border-radius: 12px;
+      padding: 14px 22px; font-size: 16px; font-weight: 700; cursor: pointer;
+    }
+    #erreur { color: #ffb454; min-height: 18px; }
+  </style>
+</head>
+<body>
+  <!-- Écran d'amorçage : la lecture d'une vidéo exige un geste de
+       l'utilisateur, et le casque demande le même geste pour entrer en VR. -->
+  <div id="demarrer">
+    <h1>Cinéma VR — <span id="titre">chaîne</span></h1>
+    <p>Lance la lecture, puis appuie sur <strong>VR</strong> en bas à droite pour entrer dans le casque. Les chaînes du bouquet sont pointables à la manette, à gauche de l'écran.</p>
+    <button id="btnLancer">▶ Lancer</button>
+    <div id="erreur"></div>
+  </div>
+
+  <a-scene background="color: #05080e" renderer="colorManagement: true">
+    <a-assets>
+      <video id="vrVideo" playsinline webkit-playsinline crossorigin="anonymous"></video>
+    </a-assets>
+
+    <!-- salle : sol sombre + halo derrière l'écran, pour donner l'échelle -->
+    <a-plane rotation="-90 0 0" width="40" height="40" color="#0a1220" position="0 -1.6 0"></a-plane>
+    <a-plane position="0 1.6 -6.2" width="12.4" height="7.2" color="#0e2436"></a-plane>
+
+    <!-- écran principal, 16/9, à 6 m : ~40° de champ, confortable en VR -->
+    <a-video id="ecran" src="#vrVideo" position="0 1.6 -6" width="10.66" height="6"></a-video>
+
+    <!-- panneau des chaînes -->
+    <a-entity id="panneau" position="-6.6 1.6 -4.2" rotation="0 35 0"></a-entity>
+
+    <!-- barre de commandes sous l'écran -->
+    <a-entity id="commandes" position="0 -1.1 -5.4"></a-entity>
+
+    <a-entity camera position="0 1.6 0" look-controls wasd-controls="enabled: false">
+      <a-entity cursor="fuse: false; rayOrigin: mouse" raycaster="objects: .clic"></a-entity>
+    </a-entity>
+    <a-entity laser-controls="hand: right" raycaster="objects: .clic; far: 12" line="color: #3fc7c7"></a-entity>
+    <a-entity laser-controls="hand: left" raycaster="objects: .clic; far: 12" line="color: #3fc7c7"></a-entity>
+    <a-entity light="type: ambient; color: #dfe9f5; intensity: 0.9"></a-entity>
+  </a-scene>
+
+  <script>
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var url = params.get('url') || '';
+    var titre = params.get('title') || 'Chaîne';
+    var video = document.getElementById('vrVideo');
+    var erreur = document.getElementById('erreur');
+    document.getElementById('titre').textContent = titre;
+
+    var liste = [];
+    try { liste = JSON.parse(sessionStorage.getItem('vrZapList') || '[]'); } catch (e) { liste = []; }
+    var index = liste.findIndex(function (c) { return c.url === url; });
+
+    var hls = null, mpegts = null;
+
+    function isM3u8(u) { return /\.m3u8(\?|#|$)/i.test(u); }
+    function isTs(u) { return /\.(ts|mpegts)(\?|#|$)/i.test(u) || /\/live\//i.test(u); }
+
+    function detruire() {
+      if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
+      if (mpegts) { try { mpegts.destroy(); } catch (e) {} mpegts = null; }
+      video.removeAttribute('src');
+      video.load();
+    }
+
+    // Même chaîne de lecture que l'appli : hls.js pour le HLS, mpegts.js pour
+    // le MPEG-TS brut, lecture directe sinon.
+    function lire(u, nom) {
+      if (!u) { erreur.textContent = 'Aucun flux à lire.'; return; }
+      detruire();
+      url = u;
+      document.getElementById('titre').textContent = nom || '';
+      erreur.textContent = '';
+      if (isM3u8(u) && window.Hls && Hls.isSupported()) {
+        hls = new Hls({ enableWorker: true });
+        hls.loadSource(u);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.ERROR, function (_e, d) { if (d && d.fatal) erreur.textContent = 'Erreur de lecture (' + d.type + ').'; });
+      } else if (isTs(u) && window.mpegts && mpegts.isSupported && mpegts.isSupported()) {
+        mpegts = window.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: u });
+        mpegts.attachMediaElement(video);
+        mpegts.load();
+      } else {
+        video.src = u;
+      }
+      video.play().catch(function () { erreur.textContent = 'Appuie sur ▶ Lancer pour démarrer la lecture.'; });
+      majPanneau();
+    }
+
+    function zap(delta) {
+      if (!liste.length) return;
+      index = index === -1 ? 0 : (index + delta + liste.length) % liste.length;
+      lire(liste[index].url, liste[index].name);
+    }
+
+    // --- panneau des chaînes (12 lignes autour de la chaîne en cours) ---
+    var PAGE = 12;
+    function majPanneau() {
+      var panneau = document.getElementById('panneau');
+      panneau.innerHTML = '';
+      if (!liste.length) return;
+      var depart = Math.max(0, Math.min(liste.length - PAGE, (index === -1 ? 0 : index) - Math.floor(PAGE / 2)));
+      liste.slice(depart, depart + PAGE).forEach(function (c, i) {
+        var reel = depart + i;
+        var ligne = document.createElement('a-entity');
+        ligne.setAttribute('position', '0 ' + (2.4 - i * 0.42) + ' 0');
+
+        var fond = document.createElement('a-plane');
+        fond.setAttribute('width', 3.6);
+        fond.setAttribute('height', 0.36);
+        fond.setAttribute('color', reel === index ? '#3fc7c7' : '#16273a');
+        fond.setAttribute('opacity', reel === index ? 0.95 : 0.8);
+        fond.setAttribute('class', 'clic');
+        fond.addEventListener('click', function () { index = reel; lire(c.url, c.name); });
+        ligne.appendChild(fond);
+
+        var txt = document.createElement('a-text');
+        txt.setAttribute('value', (c.chno ? c.chno + '  ' : '') + (c.name || ''));
+        txt.setAttribute('align', 'left');
+        txt.setAttribute('width', 6);
+        txt.setAttribute('color', reel === index ? '#06181c' : '#e7eef7');
+        txt.setAttribute('position', '-1.7 0 0.01');
+        ligne.appendChild(txt);
+
+        panneau.appendChild(ligne);
+      });
+    }
+
+    // --- commandes sous l'écran ---
+    function bouton(parent, x, largeur, libelle, action) {
+      var e = document.createElement('a-entity');
+      e.setAttribute('position', x + ' 0 0');
+      var p = document.createElement('a-plane');
+      p.setAttribute('width', largeur); p.setAttribute('height', 0.5);
+      p.setAttribute('color', '#16273a'); p.setAttribute('class', 'clic');
+      p.addEventListener('click', action);
+      e.appendChild(p);
+      var t = document.createElement('a-text');
+      t.setAttribute('value', libelle); t.setAttribute('align', 'center');
+      t.setAttribute('width', 5); t.setAttribute('color', '#e7eef7');
+      t.setAttribute('position', '0 0 0.01');
+      e.appendChild(t);
+      parent.appendChild(e);
+    }
+
+    var commandes = document.getElementById('commandes');
+    bouton(commandes, -2.4, 1.4, '◀ Précédente', function () { zap(-1); });
+    bouton(commandes, -0.8, 1.2, 'Pause', function () { if (video.paused) video.play(); else video.pause(); });
+    bouton(commandes, 0.8, 1.2, 'Suivante ▶', function () { zap(1); });
+    bouton(commandes, 2.6, 1.6, 'Quitter', function () { location.href = 'index.html'; });
+
+    document.getElementById('btnLancer').addEventListener('click', function () {
+      document.getElementById('demarrer').style.display = 'none';
+      lire(url, titre);
+    });
+
+    majPanneau();
+  })();
+  </script>
+</body>
+</html>
