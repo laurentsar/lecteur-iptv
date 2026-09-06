@@ -309,6 +309,20 @@
   // ---------- chargement de la playlist active ----------
   function xtreamCfg(pl) { return { serveur: pl.serveur, utilisateur: pl.utilisateur, motDePasse: pl.motDePasse }; }
 
+  // Après un import (restauration sur un appareil vide), les playlists sont
+  // en mémoire mais aucune n'est active : l'appli continue d'afficher « Aucune
+  // playlist », comme si l'import avait échoué. On en active donc une
+  // d'office, sauf si l'utilisateur en avait déjà choisi une.
+  function activerPremierePlaylist() {
+    if (Store.getActivePlaylistId()) return;
+    var pls = Store.getPlaylists();
+    if (!pls.length) return;
+    setActivePlaylist(pls[0].id);
+    refreshOnOpen();
+    renderPlaylists();
+    renderAccueil();
+  }
+
   function setActivePlaylist(id) {
     Store.setActivePlaylistId(id);
     state.playlist = Store.getPlaylists().find(function (p) { return p.id === id; }) || null;
@@ -719,6 +733,7 @@
       closeImportModal();
       toast('Importé : ' + added.playlists + ' playlist(s), ' + added.favoris + ' favori(s)');
       renderPlaylists();
+      activerPremierePlaylist();
     }).catch(function (err) { $id('importError').textContent = err.message || 'Import impossible.'; });
   });
 
