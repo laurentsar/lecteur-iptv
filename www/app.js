@@ -202,8 +202,28 @@
   // on retente le placement du focus quelques fois plutôt qu'une seule, et on
   // abandonne dès que l'utilisateur navigue lui-même.
   var focusToken = 0;
+  var dernierGeste = 0;
   ['pointerdown', 'keydown'].forEach(function (evt) {
-    document.addEventListener(evt, function () { focusToken++; }, true);
+    document.addEventListener(evt, function () { focusToken++; dernierGeste = Date.now(); }, true);
+  });
+
+  // Filet valable pour TOUTE l'appli : dès qu'un champ de recherche récupère
+  // le focus sans qu'on l'ait visé (le WebView le fait de lui-même après
+  // chaque gros rendu — entrée dans un bouquet, changement d'onglet, retour
+  // d'un détail), on le rend à la première tuile. Le clavier virtuel ne
+  // s'ouvre donc jamais tout seul.
+  //
+  // « Sans qu'on l'ait visé » = aucun geste de l'utilisateur dans les
+  // dernières 400 ms : atteindre le champ au D-pad (une flèche) ou le
+  // toucher du doigt reste possible, c'est le focus spontané qui est repris.
+  var FOCUS_GESTE_MS = 400;
+  document.addEventListener('focusin', function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'INPUT' || t.type !== 'search') return;
+    if (Date.now() - dernierGeste < FOCUS_GESTE_MS) return;
+    t.blur();
+    var cible = firstContentItem() || document.querySelector('.tab.active');
+    if (cible) cible.focus();
   });
   function scheduleStartFocus() {
     var jeton = ++focusToken;
@@ -1044,6 +1064,7 @@
       x.classList.toggle('active', x.dataset.view === 'liste');
     });
     renderKind('direct');
+    scheduleStartFocus();
   }
 
   function renderBouquetTiles(container, moreBtn, groups, q) {
