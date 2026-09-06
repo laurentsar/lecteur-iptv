@@ -204,9 +204,16 @@ public class NativePlayerActivity extends AppCompatActivity {
         // Player qu'ExoPlayer, donc PlayerView continue de fonctionner à
         // l'identique quel que soit celui des deux qui est actif.
         MediaRouteButton castBtn = findViewById(R.id.playerCastBtn);
+        ensureNearbyWifiPermission();
         try {
             CastContext castContext = CastContext.getSharedInstance(this);
             CastButtonFactory.setUpMediaRouteButton(getApplicationContext(), castBtn);
+            // Sans ça, androidx.mediarouter masque le bouton tant qu'aucun
+            // appareil n'a encore été découvert : impossible de distinguer
+            // « pas de TV allumée » de « fonction absente », et impossible
+            // d'ouvrir la boîte de dialogue qui relance justement la
+            // recherche. On le laisse donc visible en permanence.
+            castBtn.setAlwaysVisible(true);
             castPlayer = new CastPlayer(castContext);
             castPlayer.setSessionAvailabilityListener(new SessionAvailabilityListener() {
                 @Override
@@ -227,6 +234,20 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         switchPlayer(castPlayer != null && castPlayer.isCastSessionAvailable() ? castPlayer : localPlayer);
+    }
+
+    // Android 13+ : la découverte des Chromecast se fait par mDNS sur le
+    // réseau Wi-Fi local, ce que le système considère depuis comme une
+    // permission à part entière (NEARBY_WIFI_DEVICES). Sans elle, le Cast SDK
+    // ne trouve jamais aucun appareil — et l'utilisateur ne voit qu'un bouton
+    // de diffusion qui n'ouvre rien d'utile. Demandée à l'ouverture de
+    // l'écran de lecture, pas au démarrage de l'appli : c'est le seul endroit
+    // où elle sert, et la demande y est compréhensible.
+    private void ensureNearbyWifiPermission() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return;
+        if (checkSelfPermission(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        requestPermissions(new String[]{ android.Manifest.permission.NEARBY_WIFI_DEVICES }, 4201);
     }
 
     private void switchPlayer(Player newPlayer) {
@@ -580,6 +601,36 @@ def patch_settings_gradle():
     print("settings.gradle : module decoder-ffmpeg inclus")
 
 
+def patch_manifest_permissions():
+    """Permissions nécessaires à la découverte des Chromecast (mDNS local)."""
+    p = "android/app/src/main/AndroidManifest.xml"
+    s = open(p).read()
+    perms = [
+        ('android.permission.ACCESS_WIFI_STATE', ''),
+        ('android.permission.CHANGE_WIFI_MULTICAST_STATE', ''),
+        # neverForLocation : on cherche des télés, pas la position de
+        # l'utilisateur — sans ce drapeau, Android exige en plus la
+        # localisation précise.
+        ('android.permission.NEARBY_WIFI_DEVICES', ' android:usesPermissionFlags="neverForLocation"'),
+    ]
+    added = False
+    for perm, extra in perms:
+        if perm in s:
+            continue
+        s = s.replace(
+            '<uses-permission android:name="android.permission.INTERNET" />',
+            '<uses-permission android:name="android.permission.INTERNET" />\n'
+            '    <uses-permission android:name="%s"%s />' % (perm, extra),
+            1,
+        )
+        added = True
+    if added:
+        open(p, "w").write(s)
+        print("AndroidManifest.xml : permissions de découverte Cast ajoutées")
+    else:
+        print("AndroidManifest.xml : permissions de découverte Cast déjà présentes")
+
+
 def patch_manifest():
     p = "android/app/src/main/AndroidManifest.xml"
     s = open(p).read()
@@ -682,4 +733,5 @@ write_if_changed(RES_DIR + "/drawable/ic_tracks.xml", IC_TRACKS_XML)
 patch_settings_gradle()
 patch_build_gradle()
 patch_manifest()
+patch_manifest_permissions()
 patch_main_activity()
