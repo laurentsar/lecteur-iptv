@@ -50,6 +50,7 @@
   var progBar;
   var progBarTimer = null;
   var zapBannerTimer = null;
+  var uiHideTimer = null;
   var castSdkRequested = false;
   var loadTimeoutId = null;
   var LOAD_TIMEOUT_MS = 20000; // certaines entrées de playlist (séparateurs
@@ -194,6 +195,51 @@
     setupRadioBackground();
     setupResume();
     setupChnoKeys();
+    setupAutoHideUi();
+  }
+
+  // ---------- Masquage auto de la barre du haut ----------
+  // Pendant la lecture, la barre d'outils mange le haut de l'image : on
+  // l'efface après quelques secondes sans action et on la ramène au moindre
+  // geste (touche de la télécommande, clic, souris, tactile). Elle reste en
+  // place tant qu'un menu du lecteur est ouvert ou que le focus est sur un
+  // de ses boutons — sur la télé, le focus doit toujours désigner quelque
+  // chose de visible.
+  var UI_IDLE_MS = 4000;
+
+  function uiPinned() {
+    if (tracksMenu && tracksMenu.style.display !== 'none') return true;
+    if (remotePanel && remotePanel.style.display !== 'none') return true;
+    var top = overlay && overlay.querySelector('.player-top');
+    var a = document.activeElement;
+    return !!(top && a && top.contains(a));
+  }
+
+  function hidePlayerUi() {
+    if (!isOpen()) return;
+    if (uiPinned()) { schedulePlayerUiHide(); return; }
+    overlay.classList.add('ui-hidden');
+  }
+
+  function schedulePlayerUiHide() {
+    clearTimeout(uiHideTimer);
+    uiHideTimer = setTimeout(hidePlayerUi, UI_IDLE_MS);
+  }
+
+  function showPlayerUi() {
+    if (!overlay) return;
+    overlay.classList.remove('ui-hidden');
+    schedulePlayerUiHide();
+  }
+
+  function setupAutoHideUi() {
+    ['mousemove', 'mousedown', 'click', 'touchstart', 'wheel'].forEach(function (ev) {
+      overlay.addEventListener(ev, showPlayerUi, true);
+    });
+    // Capture : la barre doit revenir même quand la touche est ensuite
+    // consommée par le zapping au numéro ou le plein écran.
+    document.addEventListener('keydown', function () { if (isOpen()) showPlayerUi(); }, true);
+    document.addEventListener('focusin', function () { if (isOpen()) showPlayerUi(); });
   }
 
   // ---------- Reprise de lecture (films/séries uniquement) ----------
@@ -1022,6 +1068,7 @@
     triedM3u8Fallback = false;
     ensureDom();
     overlay.classList.add('show');
+    showPlayerUi();
     updatePipVisibility();
     updateRecordVisibility();
     updateRemoteVisibility();
@@ -1044,6 +1091,7 @@
     if (remotePanel) closeRemote();
     releaseNativeLandscapeLock();
     if (currentIsRadio) { var rp = radioPlayerPlugin(); if (rp) rp.stop().catch(function () {}); }
+    clearTimeout(uiHideTimer);
     if (overlay) overlay.classList.remove('show');
   }
 
