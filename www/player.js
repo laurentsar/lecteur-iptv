@@ -195,6 +195,7 @@
     setupRadioBackground();
     setupResume();
     setupChnoKeys();
+    setupZapKeys();
     setupAutoHideUi();
   }
 
@@ -577,12 +578,32 @@
     }
     var idx = -1;
     for (var i = 0; i < list.length; i++) { if (list[i].url === originalUrl) { idx = i; break; } }
-    if (idx === -1) {
-      setStatus('Chaîne actuelle absente de cette liste — impossible de zapper depuis ici.');
-      return;
-    }
-    var next = list[(idx + delta + list.length) % list.length];
+    // Chaîne ouverte depuis les favoris, le guide ou la recherche : elle peut
+    // ne pas appartenir au bouquet affiché. Plutôt que de refuser de zapper,
+    // on entre dans ce bouquet par son premier (ou dernier) élément.
+    var next = idx === -1
+      ? list[delta > 0 ? 0 : list.length - 1]
+      : list[(idx + delta + list.length) % list.length];
     open(next.url, next.name, { live: true, epgKey: next.epgKey, logo: next.logo });
+  }
+
+  // ---------- Touches « chaîne suivante / précédente » ----------
+  // Les télécommandes de télé (et les claviers multimédia) envoient
+  // CHANNEL_UP/CHANNEL_DOWN, que la WebView expose selon les modèles sous
+  // le nom 'ChannelUp'/'ChannelDown', en Page haut/bas, en piste
+  // suivante/précédente, ou seulement par leur keyCode Android (166/167) —
+  // d'où les quatre écritures. Le zapping suit la liste affichée dans
+  // l'onglet Direct, donc le bouquet en cours (voir setZapList dans app.js).
+  function setupZapKeys() {
+    document.addEventListener('keydown', function (e) {
+      if (!isOpen() || !currentIsLive) return;
+      var delta = 0;
+      if (e.key === 'ChannelUp' || e.key === 'PageUp' || e.key === 'MediaTrackNext' || e.keyCode === 166) delta = 1;
+      else if (e.key === 'ChannelDown' || e.key === 'PageDown' || e.key === 'MediaTrackPrevious' || e.keyCode === 167) delta = -1;
+      else return;
+      e.preventDefault();
+      zapStep(delta);
+    });
   }
 
   // ---------- Bandeau au zapping (chaînes en direct uniquement) ----------
