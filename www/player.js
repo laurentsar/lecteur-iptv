@@ -604,6 +604,13 @@
       e.preventDefault();
       zapStep(delta);
     });
+    // Sur une télé Android, les touches CHAÎNE +/− ne parviennent jamais à la
+    // WebView (le système les garde pour le tuner du téléviseur) : l'activité
+    // les relaie sous forme d'évènement DOM — voir ci/patch_tv_keys.py.
+    global.addEventListener('tvchannel', function (e) {
+      if (!isOpen() || !currentIsLive) return;
+      zapStep(e.detail < 0 ? -1 : 1);
+    });
   }
 
   // ---------- Bandeau au zapping (chaînes en direct uniquement) ----------

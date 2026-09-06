@@ -31,6 +31,7 @@ jobs:
         ci/patch_native_player.py
         ci/patch_recorder.py
         ci/patch_radio_background.py
+        ci/patch_tv_keys.py
         ci/patch_abi.py
         ci/set_version.py
         ci/set_icons.py
