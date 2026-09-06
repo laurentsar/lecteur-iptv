@@ -36,6 +36,10 @@
         <p class="sub" id="activePlaylistLabel">Aucune playlist</p>
       </div>
     </div>
+    <!-- Transfert sur la télé, disponible hors du lecteur : affiché seulement
+         quand le SDK Cast détecte un appareil (voir setupChromecast dans
+         player.js). -->
+    <google-cast-launcher id="castHeader" class="cast-header" style="display:none" title="Diffuser sur la TV"></google-cast-launcher>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -392,7 +396,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.77';
+    window.APP_VERSION = '1.78';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

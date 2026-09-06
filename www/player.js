@@ -184,6 +184,7 @@
     video.addEventListener('playing', function () { clearLoadTimeout(); setStatus(''); });
     setupAirplay();
     setupChromecast();
+    updateCastAvailability();
     setupPip();
     setupTracks();
     setupRecording();
@@ -895,6 +896,10 @@
   }
 
   // ---------- Chromecast (Cast Sender SDK Google) ----------
+  // Chargé au démarrage de l'appli, pas à l'ouverture du lecteur : le bouton
+  // « diffuser » de l'en-tête doit être utilisable en parcourant les listes,
+  // sans avoir à lancer une chaîne ni à passer en plein écran. Une session
+  // ouverte avant la lecture est reprise par startPlayback (isCasting()).
   function setupChromecast() {
     if (castSdkRequested) return;
     castSdkRequested = true;
@@ -904,6 +909,12 @@
         receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
         autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
       });
+      // Les deux boutons (en-tête et lecteur) ne s'affichent que si un
+      // appareil Cast est joignable — inutile de proposer un transfert vers
+      // rien du tout.
+      cast.framework.CastContext.getInstance().addEventListener(
+        cast.framework.CastContextEventType.CAST_STATE_CHANGED, updateCastAvailability);
+      updateCastAvailability();
       cast.framework.CastContext.getInstance().addEventListener(
         cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
         function (e) {
@@ -920,6 +931,17 @@
     var s = document.createElement('script');
     s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
     document.head.appendChild(s);
+  }
+
+  function updateCastAvailability() {
+    var dispo = false;
+    try {
+      var etat = cast.framework.CastContext.getInstance().getCastState();
+      dispo = !!etat && etat !== 'NO_DEVICES_AVAILABLE';
+    } catch (e) { dispo = false; }
+    var header = document.getElementById('castHeader');
+    if (header) header.style.display = dispo ? '' : 'none';
+    if (castLauncher) castLauncher.style.display = dispo ? '' : 'none';
   }
 
   function isCasting() {
@@ -1135,6 +1157,8 @@
     if (tracksMenu && tracksMenu.style.display !== 'none') { tracksMenu.style.display = 'none'; return true; }
     return false;
   }
+
+  setupChromecast();
 
   global.Player = { open: open, close: close, isOpen: isOpen, closeTopOverlay: closeTopOverlay };
 })(window);
