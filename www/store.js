@@ -15,7 +15,12 @@
     } catch (e) { return fallback; }
   }
   function lsSet(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    try {
+      var brut = JSON.stringify(value);
+      localStorage.setItem(key, brut);
+      miroirEcrire(key, brut);
+      return true;
+    }
     catch (e) { return false; }
   }
 
@@ -24,6 +29,62 @@
   var K_FAVORIS = 'iptv:favoris';
   var K_TMDB = 'iptv:tmdbKey';
   var K_PIN = 'iptv:parentalPin';
+
+  // ---------- Miroir natif (Capacitor Preferences) ----------
+  // Symptôme corrigé ici : les playlists disparaissaient à chaque mise à jour
+  // de l'APK. Une réinstallation « par-dessus » conserve pourtant le dossier
+  // de données de l'app — mais le stockage du WebView (localStorage,
+  // IndexedDB) n'appartient pas à l'app : il est géré par le WebView système,
+  // qui peut le réinitialiser pour son propre compte (mise à jour du WebView
+  // ou de Chrome, changement de profil, nettoyage de stockage Android). Rien
+  // ne le protège côté app.
+  //
+  // Les Preferences Capacitor, elles, sont des SharedPreferences Android :
+  // un fichier XML dans le dossier de l'app, indépendant du WebView. On y
+  // recopie donc les CLÉS LÉGÈRES (playlists, favoris, réglages — pas les
+  // caches de chaînes, trop volumineux et reconstructibles), et on rehydrate
+  // le localStorage au démarrage quand il revient vide.
+  var MIROIR = [K_PLAYLISTS, K_ACTIVE, K_FAVORIS, K_TMDB, K_PIN];
+  var PREFIXE_MIROIR = 'mirror:';
+
+  function prefsPlugin() {
+    return global.Capacitor && global.Capacitor.Plugins &&
+      global.Capacitor.Plugins.Preferences;
+  }
+  // Une valeur « vide » ne doit jamais écraser une valeur pleine, dans un sens
+  // comme dans l'autre : c'est la seule garde qui empêche une restauration
+  // ratée d'effacer ce qui restait.
+  function estVide(brut) {
+    return brut == null || brut === '' || brut === 'null' ||
+      brut === '[]' || brut === '{}';
+  }
+  function miroirEcrire(key, brut) {
+    var P = prefsPlugin();
+    if (!P || MIROIR.indexOf(key) === -1) return;
+    try { P.set({ key: PREFIXE_MIROIR + key, value: String(brut) }); } catch (e) {}
+  }
+  // Appelée avant le premier rendu (app.js) : renvoie le nombre de clés
+  // effectivement restaurées. Sur le web, sans plugin natif, ne fait rien.
+  function hydrate() {
+    var P = prefsPlugin();
+    if (!P) return Promise.resolve(0);
+    return Promise.all(MIROIR.map(function (k) {
+      var local = null;
+      try { local = localStorage.getItem(k); } catch (e) {}
+      if (!estVide(local)) {                       // le local fait foi
+        return P.set({ key: PREFIXE_MIROIR + k, value: local })
+          .then(function () { return 0; }, function () { return 0; });
+      }
+      return P.get({ key: PREFIXE_MIROIR + k }).then(function (r) {
+        var v = r && r.value;
+        if (estVide(v)) return 0;
+        try { localStorage.setItem(k, v); } catch (e) { return 0; }
+        return 1;
+      }, function () { return 0; });
+    })).then(function (n) {
+      return n.reduce(function (a, b) { return a + b; }, 0);
+    });
+  }
 
   function getPlaylists() { return lsGet(K_PLAYLISTS, []); }
   function savePlaylists(list) { return lsSet(K_PLAYLISTS, list); }
@@ -180,7 +241,7 @@
   }
 
   global.Store = {
-    uid: uid,
+    uid: uid, hydrate: hydrate,
     getPlaylists: getPlaylists, addPlaylist: addPlaylist,
     updatePlaylist: updatePlaylist, removePlaylist: removePlaylist,
     getActivePlaylistId: getActivePlaylistId, setActivePlaylistId: setActivePlaylistId,

@@ -2051,5 +2051,10 @@
       }
     }
   }
-  init();
+  // Rehydratation avant le premier rendu : si le WebView a perdu son
+  // localStorage (voir store.js), les playlists sont relues depuis les
+  // Preferences natives AVANT que l'interface conclue « aucune playlist » —
+  // et surtout avant qu'une écriture ultérieure ne fige ce vide.
+  if (global.Store && Store.hydrate) Store.hydrate().then(init, init);
+  else init();
 })();
