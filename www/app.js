@@ -69,15 +69,64 @@
   // Rend un <div> cliquable navigable au clavier/D-pad (télécommande TV) :
   // un <div> n'entre pas dans l'ordre de tabulation par défaut, contrairement
   // à <button>. Entrée/Espace déclenchent le clic, comme un vrai bouton.
+  var LONG_PRESS_MS = 550;
+  function isSelectKey(e) { return e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar'; }
+
   function makeFocusable(node) {
     node.tabIndex = 0;
+    var downAt = 0, longFired = false;
     node.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
-        e.preventDefault();
-        node.click();
+      if (!isSelectKey(e)) return;
+      e.preventDefault();
+      // Sans appui long déclaré, on garde le comportement d'un vrai bouton :
+      // action dès l'enfoncement.
+      if (!node._longPress) { node.click(); return; }
+      if (e.repeat) {
+        // Les télécommandes qui répètent la touche permettent de déclencher
+        // l'appui long sans attendre le relâchement (retour immédiat).
+        if (!longFired && Date.now() - downAt >= LONG_PRESS_MS) { longFired = true; node._longPress(); }
+        return;
       }
+      downAt = Date.now();
+      longFired = false;
+    });
+    node.addEventListener('keyup', function (e) {
+      if (!isSelectKey(e) || !node._longPress) return;
+      if (longFired) { longFired = false; return; }
+      // Filet pour les télécommandes qui n'émettent aucune répétition.
+      if (Date.now() - downAt >= LONG_PRESS_MS) node._longPress();
+      else node.click();
     });
     return node;
+  }
+
+  // Appui long (doigt, souris ou touche OK de la télécommande) sur un élément
+  // par ailleurs cliquable. Le clic qui suit un appui long est annulé, sinon
+  // un ajout aux favoris ouvrirait la chaîne dans la foulée.
+  function setLongPress(node, fn) {
+    var timer = null, fired = false, x0 = 0, y0 = 0;
+    function start(e) {
+      fired = false;
+      x0 = e.clientX || 0; y0 = e.clientY || 0;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fired = true; fn(); }, LONG_PRESS_MS);
+    }
+    function cancel() { clearTimeout(timer); }
+    node.addEventListener('pointerdown', start);
+    node.addEventListener('pointerup', cancel);
+    node.addEventListener('pointercancel', cancel);
+    node.addEventListener('pointerleave', cancel);
+    // Défilement de la liste au doigt : ce n'est pas un appui long.
+    node.addEventListener('pointermove', function (e) {
+      if (Math.abs((e.clientX || 0) - x0) > 10 || Math.abs((e.clientY || 0) - y0) > 10) cancel();
+    });
+    node.addEventListener('click', function (e) {
+      if (!fired) return;
+      fired = false;
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+    node._longPress = fn;
   }
   var toastTimer;
   function toast(msg) {
@@ -773,13 +822,23 @@
     if (item.url) {
       var star = el('button', 'carte-star', Store.isFavori(item.key) ? '★' : '☆');
       star.setAttribute('aria-label', 'Favori');
-      star.addEventListener('click', function (e) {
-        e.stopPropagation();
+      // Hors du parcours D-pad : sur la télé, l'étoile obligeait à un arrêt
+      // supplémentaire à chaque chaîne en descendant la liste. Elle reste
+      // cliquable au doigt/souris, et l'appui long sur la carte fait le
+      // même travail à la télécommande.
+      star.tabIndex = -1;
+      function toggleFavori() {
         var justAdded = Store.toggleFavori({ key: item.key, kind: item.kind, name: item.name, logo: item.logo, group: item.group, url: item.url, streamId: item.streamId });
         star.textContent = justAdded ? '★' : '☆';
+        toast(justAdded ? '★ ' + item.name + ' ajouté aux favoris' : '☆ ' + item.name + ' retiré des favoris');
         if (isTabActive('maliste')) renderFavoris();
+      }
+      star.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toggleFavori();
       });
       card.appendChild(star);
+      setLongPress(card, toggleFavori);
     }
 
     // item.kind vaut 'direct' (Xtream) ou 'live' (M3U, voir m3u.js
@@ -1627,7 +1686,7 @@
     var container = $id('listeFavoris');
     var favs = Store.getFavoris().filter(function (item) { return !isHiddenChannel(item.name); });
     container.innerHTML = '';
-    if (!favs.length) { container.appendChild(el('div', 'hint', 'Aucun favori pour le moment — touche ☆ sur une chaîne, un film ou un épisode.')); return; }
+    if (!favs.length) { container.appendChild(el('div', 'hint', 'Aucun favori pour le moment — appui long sur une chaîne, un film ou un épisode (ou touche ☆).')); return; }
     favs.forEach(function (item) {
       var isFilm = item.kind === 'films' || item.kind === 'vod';
       container.appendChild(card(item, isFilm ? { onOpen: openFilm } : {}));
