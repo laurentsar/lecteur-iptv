@@ -1923,7 +1923,31 @@
     Store.getFavoris().forEach(function (f) { if (isHiddenChannel(f.name)) Store.toggleFavori(f); });
   }
 
+  // ---------- écran d'accueil animé ----------
+  // Bandeau plein écran science-fiction (grille en perspective, anneaux,
+  // balayage) le temps que la playlist se charge en tâche de fond. Passable
+  // d'une touche ou d'un appui : sur la télé, personne ne veut revoir la
+  // même animation vingt fois. Le focus de démarrage est (re)posé à la fin,
+  // car le geste qui abrège l'animation annule les tentatives en cours.
+  function startSplash() {
+    var sp = $id('splash');
+    if (!sp) return;
+    var fini = false;
+    function finir() {
+      if (fini) return;
+      fini = true;
+      sp.classList.add('done');
+      scheduleStartFocus();
+    }
+    ['keydown', 'pointerdown'].forEach(function (evt) {
+      document.addEventListener(evt, finir, true);
+    });
+    var reduit = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    setTimeout(finir, reduit ? 900 : 2600);
+  }
+
   function init() {
+    startSplash();
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');
     $id('verText').textContent = window.APP_VERSION || '';
     pruneHiddenFavoris();

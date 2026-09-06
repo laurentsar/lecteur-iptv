@@ -421,3 +421,89 @@ button.ghost { background: var(--card2); color: var(--text); }
   opacity: 0; pointer-events: none; transition: .22s; z-index: 60; max-width: 90vw;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- écran d'accueil animé ---------- */
+/* Tout est en transform/opacity : une TV Android bas de gamme n'a pas de quoi
+   animer des flous ou des ombres plein écran à 60 i/s. */
+.splash {
+  position: fixed; inset: 0; z-index: 2000; overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, #123043 0%, #0a1220 55%, #05080e 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+  animation: splash-out .5s ease 2.1s forwards;
+}
+.splash.done { display: none; }
+
+/* grille en perspective qui file vers l'horizon */
+.splash-grid {
+  position: absolute; left: -50%; right: -50%; bottom: -10%; height: 90%;
+  background-image:
+    repeating-linear-gradient(to right, rgba(63,199,199,.30) 0 1px, transparent 1px 62px),
+    repeating-linear-gradient(to bottom, rgba(63,199,199,.30) 0 1px, transparent 1px 62px);
+  transform: perspective(360px) rotateX(72deg);
+  transform-origin: 50% 100%;
+  opacity: .55;
+  animation: splash-grid 1.6s linear infinite;
+}
+@keyframes splash-grid { from { background-position: 0 0; } to { background-position: 0 62px; } }
+
+/* balayage horizontal type scanner */
+.splash-scan {
+  position: absolute; left: 0; right: 0; top: 0; height: 34%;
+  background: linear-gradient(to bottom, transparent, rgba(63,199,199,.16) 60%, rgba(63,199,199,.55) 98%, transparent);
+  animation: splash-scan 1.5s ease-in-out 2;
+}
+@keyframes splash-scan { from { transform: translateY(-40%); } to { transform: translateY(320%); } }
+
+/* cœur : anneaux concentriques + logo */
+.splash-core { position: relative; width: 168px; height: 168px; flex: none; }
+.splash-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid rgba(63,199,199,.55); border-top-color: transparent; border-left-color: transparent;
+  animation: splash-spin 2.4s linear infinite;
+}
+.splash-ring-2 { inset: 16px; border-color: rgba(78,201,138,.5); border-bottom-color: transparent; border-right-color: transparent; animation-duration: 1.7s; animation-direction: reverse; }
+.splash-ring-3 { inset: 32px; border-color: rgba(255,180,84,.45); border-top-color: transparent; border-right-color: transparent; animation-duration: 3.2s; }
+@keyframes splash-spin { to { transform: rotate(360deg); } }
+.splash-logo {
+  position: absolute; inset: 46px; width: auto; height: auto; border-radius: 18px;
+  animation: splash-pop .7s cubic-bezier(.16,1.06,.3,1) both;
+}
+@keyframes splash-pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+
+/* texte */
+.splash-txt { position: relative; text-align: center; }
+.splash-hello {
+  color: #eaf7ff; font-size: 30px; font-weight: 800; letter-spacing: 10px;
+  text-shadow: 0 0 14px rgba(63,199,199,.85);
+  animation: splash-in .8s ease .25s both;
+}
+.splash-name { color: var(--accent); }
+.splash-sub {
+  margin-top: 8px; color: var(--muted); font-size: 12px; letter-spacing: 5px;
+  animation: splash-in .8s ease .6s both;
+}
+@keyframes splash-in { from { opacity: 0; transform: translateY(10px); letter-spacing: 22px; } to { opacity: 1; transform: none; } }
+
+/* barre de « chargement » qui se remplit le temps de l'animation */
+.splash-bar {
+  margin: 16px auto 0; width: 220px; max-width: 60vw; height: 3px; border-radius: 3px;
+  background: rgba(63,199,199,.18); overflow: hidden;
+}
+.splash-bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: 0 50%; animation: splash-fill 1.7s ease-out .3s both; }
+@keyframes splash-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+@keyframes splash-out { to { opacity: 0; visibility: hidden; } }
+
+/* Accessibilité : pas d'animation pour qui n'en veut pas — l'écran reste
+   affiché brièvement puis disparaît (durée pilotée en JS). */
+@media (prefers-reduced-motion: reduce) {
+  .splash, .splash-grid, .splash-scan, .splash-ring, .splash-logo,
+  .splash-hello, .splash-sub, .splash-bar i { animation: none; }
+  .splash { opacity: 1; }
+}
+
+@media (max-width: 480px) {
+  .splash-hello { font-size: 21px; letter-spacing: 6px; }
+  .splash-core { width: 130px; height: 130px; }
+  .splash-logo { inset: 36px; }
+}

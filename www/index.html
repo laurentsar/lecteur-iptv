@@ -10,6 +10,24 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <!-- Écran d'accueil animé (2,4 s, passable d'une touche) — voir startSplash()
+       dans app.js et .splash dans styles.css. -->
+  <div id="splash" class="splash" aria-hidden="true">
+    <div class="splash-grid"></div>
+    <div class="splash-scan"></div>
+    <div class="splash-core">
+      <div class="splash-ring splash-ring-1"></div>
+      <div class="splash-ring splash-ring-2"></div>
+      <div class="splash-ring splash-ring-3"></div>
+      <img class="splash-logo" src="img/icon-192.png" alt="" />
+    </div>
+    <div class="splash-txt">
+      <div class="splash-hello">BIENVENUE <span class="splash-name">LAURENT</span></div>
+      <div class="splash-sub">LECTEUR IPTV · SYSTÈME PRÊT</div>
+      <div class="splash-bar"><i></i></div>
+    </div>
+  </div>
+
   <header class="app-header">
     <div class="brand">
       <img class="brand-logo" src="img/icon-192.png" alt="" />
@@ -374,7 +392,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.73';
+    window.APP_VERSION = '1.74';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
