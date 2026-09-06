@@ -46,10 +46,25 @@
 
     <!-- salle : sol sombre + halo derrière l'écran, pour donner l'échelle -->
     <a-plane rotation="-90 0 0" width="40" height="40" color="#0a1220" position="0 -1.6 0"></a-plane>
-    <a-plane position="0 1.6 -6.2" width="12.4" height="7.2" color="#0e2436"></a-plane>
+    <a-entity id="halo"
+              geometry="primitive: cylinder; radius: 6.35; height: 7.2; openEnded: true; thetaStart: 125; thetaLength: 110; segmentsRadial: 64"
+              material="shader: flat; color: #0e2436; side: back"
+              position="0 1.6 0"></a-entity>
 
-    <!-- écran principal, 16/9, à 6 m : ~40° de champ, confortable en VR -->
-    <a-video id="ecran" src="#vrVideo" position="0 1.6 -6" width="10.66" height="6"></a-video>
+    <!-- Écran principal INCURVÉ : portion de cylindre centrée sur le
+         spectateur (rayon 6 m), donc chaque point de l'image est à la même
+         distance de l'œil — un plan, lui, s'éloigne sur les bords et fatigue
+         l'accommodation dans un casque.
+         Géométrie : thetaLength 102° pour une corde équivalente à l'ancien
+         écran de 10,66 m (6 m × 1,78 rad), hauteur 6 m -> 16/9 conservé.
+         thetaStart = 180 - 102/2 centre l'arc sur -Z, face à la caméra.
+         side: back  = on regarde la face intérieure du cylindre.
+         repeat: -1 1 + offset: 1 0 = miroir horizontal : vu de l'intérieur,
+         l'UV du cylindre part de la droite, l'image serait sinon inversée. -->
+    <a-entity id="ecran"
+              geometry="primitive: cylinder; radius: 6; height: 6; openEnded: true; thetaStart: 129; thetaLength: 102; segmentsRadial: 64"
+              material="shader: flat; src: #vrVideo; side: back; repeat: -1 1; offset: 1 0; npot: true"
+              position="0 1.6 0"></a-entity>
 
     <!-- panneau des chaînes -->
     <a-entity id="panneau" position="-6.6 1.6 -4.2" rotation="0 35 0"></a-entity>
