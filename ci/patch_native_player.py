@@ -53,7 +53,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.json.JSONObject;
 
 @CapacitorPlugin(name = "NativePlayer")
@@ -65,6 +67,10 @@ public class NativePlayerPlugin extends Plugin {
     // processus, il n'y a donc rien à sérialiser.
     static List<NativePlayerActivity.Channel> channels = new ArrayList<>();
     static int channelIndex = -1;
+    // Autres versions du même contenu (menu « Sources » du lecteur web) et
+    // favoris, pour que la barre native propose exactement les mêmes choix.
+    static List<NativePlayerActivity.Channel> versions = new ArrayList<>();
+    static Set<String> favorites = new HashSet<>();
 
     private static NativePlayerPlugin instance;
 
@@ -84,6 +90,11 @@ public class NativePlayerPlugin extends Plugin {
         }
         channels = parseChannels(call.getArray("channels"));
         channelIndex = call.getInt("index", -1);
+        versions = parseChannels(call.getArray("versions"));
+        favorites = new HashSet<>();
+        for (NativePlayerActivity.Channel favori : parseChannels(call.getArray("favorites"))) {
+            favorites.add(favori.url);
+        }
         Intent intent = new Intent(getContext(), NativePlayerActivity.class);
         intent.putExtra("url", url);
         intent.putExtra("title", title);
@@ -130,6 +141,15 @@ public class NativePlayerPlugin extends Plugin {
             return;
         }
         instance.notifyListeners("closed", new JSObject());
+    }
+
+    // Bouton Accueil de la barre : l'écran natif se referme et la page
+    // retourne à l'accueil, comme le 🏠 du lecteur web.
+    static void notifyHome() {
+        if (instance == null) {
+            return;
+        }
+        instance.notifyListeners("home", new JSObject());
     }
 
     private List<NativePlayerActivity.Channel> parseChannels(JSArray array) {
@@ -196,7 +216,9 @@ import androidx.media3.ui.PlayerView;
 import com.google.android.gms.cast.framework.CastButtonFactory;
 import com.google.android.gms.cast.framework.CastContext;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public class NativePlayerActivity extends AppCompatActivity {
@@ -210,6 +232,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     // Délai après la dernière touche numérique avant de rejoindre la chaîne :
     // il faut laisser le temps de composer un numéro à deux ou trois chiffres.
     private static final long NUMBER_MS = 1500;
+    // Inactivité avant effacement de la barre du haut : même valeur que le
+    // lecteur web (UI_IDLE_MS dans www/player.js).
+    private static final long UI_IDLE_MS = 4000;
 
     // L'écran natif remplace complètement le lecteur web le temps de la
     // lecture : sans les commandes ci-dessous, basculer en natif ferait
@@ -247,6 +272,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private ImageButton tracksBtn;
     private ImageButton listBtn;
     private ImageButton recordBtn;
+    private ImageButton homeBtn;
     private View banner;
     private TextView bannerName;
     private TextView bannerProg;
@@ -254,7 +280,16 @@ public class NativePlayerActivity extends AppCompatActivity {
     private TextView numberView;
     private final StringBuilder numberBuffer = new StringBuilder();
     private List<Channel> channels = new ArrayList<>();
+    private List<Channel> versions = new ArrayList<>();
+    private Set<String> favorites = new HashSet<>();
     private int channelIndex = -1;
+    // Un menu ouvert épingle la barre : elle ne doit pas s'effacer sous le
+    // dialogue qu'on vient d'ouvrir depuis un de ses boutons.
+    private int openDialogs = 0;
+    // ExoPlayer ne dit pas si la définition en cours vient de son choix
+    // automatique ou d'un forçage manuel : on le retient nous-mêmes pour
+    // cocher la bonne ligne du menu.
+    private boolean qualiteForcee = false;
     private String mediaUrl;
     private String mediaTitle;
     private boolean isLive; // Picture-in-Picture : proposé et auto-activé au
@@ -274,6 +309,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         @Override
         public void run() {
             banner.setVisibility(View.GONE);
+        }
+    };
+    private final Runnable hideChromeRunnable = new Runnable() {
+        @Override
+        public void run() {
+            hideChrome();
         }
     };
     private final Runnable numberRunnable = new Runnable() {
@@ -316,6 +357,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         // Liste de zapping déposée par le plugin (même processus).
         channels = NativePlayerPlugin.channels;
         channelIndex = NativePlayerPlugin.channelIndex;
+        versions = NativePlayerPlugin.versions;
+        favorites = NativePlayerPlugin.favorites;
         currentInstance = this;
 
         titleView = findViewById(R.id.playerTitle);
@@ -389,6 +432,17 @@ public class NativePlayerActivity extends AppCompatActivity {
             recordBtn.setVisibility(View.GONE);
         }
 
+        // Accueil : referme l'écran natif et ramène la page à l'accueil, comme
+        // le bouton 🏠 du lecteur web.
+        homeBtn = findViewById(R.id.playerHomeBtn);
+        homeBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                NativePlayerPlugin.notifyHome();
+                finish();
+            }
+        });
+
         statusView = findViewById(R.id.playerStatusText);
         playerView = findViewById(R.id.playerView);
 
@@ -442,6 +496,64 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         switchPlayer(castPlayer != null && castPlayer.isCastSessionAvailable() ? castPlayer : localPlayer);
+        scheduleHideChrome();
+    }
+
+    // ---------- Masquage auto de la barre du haut ----------
+    // Identique au lecteur web : la barre mange le haut de l'image, on
+    // l'efface après quelques secondes sans action et on la ramène au moindre
+    // geste. Elle reste en place tant qu'un menu est ouvert ou que la
+    // télécommande a le focus sur un de ses boutons — sur une télé, le focus
+    // doit toujours désigner quelque chose de visible.
+    private boolean chromePinned() {
+        return openDialogs > 0 || (topBar != null && topBar.findFocus() != null);
+    }
+
+    private void hideChrome() {
+        if (chromePinned()) {
+            scheduleHideChrome();
+            return;
+        }
+        topBar.setVisibility(View.GONE);
+    }
+
+    private void scheduleHideChrome() {
+        uiHandler.removeCallbacks(hideChromeRunnable);
+        uiHandler.postDelayed(hideChromeRunnable, UI_IDLE_MS);
+    }
+
+    private void showChrome() {
+        if (topBar == null || isInPip()) {
+            return;
+        }
+        topBar.setVisibility(View.VISIBLE);
+        scheduleHideChrome();
+    }
+
+    private boolean isInPip() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode();
+    }
+
+    // Appelée par le système à chaque geste ou touche envoyés à l'activité :
+    // un seul point d'entrée pour réveiller la barre.
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        showChrome();
+    }
+
+    // Les dialogues (pistes, liste des chaînes) épinglent la barre le temps
+    // qu'ils sont affichés, puis relancent le compte à rebours.
+    private void trackDialog(AlertDialog dialog) {
+        openDialogs++;
+        uiHandler.removeCallbacks(hideChromeRunnable);
+        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface d) {
+                openDialogs--;
+                showChrome();
+            }
+        });
     }
 
     // Android 13+ : la découverte des Chromecast se fait par mDNS sur le
@@ -572,6 +684,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int code = event.getKeyCode();
+        // onUserInteraction() n'est pas appelée pour les touches qu'on
+        // consomme ici : on réveille donc la barre explicitement.
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            showChrome();
+        }
         boolean mine;
         if (canZap() && (isZapUp(code) || isZapDown(code))) {
             mine = true;
@@ -615,15 +732,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         playChannel(next);
     }
 
-    private void playChannel(int index) {
-        if (index < 0 || index >= channels.size()) {
-            return;
-        }
-        Channel channel = channels.get(index);
-        channelIndex = index;
-        NativePlayerPlugin.channelIndex = index;
-        mediaUrl = channel.url;
-        mediaTitle = channel.name == null ? "" : channel.name;
+    private void playUrl(String url, String title) {
+        qualiteForcee = false;
+        mediaUrl = url;
+        mediaTitle = title == null ? "" : title;
         titleView.setText(mediaTitle);
         statusView.setVisibility(View.GONE);
 
@@ -635,8 +747,18 @@ public class NativePlayerActivity extends AppCompatActivity {
             timeoutHandler.removeCallbacks(timeoutRunnable);
             timeoutHandler.postDelayed(timeoutRunnable, LOAD_TIMEOUT_MS);
         }
-        showBanner(channel);
         updateRecordButton();
+    }
+
+    private void playChannel(int index) {
+        if (index < 0 || index >= channels.size()) {
+            return;
+        }
+        Channel channel = channels.get(index);
+        channelIndex = index;
+        NativePlayerPlugin.channelIndex = index;
+        playUrl(channel.url, channel.name);
+        showBanner(channel);
         NativePlayerPlugin.notifyZap(index, channel.url, mediaTitle);
     }
 
@@ -720,21 +842,26 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         String[] labels = new String[channels.size()];
         for (int i = 0; i < channels.size(); i++) {
-            labels[i] = channelLabel(channels.get(i));
+            Channel channel = channels.get(i);
+            // Favoris repérés d'une étoile, comme dans le panneau
+            // « télécommande » du lecteur web.
+            labels[i] = (favorites.contains(channel.url) ? "⭐ " : "") + channelLabel(channel);
         }
         // setSingleChoiceItems plutôt que setItems : la liste s'ouvre
         // directement sur la chaîne en cours (et le D-pad démarre dessus),
         // indispensable dans un bouquet de plusieurs centaines d'entrées.
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Chaînes")
                 .setSingleChoiceItems(labels, channelIndex, new DialogInterface.OnClickListener() {
                     @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        dialog.dismiss();
+                    public void onClick(DialogInterface d, int which) {
+                        d.dismiss();
                         playChannel(which);
                     }
                 })
-                .show();
+                .create();
+        trackDialog(dialog);
+        dialog.show();
     }
 
     // ---------- Enregistrement ----------
@@ -804,13 +931,16 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
-        topBar.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         playerView.setUseController(!isInPictureInPictureMode);
         if (isInPictureInPictureMode) {
             // Quelques centimètres carrés : tout l'habillage masquerait l'image.
+            uiHandler.removeCallbacks(hideChromeRunnable);
+            topBar.setVisibility(View.GONE);
             banner.setVisibility(View.GONE);
             numberView.setVisibility(View.GONE);
             progBar.setVisibility(View.GONE);
+        } else {
+            showChrome();
         }
     }
 
@@ -826,6 +956,66 @@ public class NativePlayerActivity extends AppCompatActivity {
         Tracks tracks = localPlayer.getCurrentTracks();
         final List<String> labels = new ArrayList<>();
         final List<Runnable> actions = new ArrayList<>();
+
+        // Sources : autres versions du même contenu (menu « Sources » du
+        // lecteur web) — changer de source se fait sur place, sans repasser
+        // par la page.
+        for (int i = 0; i < versions.size(); i++) {
+            final Channel version = versions.get(i);
+            boolean courante = version.url.equals(mediaUrl);
+            labels.add("🎬 Source : " + version.name + (courante ? " ✓" : ""));
+            actions.add(new Runnable() {
+                @Override
+                public void run() {
+                    playUrl(version.url, version.name);
+                }
+            });
+        }
+
+        // Qualité : forçage manuel d'une définition, en plus de la sélection
+        // automatique d'ExoPlayer — même usage que le menu « Qualité » du web
+        // (image figée sur une connexion limitée, ou définition trop basse
+        // alors que le débit suit).
+        labels.add("🎚 Qualité : automatique" + (qualiteForcee ? "" : " ✓"));
+        actions.add(new Runnable() {
+            @Override
+            public void run() {
+                qualiteForcee = false;
+                localPlayer.setTrackSelectionParameters(
+                        localPlayer.getTrackSelectionParameters().buildUpon()
+                                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                                .build());
+            }
+        });
+
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_VIDEO) {
+                continue;
+            }
+            for (int i = 0; i < group.length; i++) {
+                if (!group.isTrackSupported(i)) {
+                    continue;
+                }
+                Format format = group.getTrackFormat(i);
+                String name = format.height > 0
+                        ? format.height + "p"
+                        : (format.bitrate > 0 ? (format.bitrate / 1000) + " kb/s" : "Piste " + (i + 1));
+                boolean selected = qualiteForcee && group.isTrackSelected(i);
+                labels.add("🎚 Qualité : " + name + (selected ? " ✓" : ""));
+                final TrackGroup mediaTrackGroup = group.getMediaTrackGroup();
+                final int trackIndex = i;
+                actions.add(new Runnable() {
+                    @Override
+                    public void run() {
+                        qualiteForcee = true;
+                        localPlayer.setTrackSelectionParameters(
+                                localPlayer.getTrackSelectionParameters().buildUpon()
+                                        .setOverrideForType(new TrackSelectionOverride(mediaTrackGroup, trackIndex))
+                                        .build());
+                    }
+                });
+            }
+        }
 
         for (Tracks.Group group : tracks.getGroups()) {
             if (group.getType() != C.TRACK_TYPE_AUDIO) {
@@ -892,15 +1082,17 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
 
-        new AlertDialog.Builder(this)
-                .setTitle("Langue et sous-titres")
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Source, qualité, langue et sous-titres")
                 .setItems(labels.toArray(new String[0]), new DialogInterface.OnClickListener() {
                     @Override
-                    public void onClick(DialogInterface dialog, int which) {
+                    public void onClick(DialogInterface d, int which) {
                         actions.get(which).run();
                     }
                 })
-                .show();
+                .create();
+        trackDialog(dialog);
+        dialog.show();
     }
 
     @Override
@@ -909,6 +1101,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             currentInstance = null;
             NativePlayerPlugin.notifyClosed();
         }
+        uiHandler.removeCallbacks(hideChromeRunnable);
         uiHandler.removeCallbacks(hideBannerRunnable);
         uiHandler.removeCallbacks(numberRunnable);
         timeoutHandler.removeCallbacks(timeoutRunnable);
@@ -1045,6 +1238,17 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
             android:background="@drawable/bg_player_btn"
             android:src="@drawable/ic_tracks"
             android:contentDescription="Langue et sous-titres" />
+
+        <ImageButton
+            android:id="@+id/playerHomeBtn"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="10dp"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:background="@drawable/bg_player_btn"
+            android:src="@drawable/ic_home"
+            android:contentDescription="Accueil" />
 
         <ImageButton
             android:id="@+id/playerCloseBtn"
@@ -1184,6 +1388,20 @@ CARD_BG_XML = """<?xml version="1.0" encoding="utf-8"?>
     <solid android:color="#E00A1018" />
     <stroke android:width="1dp" android:color="#223447" />
 </shape>
+"""
+
+# Icône « home » — Google Material Icons (Apache License 2.0).
+IC_HOME_XML = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z" />
+</vector>
 """
 
 # Icône « close » — Google Material Icons (Apache License 2.0). Remplace
@@ -1439,6 +1657,7 @@ write_if_changed(RES_DIR + "/drawable/ic_tracks.xml", IC_TRACKS_XML)
 write_if_changed(RES_DIR + "/drawable/ic_channels.xml", IC_CHANNELS_XML)
 write_if_changed(RES_DIR + "/drawable/ic_record.xml", IC_RECORD_XML)
 write_if_changed(RES_DIR + "/drawable/ic_close.xml", IC_CLOSE_XML)
+write_if_changed(RES_DIR + "/drawable/ic_home.xml", IC_HOME_XML)
 write_if_changed(RES_DIR + "/drawable/bg_player_btn.xml", BTN_BG_XML)
 write_if_changed(RES_DIR + "/drawable/bg_player_card.xml", CARD_BG_XML)
 patch_settings_gradle()

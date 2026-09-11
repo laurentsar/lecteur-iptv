@@ -1229,7 +1229,19 @@
         epgKey: item.epgKey || ''
       });
     }
-    return { channels: channels, index: index };
+    var versions = [];
+    if (currentVersions && currentVersions.length > 1) {
+      for (var v = 0; v < currentVersions.length; v++) {
+        if (currentVersions[v] && currentVersions[v].url) {
+          versions.push({ name: currentVersions[v].name || '', url: currentVersions[v].url, chno: '', epgKey: '' });
+        }
+      }
+    }
+    var favoris = [], brut = (global.AppZap && global.AppZap.favoris()) || [];
+    for (var f = 0; f < brut.length; f++) {
+      if (brut[f] && brut[f].url) favoris.push({ name: brut[f].name || '', url: brut[f].url, chno: '', epgKey: '' });
+    }
+    return { channels: channels, index: index, versions: versions, favorites: favoris };
   }
 
   // Un zapping fait dans l'écran natif ne passe pas par open() : on remet ici
@@ -1285,6 +1297,12 @@
     plugin.addListener('closed', function () {
       clearInterval(nativeInfoTimer);
     });
+    // Bouton Accueil de la barre native : l'écran natif s'est déjà refermé,
+    // la page n'a plus qu'à revenir à l'accueil.
+    plugin.addListener('home', function () {
+      clearInterval(nativeInfoTimer);
+      if (global.AppNav) global.AppNav.goHome();
+    });
   }
 
   function tryNativePlayer(url, title, message) {
@@ -1295,7 +1313,8 @@
     var zap = nativeZapPayload(url);
     nativePlayer.open({
       url: url, title: title || '', live: currentIsLive,
-      channels: zap.channels, index: zap.index
+      channels: zap.channels, index: zap.index,
+      versions: zap.versions, favorites: zap.favorites
     }).then(function () {
       close();
       startNativeInfoRefresh(nativePlayer);
