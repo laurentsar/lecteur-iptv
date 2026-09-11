@@ -266,6 +266,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     // Fréquence de remontée de la position de lecture, alignée sur celle du
     // lecteur web (saveProgress toutes les 5 s).
     private static final long PROGRESS_MS = 5000;
+    // Le bandeau du programme ne reste pas affiché en permanence : il mange
+    // le bas de l'image. Même durée que le bandeau équivalent du lecteur web.
+    private static final long PROGBAR_MS = 6000;
 
     // L'écran natif remplace complètement le lecteur web le temps de la
     // lecture : sans les commandes ci-dessous, basculer en natif ferait
@@ -330,6 +333,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     // automatique ou d'un forçage manuel : on le retient nous-mêmes pour
     // cocher la bonne ligne du menu.
     private boolean qualiteForcee = false;
+    // Dernier programme affiché : tant qu'il ne change pas, le rafraîchissement
+    // périodique envoyé par la page ne refait pas apparaître le bandeau.
+    private String dernierProgramme = "";
     private String mediaUrl;
     private String mediaTitle;
     private long startPositionMs;
@@ -356,6 +362,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         @Override
         public void run() {
             hideChrome();
+        }
+    };
+    private final Runnable hideProgBarRunnable = new Runnable() {
+        @Override
+        public void run() {
+            fadeOut(progBar);
         }
     };
     private final Runnable numberRunnable = new Runnable() {
@@ -624,6 +636,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
         fadeIn(topBar);
+        // L'utilisateur réveille l'interface : il veut aussi savoir ce qui
+        // passe en ce moment.
+        showProgBar();
         scheduleHideChrome();
     }
 
@@ -857,6 +872,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void playUrl(String url, String title) {
         reportProgress();
+        dernierProgramme = "";
         startPositionMs = 0;
         qualiteForcee = false;
         mediaUrl = url;
@@ -983,18 +999,36 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
         boolean vide = text == null || text.isEmpty();
-        progBar.setText(vide ? "" : text);
         if (vide) {
+            dernierProgramme = "";
+            uiHandler.removeCallbacks(hideProgBarRunnable);
             fadeOut(progBar);
             bannerProg.setVisibility(View.GONE);
             return;
         }
-        fadeIn(progBar);
+        boolean nouveau = !text.equals(dernierProgramme);
+        dernierProgramme = text;
+        progBar.setText(text);
         bannerProg.setText(text);
+        // Même émission qu'avant (simple rafraîchissement) : on met le texte à
+        // jour sans refaire surgir les bandeaux.
+        if (!nouveau) {
+            return;
+        }
+        showProgBar();
         bannerProg.setVisibility(View.VISIBLE);
         fadeIn(banner);
         uiHandler.removeCallbacks(hideBannerRunnable);
         uiHandler.postDelayed(hideBannerRunnable, BANNER_MS);
+    }
+
+    private void showProgBar() {
+        if (dernierProgramme.isEmpty() || isInPip()) {
+            return;
+        }
+        fadeIn(progBar);
+        uiHandler.removeCallbacks(hideProgBarRunnable);
+        uiHandler.postDelayed(hideProgBarRunnable, PROGBAR_MS);
     }
 
     // Numéro de chaîne composé au pavé numérique de la télécommande, comme
@@ -1307,6 +1341,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         uiHandler.removeCallbacks(hideChromeRunnable);
         uiHandler.removeCallbacks(hideBannerRunnable);
+        uiHandler.removeCallbacks(hideProgBarRunnable);
         uiHandler.removeCallbacks(numberRunnable);
         timeoutHandler.removeCallbacks(timeoutRunnable);
         if (castPlayer != null) {

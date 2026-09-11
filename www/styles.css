@@ -398,7 +398,10 @@ button.ghost { background: var(--card2); color: var(--text); }
   padding: 6px 8px; display: flex; align-items: center; gap: 6px; cursor: pointer;
 }
 .guide-chan img { width: 24px; height: 24px; object-fit: contain; border-radius: 4px; background: var(--card2); flex: none; }
+.guide-chan-txt { min-width: 0; flex: 1; }
 .guide-chan span { font-size: 12px; font-weight: 600; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* prochaine émission (retirée des vignettes de chaînes, cf. epgBadge) */
+.guide-next { font-size: 10px; color: var(--muted); line-height: 1.25; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .guide-timeline { position: relative; min-height: 52px; border-bottom: 1px solid var(--line); }
 .guide-prog {
   position: absolute; top: 4px; bottom: 4px; background: var(--card2); border: 1px solid var(--line);

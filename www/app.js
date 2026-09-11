@@ -501,7 +501,10 @@
   function epgBadge(item) {
     var info = nowNextFor(item);
     if (!info || !info.now) return null;
-    return el('div', 'carte-epg', '▶ ' + info.now.titre + (info.next ? ' · ensuite : ' + info.next.titre : ''));
+    // Seulement l'émission en cours : la suivante encombrait les vignettes
+    // pour une information qu'on ne cherche pas en zappant. Elle est
+    // affichée dans le Guide (ligne « Ensuite », voir renderGuide).
+    return el('div', 'carte-epg', '▶ ' + info.now.titre);
   }
 
   function isTabActive(name) { var p = $id('tab-' + name); return p && p.classList.contains('active'); }
@@ -1432,12 +1435,26 @@
           img.onerror = function () { img.remove(); };
           chan.appendChild(img);
         }
-        chan.appendChild(el('span', null, item.name));
+        var progs = Epg.progsFor(state.epgMap, item.epgKey, item.name) || [];
+
+        var texte = el('div', 'guide-chan-txt');
+        texte.appendChild(el('span', null, item.name));
+        // Prochaine émission : retirée des vignettes de chaînes (trop
+        // encombrante), elle a sa place ici — mais seulement sur la journée
+        // en cours, « ensuite » n'ayant aucun sens sur un autre jour.
+        if (state.guideDayOffset === 0) {
+          var suite = Epg.nowNext(state.epgMap, item.epgKey, item.name);
+          if (suite && suite.next) {
+            texte.appendChild(el('div', 'guide-next',
+              'Ensuite : ' + (suite.next.titre || '(sans titre)') +
+              (suite.next.start ? ' · ' + new Date(suite.next.start).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '')));
+          }
+        }
+        chan.appendChild(texte);
         chan.addEventListener('click', function () { Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo }); });
         grid.appendChild(makeFocusable(chan));
 
         var timeline = el('div', 'guide-timeline');
-        var progs = Epg.progsFor(state.epgMap, item.epgKey, item.name) || [];
         var visible = progs.filter(function (p) { return p.start != null && p.stop != null && p.stop > dayStart && p.start < dayEnd; });
         if (!visible.length) {
           timeline.appendChild(el('div', 'guide-empty', 'Pas de programme disponible'));

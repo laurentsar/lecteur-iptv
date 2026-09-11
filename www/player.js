@@ -238,6 +238,8 @@
   function showPlayerUi() {
     if (!overlay) return;
     overlay.classList.remove('ui-hidden');
+    // L'utilisateur réveille l'interface : il veut aussi savoir ce qui passe.
+    flashProgBar();
     schedulePlayerUiHide();
   }
 
@@ -629,9 +631,9 @@
     clearTimeout(zapBannerTimer);
     zapBannerName.textContent = name || '';
     var info = (global.AppZap && global.AppZap.epgNow) ? global.AppZap.epgNow(epgKey, name) : null;
-    zapBannerProg.textContent = info && info.now
-      ? '▶ ' + info.now.titre + (info.next ? ' · ensuite : ' + info.next.titre : '')
-      : '';
+    // Seulement l'émission en cours : la suivante est affichée dans le Guide
+    // (ligne « Ensuite »), elle n'a pas sa place dans un bandeau fugace.
+    zapBannerProg.textContent = info && info.now ? '▶ ' + info.now.titre : '';
     if (logo) {
       zapBannerLogo.src = logo;
       zapBannerLogo.style.display = '';
@@ -649,20 +651,46 @@
   // moment du zapping — rafraîchi périodiquement (setupProgBarRefresh)
   // puisque le programme change au fil du temps sans que l'utilisateur ne
   // fasse rien.
+  // Le bandeau ne reste plus affiché en permanence : il apparaît à la prise
+  // d'antenne, à chaque changement de programme et au réveil de l'interface,
+  // puis s'efface — sinon il mange le bas de l'image en continu.
+  var PROG_BAR_MS = 6000;
+  var progBarHideTimer = 0, progBarTexte = '';
+
+  function flashProgBar() {
+    if (!progBar || !progBarTexte) return;
+    progBar.textContent = progBarTexte;
+    progBar.style.display = '';
+    clearTimeout(progBarHideTimer);
+    progBarHideTimer = setTimeout(function () {
+      if (progBar) progBar.style.display = 'none';
+    }, PROG_BAR_MS);
+  }
+
   function updateProgBar(name, epgKey) {
     if (!progBar) return;
     var info = (global.AppZap && global.AppZap.epgNow) ? global.AppZap.epgNow(epgKey, name) : null;
-    if (info && info.now) {
-      progBar.textContent = '▶ ' + info.now.titre;
-      progBar.style.display = '';
-    } else {
+    var texte = info && info.now ? '▶ ' + info.now.titre : '';
+    // Rafraîchissement périodique : tant que c'est la même émission, on ne
+    // fait pas réapparaître le bandeau pour rien.
+    if (texte === progBarTexte) return;
+    progBarTexte = texte;
+    if (!texte) {
+      clearTimeout(progBarHideTimer);
       progBar.style.display = 'none';
+      return;
     }
+    flashProgBar();
   }
 
   function setupProgBarRefresh(name, epgKey) {
     clearInterval(progBarTimer);
-    if (!currentIsLive) { if (progBar) progBar.style.display = 'none'; return; }
+    progBarTexte = ''; // nouvelle chaîne : le bandeau doit se remontrer
+    if (!currentIsLive) {
+      clearTimeout(progBarHideTimer);
+      if (progBar) progBar.style.display = 'none';
+      return;
+    }
     updateProgBar(name, epgKey);
     progBarTimer = setInterval(function () { updateProgBar(name, epgKey); }, 60000);
   }
@@ -1259,9 +1287,7 @@
     }
     var epg = (item && global.AppZap && global.AppZap.epgNow)
       ? global.AppZap.epgNow(item.epgKey, item.name) : null;
-    return epg && epg.now
-      ? '▶ ' + epg.now.titre + (epg.next ? ' · ensuite : ' + epg.next.titre : '')
-      : '';
+    return epg && epg.now ? '▶ ' + epg.now.titre : '';
   }
 
   function pushNativeInfo(plugin) {
