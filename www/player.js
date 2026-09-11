@@ -42,7 +42,7 @@
   var currentIsLive = false; // PiP proposé uniquement pour le direct
   var currentIsRadio = false; // lecture en fond sonore natif quand l'appli passe en arrière-plan, voir setupRadioBackground()
   var currentLogo = '';
-  var triedNativeFallback = false, triedM3u8Fallback = false;
+  var triedNativeFallback = false, triedM3u8Fallback = false, triedAudioFallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
   var remoteBtn, remotePanel, castTvBtn, vrBtn;
   var fullscreenBtn, homeBtn;
@@ -126,6 +126,7 @@
       '  <div id="tracksQualityList"></div>' +
       '  <div class="tracks-title">Audio</div>' +
       '  <div id="tracksAudioList"></div>' +
+      '  <div id="tracksAudioFix"></div>' +
       '  <div class="tracks-title">Sous-titres</div>' +
       '  <div id="tracksSubList"></div>' +
       '</div>' +
@@ -185,7 +186,7 @@
       clearLoadTimeout();
       attemptFallbackOrFail('Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error));
     });
-    video.addEventListener('playing', function () { clearLoadTimeout(); setStatus(''); });
+    video.addEventListener('playing', function () { clearLoadTimeout(); setStatus(''); armAudioWatchdog(); });
     setupAirplay();
     setupChromecast();
     updateCastAvailability();
@@ -837,7 +838,11 @@
   }
 
   function updateTracksVisibility() {
-    var hasChoice = getAudioTracks().length > 1 || getSubtitleTracks().length > 0 || getQualityLevels().length > 1 || getSourceVersions().length > 1;
+    // Le lecteur natif étant proposé dans ce menu, le bouton reste visible dès
+    // que ce lecteur existe : sans ça, une chaîne sans piste alternative (donc
+    // sans « choix ») cachait le seul moyen de récupérer le son.
+    var hasChoice = !!nativePlayerPlugin() ||
+      getAudioTracks().length > 1 || getSubtitleTracks().length > 0 || getQualityLevels().length > 1 || getSourceVersions().length > 1;
     tracksBtn.style.display = hasChoice ? '' : 'none';
     if (!hasChoice) tracksMenu.style.display = 'none';
   }
@@ -871,10 +876,31 @@
     return e;
   }
 
+  // Bascule manuelle vers le lecteur natif. La détection automatique du son
+  // absent couvre les cas où le flux annonce son codec, mais un flux peut
+  // mentir ou ne rien annoncer du tout : il faut laisser la main.
+  function renderAudioFix() {
+    var box = overlay.querySelector('#tracksAudioFix');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!nativePlayerPlugin()) return;
+    var b = document.createElement('button');
+    b.className = 'tracks-item';
+    b.textContent = '🔈 Pas de son ? Ouvrir dans le lecteur natif';
+    b.addEventListener('click', function () {
+      tracksMenu.style.display = 'none';
+      triedNativeFallback = true;
+      triedAudioFallback = true;
+      tryNativePlayer(originalUrl, originalTitle, 'Ouverture du lecteur natif (son)…');
+    });
+    box.appendChild(b);
+  }
+
   function renderTracksMenu() {
     tracksMenuList(overlay.querySelector('#tracksSourcesList'), getSourceVersions(), getCurrentSourceIndex(), false, setSourceVersion);
     tracksMenuList(overlay.querySelector('#tracksQualityList'), getQualityLevels(), getCurrentQualityLevel(), true, setQualityLevel, 'Auto');
     tracksMenuList(overlay.querySelector('#tracksAudioList'), getAudioTracks(), getCurrentAudioTrack(), false, setAudioTrack);
+    renderAudioFix();
     tracksMenuList(overlay.querySelector('#tracksSubList'), getSubtitleTracks(), getCurrentSubtitleTrack(), true, setSubtitleTrack);
   }
 
@@ -1005,6 +1031,102 @@
   function destroyPlayers() {
     if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
     if (mpegtsPlayer) { try { mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
+    clearAudioWatchdog();
+  }
+
+  // ---------- Chaîne sans son ----------
+  //
+  // Le repli vers le lecteur natif ne se déclenchait que sur une ERREUR. Or
+  // une piste audio que la WebView ne sait pas décoder ne produit aucune
+  // erreur : l'image passe, le son est simplement absent. C'est le cas de
+  // beaucoup de chaînes IPTV européennes — AC-3 et E-AC-3 (Dolby Digital),
+  // DTS, et surtout MPEG-1 Layer 2, la norme audio du DVB hertzien. La
+  // WebView Android ne décode que AAC, MP3, Opus, Vorbis et FLAC ; mpegts.js
+  // se limite même à AAC et MP3.
+  //
+  // Le lecteur natif, lui, sait les lire : Media3 avec l'extension FFmpeg
+  // (voir native/decoder-ffmpeg) décode AC-3, E-AC-3, DTS et MP2. Il faut
+  // donc y basculer AVANT d'attendre une erreur qui ne viendra jamais.
+
+  var AUDIO_WATCHDOG_MS = 6000;
+  var audioWatchdogId = null;
+
+  function clearAudioWatchdog() {
+    if (audioWatchdogId) { clearTimeout(audioWatchdogId); audioWatchdogId = null; }
+  }
+
+  // Vrai seulement si on est SÛR que la WebView décode ce codec. Dans le
+  // doute (codec inconnu, information absente), on répond vrai : basculer sur
+  // le lecteur natif à tort sortirait le spectateur de l'interface pour rien.
+  function audioCodecPlayable(codec) {
+    if (!codec) return true;
+    var c = String(codec).toLowerCase();
+    if (/aac|mp4a\.40|mp3|mp4a\.69|mp4a\.6b|opus|vorbis|flac/.test(c)) return true;
+    // Les codecs qu'aucune WebView Android ne décode.
+    if (/ac-?3|ec-?3|eac-?3|mp4a\.a5|mp4a\.a6|dts|truehd|mlp|mp2|mpeg-?1|mpeg-?2|layer ?(i|ii|2)\b|pcm|lpcm/.test(c)) return false;
+    // Codec inconnu : on demande au navigateur avant de conclure.
+    if (global.MediaSource && global.MediaSource.isTypeSupported) {
+      try {
+        if (global.MediaSource.isTypeSupported('audio/mp4; codecs="' + codec + '"')) return true;
+        return false;
+      } catch (e) { /* codec mal formé : on laisse jouer */ }
+    }
+    return true;
+  }
+
+  function noAudioFallback(reason) {
+    if (triedAudioFallback || currentIsRadio) return;
+    triedAudioFallback = true;
+    clearAudioWatchdog();
+    var why = 'piste audio ' + (reason || 'non décodable') + ' — le navigateur ne la lit pas';
+    if (!triedNativeFallback) {
+      triedNativeFallback = true;
+      if (tryNativePlayer(originalUrl, originalTitle, why + ', bascule sur le lecteur natif…')) return;
+    }
+    // Sans lecteur natif (PWA, navigateur) : certains panels Xtream
+    // retranscodent en AAC quand on demande la variante .m3u8.
+    if (!triedM3u8Fallback && !isM3u8(currentUrl)) {
+      triedM3u8Fallback = true;
+      setStatus(why + ', nouvelle tentative en HLS transcodé…');
+      startPlayback(swapExtToM3u8(currentUrl), currentTitle);
+      return;
+    }
+    setStatus('Cette chaîne utilise une ' + why + '. Installe l\u2019application Android pour l\u2019entendre.');
+  }
+
+  // Filet de sécurité, quand le codec n'a pas pu être lu dans le manifeste :
+  // si après six secondes de lecture le moteur n'a décodé AUCUN octet audio,
+  // c'est qu'il n'y a pas de son. `webkitAudioDecodedByteCount` n'est pas
+  // standard mais existe dans Chromium, donc dans la WebView Android — là où
+  // le problème se pose. Ailleurs, on ne devine pas.
+  function armAudioWatchdog() {
+    clearAudioWatchdog();
+    if (triedAudioFallback || currentIsRadio) return;
+    if (typeof video.webkitAudioDecodedByteCount !== 'number') return;
+    audioWatchdogId = setTimeout(function () {
+      audioWatchdogId = null;
+      if (!isOpen() || video.paused || video.currentTime <= 0) return;
+      if (video.webkitAudioDecodedByteCount > 0) return; // du son est bien décodé
+      noAudioFallback('non décodable par le navigateur');
+    }, AUDIO_WATCHDOG_MS);
+  }
+
+  // Ce que hls.js a lu dans le manifeste : le codec est annoncé avant même
+  // que le premier segment soit téléchargé, on bascule donc sans attendre.
+  function checkHlsAudioCodec() {
+    if (!hls) return;
+    var codec = null;
+    try {
+      var tracks = hls.audioTracks || [];
+      var t = tracks[hls.audioTrack] || tracks[0];
+      if (t && t.audioCodec) codec = t.audioCodec;
+      if (!codec) {
+        var levels = hls.levels || [];
+        var lvl = levels[hls.currentLevel >= 0 ? hls.currentLevel : 0];
+        if (lvl && lvl.audioCodec) codec = lvl.audioCodec;
+      }
+    } catch (e) { return; }
+    if (codec && !audioCodecPlayable(codec)) noAudioFallback(codec);
   }
 
   function clearLoadTimeout() {
@@ -1126,9 +1248,12 @@
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
         if (data && data.fatal) attemptFallbackOrFail('Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
-      hls.on(global.Hls.Events.AUDIO_TRACKS_UPDATED, updateTracksVisibility);
+      hls.on(global.Hls.Events.AUDIO_TRACKS_UPDATED, function () { updateTracksVisibility(); checkHlsAudioCodec(); });
       hls.on(global.Hls.Events.SUBTITLE_TRACKS_UPDATED, updateTracksVisibility);
-      hls.on(global.Hls.Events.MANIFEST_PARSED, updateTracksVisibility);
+      hls.on(global.Hls.Events.MANIFEST_PARSED, function () { updateTracksVisibility(); checkHlsAudioCodec(); });
+      if (global.Hls.Events.AUDIO_TRACK_SWITCHED) {
+        hls.on(global.Hls.Events.AUDIO_TRACK_SWITCHED, checkHlsAudioCodec);
+      }
       hls.loadSource(url);
       hls.attachMedia(video);
       video.play().catch(function () {});
@@ -1146,6 +1271,15 @@
       mpegtsPlayer.on(global.mpegts.Events.ERROR, function () {
         attemptFallbackOrFail('Flux mpeg-ts interrompu — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
       });
+      // mpegts.js ne démultiplexe que l'AAC et le MP3. Une chaîne en MPEG-1
+      // Layer 2 (la norme du DVB hertzien) ou en AC-3 passe donc en silence,
+      // sans la moindre erreur. Le flux annonce son codec ici, avant l'image.
+      if (global.mpegts.Events.MEDIA_INFO) {
+        mpegtsPlayer.on(global.mpegts.Events.MEDIA_INFO, function (info) {
+          if (!info || info.hasAudio === false) return;
+          if (info.audioCodec && !audioCodecPlayable(info.audioCodec)) noAudioFallback(info.audioCodec);
+        });
+      }
       mpegtsPlayer.attachMediaElement(video);
       mpegtsPlayer.load();
       mpegtsPlayer.play().catch(function () {});
@@ -1167,6 +1301,7 @@
     currentVersions = (opts && opts.versions) || null;
     triedNativeFallback = false;
     triedM3u8Fallback = false;
+    triedAudioFallback = false;
     ensureDom();
     overlay.classList.add('show');
     showPlayerUi();
@@ -1183,6 +1318,7 @@
 
   function close() {
     clearLoadTimeout();
+    clearAudioWatchdog();
     clearInterval(progBarTimer);
     saveProgress(true);
     if (document.pictureInPictureElement === video) { document.exitPictureInPicture().catch(function () {}); }
