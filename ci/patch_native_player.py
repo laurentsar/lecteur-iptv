@@ -99,6 +99,10 @@ public class NativePlayerPlugin extends Plugin {
         intent.putExtra("url", url);
         intent.putExtra("title", title);
         intent.putExtra("live", live);
+        // Reprise d'un film/épisode : la position mémorisée vit côté web
+        // (Store.getProgress), le lecteur natif la reçoit à l'ouverture et
+        // la renvoie régulièrement pour qu'elle continue d'être suivie.
+        intent.putExtra("positionMs", call.getLong("positionMs", 0L));
         getActivity().startActivity(intent);
         call.resolve();
     }
@@ -141,6 +145,17 @@ public class NativePlayerPlugin extends Plugin {
             return;
         }
         instance.notifyListeners("closed", new JSObject());
+    }
+
+    static void notifyProgress(String url, long positionMs, long durationMs) {
+        if (instance == null) {
+            return;
+        }
+        JSObject data = new JSObject();
+        data.put("url", url);
+        data.put("positionMs", positionMs);
+        data.put("durationMs", durationMs);
+        instance.notifyListeners("progress", data);
     }
 
     // Bouton Accueil de la barre : l'écran natif se referme et la page
@@ -248,6 +263,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     // Inactivité avant effacement de la barre du haut : même valeur que le
     // lecteur web (UI_IDLE_MS dans www/player.js).
     private static final long UI_IDLE_MS = 4000;
+    // Fréquence de remontée de la position de lecture, alignée sur celle du
+    // lecteur web (saveProgress toutes les 5 s).
+    private static final long PROGRESS_MS = 5000;
 
     // L'écran natif remplace complètement le lecteur web le temps de la
     // lecture : sans les commandes ci-dessous, basculer en natif ferait
@@ -314,6 +332,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean qualiteForcee = false;
     private String mediaUrl;
     private String mediaTitle;
+    private long startPositionMs;
     private boolean isLive; // Picture-in-Picture : proposé et auto-activé au
     // bouton Accueil uniquement pour le direct (pas d'intérêt pour la VOD,
     // pas de contrôles lecture/pause depuis la mini-fenêtre système).
@@ -375,6 +394,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         String title = getIntent().getStringExtra("title");
         mediaTitle = title == null ? "" : title;
         isLive = getIntent().getBooleanExtra("live", false);
+        startPositionMs = getIntent().getLongExtra("positionMs", 0L);
 
         // Liste de zapping déposée par le plugin (même processus).
         channels = NativePlayerPlugin.channels;
@@ -522,6 +542,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         switchPlayer(castPlayer != null && castPlayer.isCastSessionAvailable() ? castPlayer : localPlayer);
         applyFocusEffect(homeBtn, listBtn, recordBtn, tracksBtn, pipBtn, closeBtn, castBtn);
         scheduleHideChrome();
+        if (!isLive) {
+            uiHandler.postDelayed(progressRunnable, PROGRESS_MS);
+        }
     }
 
     // Sur une télé, le bouton survolé doit sauter aux yeux de loin : en plus
@@ -649,7 +672,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (current == newPlayer) {
             return;
         }
-        long position = current != null ? current.getCurrentPosition() : 0;
+        long position = current != null ? current.getCurrentPosition() : startPositionMs;
         boolean playWhenReady = current == null || current.getPlayWhenReady();
         if (current != null) {
             current.pause();
@@ -806,7 +829,35 @@ public class NativePlayerActivity extends AppCompatActivity {
         playChannel(next);
     }
 
+    // Position de lecture renvoyée à la page (qui la mémorise) : à l'arrêt,
+    // au changement de flux, et périodiquement — sinon une coupure de courant
+    // perdrait toute la séance.
+    private final Runnable progressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            reportProgress();
+            uiHandler.postDelayed(this, PROGRESS_MS);
+        }
+    };
+
+    private void reportProgress() {
+        if (isLive || mediaUrl == null || mediaUrl.isEmpty()) {
+            return;
+        }
+        Player player = playerView == null ? null : playerView.getPlayer();
+        if (player == null) {
+            return;
+        }
+        long duration = player.getDuration();
+        if (duration <= 0) {
+            return;
+        }
+        NativePlayerPlugin.notifyProgress(mediaUrl, player.getCurrentPosition(), duration);
+    }
+
     private void playUrl(String url, String title) {
+        reportProgress();
+        startPositionMs = 0;
         qualiteForcee = false;
         mediaUrl = url;
         mediaTitle = title == null ? "" : title;
@@ -1244,6 +1295,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        reportProgress();
+        uiHandler.removeCallbacks(progressRunnable);
         if (currentInstance == this) {
             currentInstance = null;
             NativePlayerPlugin.notifyClosed();

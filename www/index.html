@@ -162,6 +162,13 @@
         <p class="hint">Les favoris sont partagés entre le téléphone et les télés via l'entité <code>sensor.lecteur_iptv_favoris</code> de Home Assistant. Fusion dans les deux sens : un ajout ou une suppression faite sur un appareil se retrouve sur les autres. Le jeton se crée dans HA : profil → Jetons d'accès longue durée.</p>
         <div id="haSyncPanel"></div>
       </div>
+      <div class="cat-title" id="cat-lecture" style="display:none">▶️ Lecture</div>
+      <div class="card" id="card-lecture" style="display:none">
+        <h2>Lecteur vidéo natif</h2>
+        <p class="hint">Lecture hors WebView (Media3/ExoPlayer) : décode l'HEVC et l'audio AC3/E-AC3/DTS que le navigateur refuse, et tient mieux la charge sur une télé ou un boîtier. Décoche pour revenir au lecteur web — il reste utilisé automatiquement si le lecteur natif échoue.</p>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optLecteurNatif" checked /> Lire avec le lecteur natif</label>
+      </div>
+
       <div class="cat-title">🗂️ Playlists</div>
       <div class="card">
         <h2>Mes playlists</h2>
@@ -407,7 +414,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.94';
+    window.APP_VERSION = '1.95';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>

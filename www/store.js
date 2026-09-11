@@ -29,6 +29,10 @@
   var K_FAVORIS = 'iptv:favoris';
   var K_TMDB = 'iptv:tmdbKey';
   var K_PIN = 'iptv:parentalPin';
+  // Lecteur utilisé dans l'APK : natif (Media3/ExoPlayer, hors WebView) par
+  // défaut, décochable pour revenir au lecteur web. Sans effet en PWA, où le
+  // lecteur natif n'existe pas.
+  var K_NATIF = 'iptv:lecteurNatif';
 
   // ---------- Miroir natif (Capacitor Preferences) ----------
   // Symptôme corrigé ici : les playlists disparaissaient à chaque mise à jour
@@ -44,7 +48,7 @@
   // recopie donc les CLÉS LÉGÈRES (playlists, favoris, réglages — pas les
   // caches de chaînes, trop volumineux et reconstructibles), et on rehydrate
   // le localStorage au démarrage quand il revient vide.
-  var MIROIR = [K_PLAYLISTS, K_ACTIVE, K_FAVORIS, K_TMDB, K_PIN];
+  var MIROIR = [K_PLAYLISTS, K_ACTIVE, K_FAVORIS, K_TMDB, K_PIN, K_NATIF];
   var PREFIXE_MIROIR = 'mirror:';
 
   function prefsPlugin() {
@@ -125,6 +129,11 @@
   // facultatif, aucune catégorie n'est masquée tant qu'il n'est pas défini.
   function getParentalPin() { return lsGet(K_PIN, null); }
   function setParentalPin(pin) { return lsSet(K_PIN, pin || null); }
+
+  // Par défaut à vrai : le lecteur natif décode ce que la WebView refuse
+  // (HEVC, audio AC3/E-AC3/DTS) et tient mieux la charge sur un boîtier TV.
+  function getLecteurNatif() { return lsGet(K_NATIF, true) !== false; }
+  function setLecteurNatif(actif) { return lsSet(K_NATIF, !!actif); }
 
   // Export/import de config (sauvegarde, transfert vers un autre appareil —
   // ex. le navigateur embarqué d'une Tesla, où retaper un compte Xtream au
@@ -247,6 +256,7 @@
     getActivePlaylistId: getActivePlaylistId, setActivePlaylistId: setActivePlaylistId,
     getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
     getParentalPin: getParentalPin, setParentalPin: setParentalPin,
+    getLecteurNatif: getLecteurNatif, setLecteurNatif: setLecteurNatif,
     getFavoris: getFavoris, setFavoris: setFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
     getProgress: getProgress, setProgress: setProgress, clearProgress: clearProgress,
     exportConfig: exportConfig, importConfig: importConfig,

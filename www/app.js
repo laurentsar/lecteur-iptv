@@ -2001,12 +2001,29 @@
     setTimeout(finir, reduit ? 900 : 2600);
   }
 
+  // Choix du lecteur (Réglages) : n'a de sens que dans l'APK, le lecteur natif
+  // n'existant pas en PWA — la carte reste donc masquée sur le web.
+  function setupLecteurNatif() {
+    var natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() &&
+      window.Capacitor.Plugins && window.Capacitor.Plugins.NativePlayer);
+    if (!natif) return;
+    $id('cat-lecture').style.display = '';
+    $id('card-lecture').style.display = '';
+    var box = $id('optLecteurNatif');
+    box.checked = Store.getLecteurNatif();
+    box.addEventListener('change', function () {
+      Store.setLecteurNatif(box.checked);
+      toast(box.checked ? 'Lecteur natif activé' : 'Lecteur web activé');
+    });
+  }
+
   function init() {
     startSplash();
     if (window.HaSync) HaSync.start();
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');
     $id('verText').textContent = window.APP_VERSION || '';
     pruneHiddenFavoris();
+    setupLecteurNatif();
     var activeId = Store.getActivePlaylistId();
     if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
     renderAccueil();

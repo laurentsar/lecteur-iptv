@@ -1249,7 +1249,7 @@
   // l'état du lecteur web d'équerre (chaîne courante, donc reprise correcte à
   // la fermeture) et on renvoie le programme en cours, que seule la page
   // connaît (l'EPG vit ici, pas dans le lecteur natif).
-  var nativeZapBound = false, nativeInfoTimer = 0;
+  var nativeZapBound = false, nativeInfoTimer = 0, skipNativeDefault = false;
 
   function nativeProgramText(url) {
     var list = (global.AppZap && global.AppZap.list()) || [];
@@ -1298,6 +1298,20 @@
     plugin.addListener('closed', function () {
       clearInterval(nativeInfoTimer);
     });
+    // Position de lecture renvoyée par le lecteur natif : mêmes règles que
+    // saveProgress() côté web (rien au tout début ni à la toute fin).
+    plugin.addListener('progress', function (info) {
+      if (!info || !info.url || !global.Store) return;
+      var position = (info.positionMs || 0) / 1000;
+      var duree = (info.durationMs || 0) / 1000;
+      if (!duree || duree < RESUME_MIN_DURATION) return;
+      var ratio = position / duree;
+      if (ratio < RESUME_MIN_RATIO || ratio > RESUME_MAX_RATIO) {
+        Store.clearProgress(info.url);
+        return;
+      }
+      Store.setProgress(info.url, { position: position, duration: duree, title: originalTitle });
+    });
     // Bouton Accueil de la barre native : l'écran natif s'est déjà refermé,
     // la page n'a plus qu'à revenir à l'accueil.
     plugin.addListener('home', function () {
@@ -1306,20 +1320,29 @@
     });
   }
 
-  function tryNativePlayer(url, title, message) {
+  function tryNativePlayer(url, title, message, onFailure) {
     var nativePlayer = nativePlayerPlugin();
     if (!nativePlayer) return false;
     setStatus(message || 'Échec — nouvelle tentative avec le lecteur vidéo natif de l’appareil…');
     bindNativeZap(nativePlayer);
     var zap = nativeZapPayload(url);
+    // Reprise d'un film/épisode : la position mémorisée est transmise au
+    // lecteur natif, qui la renvoie ensuite (évènement « progress »).
+    var reprise = 0;
+    if (!currentIsLive && global.Store) {
+      var saved = Store.getProgress(url);
+      if (saved && saved.position) reprise = Math.round(saved.position * 1000);
+    }
     nativePlayer.open({
       url: url, title: title || '', live: currentIsLive,
       channels: zap.channels, index: zap.index,
-      versions: zap.versions, favorites: zap.favorites
+      versions: zap.versions, favorites: zap.favorites,
+      positionMs: reprise
     }).then(function () {
       close();
       startNativeInfoRefresh(nativePlayer);
     }).catch(function () {
+      if (onFailure) { onFailure(); return; }
       setStatus('Lecture impossible, y compris avec le lecteur vidéo natif de l’appareil.');
     });
     return true;
@@ -1331,6 +1354,21 @@
     titleEl.textContent = currentTitle;
 
     if (isCasting()) { castCurrentMedia(); return; }
+
+    // Lecteur natif par défaut dans l'APK (réglage « Lecteur vidéo natif »,
+    // décochable) : hors WebView, il décode ce que celle-ci refuse (HEVC,
+    // audio AC3/E-AC3/DTS) et tient mieux la charge sur un boîtier TV. La
+    // radio en est exclue : elle a son propre lecteur d'arrière-plan.
+    if (!skipNativeDefault && !currentIsRadio && nativePlayerPlugin() &&
+        (!global.Store || Store.getLecteurNatif()) &&
+        tryNativePlayer(url, title, 'Ouverture du lecteur natif…', function () {
+          // Le lecteur natif n'a pas pu s'ouvrir : on repart sur la chaîne de
+          // lecteurs web plutôt que de laisser l'utilisateur sans image.
+          skipNativeDefault = true;
+          startPlayback(url, title);
+        })) {
+      return;
+    }
 
     armLoadTimeout();
     destroyPlayers();
@@ -1405,6 +1443,7 @@
     triedNativeFallback = false;
     triedM3u8Fallback = false;
     triedAudioFallback = false;
+    skipNativeDefault = false;
     ensureDom();
     overlay.classList.add('show');
     showPlayerUi();
