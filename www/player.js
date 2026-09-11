@@ -1226,20 +1226,21 @@
         name: item.name || '',
         url: item.url,
         chno: item.chno == null ? '' : String(item.chno),
-        epgKey: item.epgKey || ''
+        epgKey: item.epgKey || '',
+        logo: item.logo || ''
       });
     }
     var versions = [];
     if (currentVersions && currentVersions.length > 1) {
       for (var v = 0; v < currentVersions.length; v++) {
         if (currentVersions[v] && currentVersions[v].url) {
-          versions.push({ name: currentVersions[v].name || '', url: currentVersions[v].url, chno: '', epgKey: '' });
+          versions.push({ name: currentVersions[v].name || '', url: currentVersions[v].url, chno: '', epgKey: '', logo: currentVersions[v].logo || '' });
         }
       }
     }
     var favoris = [], brut = (global.AppZap && global.AppZap.favoris()) || [];
     for (var f = 0; f < brut.length; f++) {
-      if (brut[f] && brut[f].url) favoris.push({ name: brut[f].name || '', url: brut[f].url, chno: '', epgKey: '' });
+      if (brut[f] && brut[f].url) favoris.push({ name: brut[f].name || '', url: brut[f].url, chno: '', epgKey: '', logo: brut[f].logo || '' });
     }
     return { channels: channels, index: index, versions: versions, favorites: favoris };
   }

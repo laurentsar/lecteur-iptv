@@ -166,7 +166,8 @@ public class NativePlayerPlugin extends Plugin {
                 }
                 list.add(new NativePlayerActivity.Channel(
                         item.optString("name", ""), url,
-                        item.optString("chno", ""), item.optString("epgKey", "")));
+                        item.optString("chno", ""), item.optString("epgKey", ""),
+                        item.optString("logo", "")));
             }
         } catch (org.json.JSONException e) {
             // Liste illisible : on repart sans zapping plutôt que d'échouer.
@@ -185,6 +186,11 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
+import android.widget.ImageView;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -215,11 +221,18 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
 import com.google.android.gms.cast.framework.CastButtonFactory;
 import com.google.android.gms.cast.framework.CastContext;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class NativePlayerActivity extends AppCompatActivity {
     private static final long LOAD_TIMEOUT_MS = 20000; // certaines entrées de
@@ -246,12 +259,14 @@ public class NativePlayerActivity extends AppCompatActivity {
         public final String url;
         public final String chno;
         public final String epgKey;
+        public final String logo;
 
-        public Channel(String name, String url, String chno, String epgKey) {
+        public Channel(String name, String url, String chno, String epgKey, String logo) {
             this.name = name;
             this.url = url;
             this.chno = chno;
             this.epgKey = epgKey;
+            this.logo = logo;
         }
     }
 
@@ -274,11 +289,18 @@ public class NativePlayerActivity extends AppCompatActivity {
     private ImageButton recordBtn;
     private ImageButton homeBtn;
     private View banner;
+    private ImageView bannerLogo;
     private TextView bannerName;
     private TextView bannerProg;
     private TextView progBar;
     private TextView numberView;
     private final StringBuilder numberBuffer = new StringBuilder();
+    // Logos des chaînes : téléchargés une fois puis gardés en mémoire. Le
+    // cache est borné — un bouquet entier de logos saturerait la mémoire d'un
+    // boîtier TV, et seuls les derniers zappés sont réaffichés.
+    private static final int LOGO_CACHE_MAX = 60;
+    private static final Map<String, Bitmap> LOGO_CACHE = new HashMap<>();
+    private ExecutorService logoExecutor;
     private List<Channel> channels = new ArrayList<>();
     private List<Channel> versions = new ArrayList<>();
     private Set<String> favorites = new HashSet<>();
@@ -308,7 +330,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private final Runnable hideBannerRunnable = new Runnable() {
         @Override
         public void run() {
-            banner.setVisibility(View.GONE);
+            fadeOut(banner);
         }
     };
     private final Runnable hideChromeRunnable = new Runnable() {
@@ -322,7 +344,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         public void run() {
             String composed = numberBuffer.toString();
             numberBuffer.setLength(0);
-            numberView.setVisibility(View.GONE);
+            fadeOut(numberView);
             jumpToNumber(composed);
         }
     };
@@ -367,7 +389,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         topBar = findViewById(R.id.playerTopBar);
         banner = findViewById(R.id.playerBanner);
         bannerName = findViewById(R.id.playerBannerName);
+        bannerLogo = findViewById(R.id.playerBannerLogo);
         bannerProg = findViewById(R.id.playerBannerProg);
+        logoExecutor = Executors.newSingleThreadExecutor();
         progBar = findViewById(R.id.playerProgBar);
         numberView = findViewById(R.id.playerNumber);
 
@@ -496,7 +520,57 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         switchPlayer(castPlayer != null && castPlayer.isCastSessionAvailable() ? castPlayer : localPlayer);
+        applyFocusEffect(homeBtn, listBtn, recordBtn, tracksBtn, pipBtn, closeBtn, castBtn);
         scheduleHideChrome();
+    }
+
+    // Sur une télé, le bouton survolé doit sauter aux yeux de loin : en plus
+    // du fond d'accent (bg_player_btn), il grossit légèrement.
+    private void applyFocusEffect(View... boutons) {
+        View.OnFocusChangeListener listener = new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                v.animate().cancel();
+                v.animate().scaleX(hasFocus ? 1.15f : 1f).scaleY(hasFocus ? 1.15f : 1f)
+                        .setDuration(140).setInterpolator(new DecelerateInterpolator()).start();
+                if (hasFocus) {
+                    showChrome();
+                }
+            }
+        };
+        for (View bouton : boutons) {
+            if (bouton != null) {
+                bouton.setOnFocusChangeListener(listener);
+            }
+        }
+    }
+
+    // Apparitions et disparitions en fondu, comme les transitions CSS du
+    // lecteur web (.25s sur .player-top et .zap-banner).
+    private void fadeIn(View view) {
+        if (view.getVisibility() == View.VISIBLE && view.getAlpha() == 1f) {
+            return;
+        }
+        view.animate().cancel();
+        view.setAlpha(view.getVisibility() == View.VISIBLE ? view.getAlpha() : 0f);
+        view.setVisibility(View.VISIBLE);
+        view.animate().alpha(1f).setDuration(220)
+                .setInterpolator(new DecelerateInterpolator()).start();
+    }
+
+    private void fadeOut(final View view) {
+        if (view.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        view.animate().cancel();
+        view.animate().alpha(0f).setDuration(220)
+                .setInterpolator(new AccelerateInterpolator())
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        view.setVisibility(View.GONE);
+                    }
+                }).start();
     }
 
     // ---------- Masquage auto de la barre du haut ----------
@@ -514,7 +588,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             scheduleHideChrome();
             return;
         }
-        topBar.setVisibility(View.GONE);
+        fadeOut(topBar);
     }
 
     private void scheduleHideChrome() {
@@ -526,7 +600,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (topBar == null || isInPip()) {
             return;
         }
-        topBar.setVisibility(View.VISIBLE);
+        fadeIn(topBar);
         scheduleHideChrome();
     }
 
@@ -773,9 +847,81 @@ public class NativePlayerActivity extends AppCompatActivity {
         // (NativePlayerPlugin.setInfo) : l'EPG n'existe que côté web.
         bannerProg.setText("");
         bannerProg.setVisibility(View.GONE);
-        banner.setVisibility(View.VISIBLE);
+        showLogo(channel.logo);
+        fadeIn(banner);
         uiHandler.removeCallbacks(hideBannerRunnable);
         uiHandler.postDelayed(hideBannerRunnable, BANNER_MS);
+    }
+
+    // Logo de la chaîne, comme dans le bandeau du lecteur web. Téléchargé une
+    // seule fois par chaîne (cache mémoire), sur un fil à part : le bandeau
+    // s'affiche immédiatement, le logo se pose ensuite s'il arrive.
+    private void showLogo(final String url) {
+        bannerLogo.setVisibility(View.GONE);
+        bannerLogo.setImageDrawable(null);
+        if (url == null || url.isEmpty() || logoExecutor == null) {
+            return;
+        }
+        bannerLogo.setTag(url);
+        Bitmap cached;
+        synchronized (LOGO_CACHE) {
+            cached = LOGO_CACHE.get(url);
+        }
+        if (cached != null) {
+            bannerLogo.setImageBitmap(cached);
+            bannerLogo.setVisibility(View.VISIBLE);
+            return;
+        }
+        logoExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                final Bitmap bitmap = downloadLogo(url);
+                if (bitmap == null) {
+                    return;
+                }
+                synchronized (LOGO_CACHE) {
+                    if (LOGO_CACHE.size() >= LOGO_CACHE_MAX) {
+                        LOGO_CACHE.clear();
+                    }
+                    LOGO_CACHE.put(url, bitmap);
+                }
+                uiHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        // La chaîne a pu changer entre-temps (zapping rapide).
+                        if (url.equals(bannerLogo.getTag())) {
+                            bannerLogo.setImageBitmap(bitmap);
+                            fadeIn(bannerLogo);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    private Bitmap downloadLogo(String url) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setConnectTimeout(4000);
+            connection.setReadTimeout(4000);
+            connection.setInstanceFollowRedirects(true);
+            InputStream stream = connection.getInputStream();
+            // inSampleSize : un logo de chaîne fait 28dp à l'écran, inutile de
+            // garder une image de 500 px en mémoire.
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 2;
+            Bitmap bitmap = BitmapFactory.decodeStream(stream, null, options);
+            stream.close();
+            return bitmap;
+        } catch (Exception e) {
+            // Logo absent ou serveur muet : le bandeau se passe d'image.
+            return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
     }
 
     // Deux affichages, comme côté web : le bandeau de zapping (temporaire) et
@@ -787,14 +933,15 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         boolean vide = text == null || text.isEmpty();
         progBar.setText(vide ? "" : text);
-        progBar.setVisibility(vide ? View.GONE : View.VISIBLE);
         if (vide) {
+            fadeOut(progBar);
             bannerProg.setVisibility(View.GONE);
             return;
         }
+        fadeIn(progBar);
         bannerProg.setText(text);
         bannerProg.setVisibility(View.VISIBLE);
-        banner.setVisibility(View.VISIBLE);
+        fadeIn(banner);
         uiHandler.removeCallbacks(hideBannerRunnable);
         uiHandler.postDelayed(hideBannerRunnable, BANNER_MS);
     }
@@ -808,7 +955,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         numberBuffer.append(digit);
         numberView.setText(numberBuffer.toString());
-        numberView.setVisibility(View.VISIBLE);
+        fadeIn(numberView);
         uiHandler.removeCallbacks(numberRunnable);
         uiHandler.postDelayed(numberRunnable, NUMBER_MS);
     }
@@ -1101,6 +1248,10 @@ public class NativePlayerActivity extends AppCompatActivity {
             currentInstance = null;
             NativePlayerPlugin.notifyClosed();
         }
+        if (logoExecutor != null) {
+            logoExecutor.shutdownNow();
+            logoExecutor = null;
+        }
         uiHandler.removeCallbacks(hideChromeRunnable);
         uiHandler.removeCallbacks(hideBannerRunnable);
         uiHandler.removeCallbacks(numberRunnable);
@@ -1167,11 +1318,11 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#D90A1018"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:background="@drawable/bg_player_scrim_top"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="18dp">
 
         <TextView
             android:id="@+id/playerTitle"
@@ -1270,35 +1421,53 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:layout_height="wrap_content"
         android:layout_below="@id/playerTopBar"
         android:layout_alignParentStart="true"
-        android:layout_marginStart="10dp"
-        android:layout_marginTop="10dp"
-        android:orientation="vertical"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:background="@drawable/bg_player_card"
+        android:elevation="8dp"
         android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/playerBannerName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/playerBannerProg"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#92A5BA"
-            android:textSize="12sp"
-            android:maxLines="1"
-            android:ellipsize="end"
+        <ImageView
+            android:id="@+id/playerBannerLogo"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="12dp"
+            android:scaleType="fitCenter"
+            android:contentDescription="@null"
             android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/playerBannerName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/playerBannerProg"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="#92A5BA"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Numéro de chaîne en cours de composition (pavé numérique de la
@@ -1309,16 +1478,18 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:layout_height="wrap_content"
         android:layout_below="@id/playerTopBar"
         android:layout_alignParentEnd="true"
-        android:layout_marginEnd="10dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginEnd="16dp"
         android:background="@drawable/bg_player_card"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
+        android:elevation="8dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
         android:textColor="#FFFFFF"
-        android:textSize="28sp"
+        android:textSize="30sp"
         android:textStyle="bold"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.08"
         android:visibility="gone" />
 
     <!-- Bandeau permanent du programme en cours, comme .prog-bar côté web. -->
@@ -1327,11 +1498,11 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:background="#D90A1018"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
+        android:background="@drawable/bg_player_scrim_bottom"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="10dp"
         android:textColor="#FFFFFF"
         android:textSize="12sp"
         android:textAlignment="center"
@@ -1341,16 +1512,48 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
 
     <TextView
         android:id="@+id/playerStatusText"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:background="@drawable/bg_player_card"
+        android:elevation="8dp"
         android:textColor="#FFB454"
         android:textSize="13sp"
         android:textAlignment="center"
-        android:padding="20dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp"
         android:visibility="gone" />
 
 </RelativeLayout>
+"""
+
+# Voiles dégradés derrière la barre du haut et le bandeau du bas : le texte
+# reste lisible sur une image claire sans poser un bandeau opaque en travers
+# de la vidéo, comme le font les lecteurs vidéo courants.
+SCRIM_TOP_XML = """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#E60A1018"
+        android:centerColor="#800A1018"
+        android:endColor="#000A1018"
+        android:angle="270" />
+</shape>
+"""
+
+SCRIM_BOTTOM_XML = """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#E60A1018"
+        android:centerColor="#800A1018"
+        android:endColor="#000A1018"
+        android:angle="90" />
+</shape>
 """
 
 # Fond des boutons de la barre : pastille arrondie translucide comme
@@ -1660,6 +1863,8 @@ write_if_changed(RES_DIR + "/drawable/ic_close.xml", IC_CLOSE_XML)
 write_if_changed(RES_DIR + "/drawable/ic_home.xml", IC_HOME_XML)
 write_if_changed(RES_DIR + "/drawable/bg_player_btn.xml", BTN_BG_XML)
 write_if_changed(RES_DIR + "/drawable/bg_player_card.xml", CARD_BG_XML)
+write_if_changed(RES_DIR + "/drawable/bg_player_scrim_top.xml", SCRIM_TOP_XML)
+write_if_changed(RES_DIR + "/drawable/bg_player_scrim_bottom.xml", SCRIM_BOTTOM_XML)
 patch_settings_gradle()
 patch_build_gradle()
 patch_manifest()
