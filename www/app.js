@@ -1593,9 +1593,16 @@
       // vue en haut. Les messages ⚠️/ℹ️ ne craignent plus rien : ils vivent
       // dans #guideHint, en dehors de cette zone défilante.
       wrap.scrollTop = resetScroll ? 0 : Math.min(defilementAvant, Math.max(0, wrap.scrollHeight - wrap.clientHeight));
-      if (!resetScroll && focusAvant != null) {
-        var reprise = wrap.querySelector('[data-guide-row="' + focusAvant + '"]');
-        if (reprise && reprise.focus) reprise.focus({ preventScroll: true });
+      // Après un « Charger plus », on AMÈNE le joueur sur la première chaîne
+      // ajoutée : en restant à la même position, la liste s'allongeait sous
+      // l'écran et le bouton avait l'air de ne rien faire.
+      var cible = guideFocusRow != null
+        ? wrap.querySelector('[data-guide-row="' + guideFocusRow + '"]')
+        : (focusAvant != null ? wrap.querySelector('[data-guide-row="' + focusAvant + '"]') : null);
+      guideFocusRow = null;
+      if (!resetScroll && cible) {
+        if (cible.scrollIntoView) cible.scrollIntoView({ block: 'start' });
+        if (cible.focus) cible.focus({ preventScroll: true });
       }
       if (resetScroll) {
         wrap.scrollLeft = state.guideDayOffset === 0 ? Math.max(0, (now - dayStart) / 60000 * PX_PER_MIN - 80) : 0;
@@ -1609,7 +1616,15 @@
   }
 
   $id('rechGuide').addEventListener('input', function () { state.shown.guide = GUIDE_PAGE; renderGuide(false); });
-  $id('plusGuide').addEventListener('click', function () { state.shown.guide += GUIDE_PAGE; renderGuide(false); });
+  // Numéro de la ligne à rejoindre après le prochain rendu (première chaîne
+  // ajoutée par « Charger plus »).
+  var guideFocusRow = null;
+
+  $id('plusGuide').addEventListener('click', function () {
+    guideFocusRow = state.shown.guide;
+    state.shown.guide += GUIDE_PAGE;
+    renderGuide(false);
+  });
 
   // CHARGEMENT AUTOMATIQUE EN BAS DE LISTE. Sur une télé, le bouton « Charger
   // plus » est sous la grille, donc sous la barre d'onglets : à la télécommande
@@ -1624,6 +1639,7 @@
     guideAutoEnCours = true;
     state.shown.guide += GUIDE_PAGE;
     renderGuide(false);
+    // Défilement automatique : on ne déplace pas le joueur, il descend déjà.
     // Le rendu est asynchrone (directChannels) : on rouvre la porte un peu
     // après, sinon un seul geste de défilement chargerait dix pages.
     setTimeout(function () { guideAutoEnCours = false; }, 600);

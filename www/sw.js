@@ -15,7 +15,7 @@
  * (donnée conservée entre deux mises à jour de l'APK) : le shell caché
  * pouvait rester bloqué sur une très vieille version indéfiniment, y
  * compris pour des correctifs déjà « publiés » depuis longtemps. */
-const CACHE = 'iptv-lecteur-v2.00';
+const CACHE = 'iptv-lecteur-v2.01';
 const SHELL = [
   'index.html', 'vr.html', 'styles.css',
   'net.js', 'hls-native-loader.js', 'store.js', 'hasync.js', 'autobackup.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'player.js', 'recorder.js', 'app.js', 'update-check.js',
