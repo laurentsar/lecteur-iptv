@@ -21,6 +21,17 @@ Services Cast Framework : un bouton dans l'écran natif bascule la lecture
 entre l'ExoPlayer local et la session Cast, sans code de lecture dupliqué
 (les deux implémentent la même interface Player).
 
+Commandes de la télécommande : cet écran natif recouvre entièrement la page,
+donc tout ce que la télécommande y pilotait disparaîtrait sans ça. Le zapping
+(CHAÎNE +/−, page +/−, piste suivante/précédente, flèches haut/bas quand les
+contrôles sont masqués), la composition d'un numéro de chaîne au pavé
+numérique, la liste des chaînes (touche GUIDE/MENU ou bouton de la barre) et
+l'enregistrement sont donc rejoués ici, sur la liste de chaînes que player.js
+transmet à l'ouverture. L'habillage (barre, bandeau de zapping, bandeau du
+programme en cours, couleurs, boutons arrondis) reprend celui du lecteur web
+— voir www/styles.css : basculer sur le lecteur natif ne doit pas donner
+l'impression de changer d'application.
+
 Tampon (DefaultLoadControl) élargi par rapport aux réglages par défaut
 d'ExoPlayer : priorité à la stabilité sur un débit faible/instable plutôt
 qu'au démarrage rapide, cohérent avec le réglage équivalent du lecteur web
@@ -35,13 +46,33 @@ RES_DIR = "android/app/src/main/res"
 PLUGIN_JAVA = """package com.laurent.iptvlecteur;
 
 import android.content.Intent;
+import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.util.ArrayList;
+import java.util.List;
+import org.json.JSONObject;
 
 @CapacitorPlugin(name = "NativePlayer")
 public class NativePlayerPlugin extends Plugin {
+    // La liste de zapping transite par un champ statique et non par les
+    // extras de l'Intent : un bouquet IPTV compte couramment des milliers de
+    // chaînes, bien au-delà de la limite d'une transaction Binder
+    // (TransactionTooLargeException). Les deux côtés vivent dans le même
+    // processus, il n'y a donc rien à sérialiser.
+    static List<NativePlayerActivity.Channel> channels = new ArrayList<>();
+    static int channelIndex = -1;
+
+    private static NativePlayerPlugin instance;
+
+    @Override
+    public void load() {
+        instance = this;
+    }
+
     @PluginMethod
     public void open(PluginCall call) {
         String url = call.getString("url");
@@ -51,12 +82,77 @@ public class NativePlayerPlugin extends Plugin {
             call.reject("url manquante");
             return;
         }
+        channels = parseChannels(call.getArray("channels"));
+        channelIndex = call.getInt("index", -1);
         Intent intent = new Intent(getContext(), NativePlayerActivity.class);
         intent.putExtra("url", url);
         intent.putExtra("title", title);
         intent.putExtra("live", live);
         getActivity().startActivity(intent);
         call.resolve();
+    }
+
+    // Programme en cours : l'EPG vit dans la page (player.js le calcule après
+    // chaque zapping et le pousse ici), pour que le bandeau natif affiche la
+    // même information que celui du lecteur web.
+    @PluginMethod
+    public void setInfo(PluginCall call) {
+        final String text = call.getString("text", "");
+        final NativePlayerActivity activity = NativePlayerActivity.current();
+        if (activity != null) {
+            activity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    activity.setProgramInfo(text);
+                }
+            });
+        }
+        call.resolve();
+    }
+
+    // Zapping fait dans l'écran natif : la page doit suivre (chaîne courante,
+    // EPG, reprise à la fermeture), d'où cet évènement.
+    static void notifyZap(int index, String url, String title) {
+        if (instance == null) {
+            return;
+        }
+        JSObject data = new JSObject();
+        data.put("index", index);
+        data.put("url", url);
+        data.put("title", title);
+        instance.notifyListeners("zap", data);
+    }
+
+    // Écran natif refermé : la page arrête de pousser l'EPG (rien ne
+    // l'affiche plus) et reprend la main.
+    static void notifyClosed() {
+        if (instance == null) {
+            return;
+        }
+        instance.notifyListeners("closed", new JSObject());
+    }
+
+    private List<NativePlayerActivity.Channel> parseChannels(JSArray array) {
+        List<NativePlayerActivity.Channel> list = new ArrayList<>();
+        if (array == null) {
+            return list;
+        }
+        try {
+            List<JSONObject> items = array.toList();
+            for (JSONObject item : items) {
+                String url = item.optString("url", "");
+                if (url.isEmpty()) {
+                    continue;
+                }
+                list.add(new NativePlayerActivity.Channel(
+                        item.optString("name", ""), url,
+                        item.optString("chno", ""), item.optString("epgKey", "")));
+            }
+        } catch (org.json.JSONException e) {
+            // Liste illisible : on repart sans zapping plutôt que d'échouer.
+            return new ArrayList<>();
+        }
+        return list;
     }
 }
 """
@@ -66,6 +162,7 @@ ACTIVITY_JAVA = """package com.laurent.iptvlecteur;
 import android.app.AlertDialog;
 import android.app.PictureInPictureParams;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -74,8 +171,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Rational;
 import android.view.View;
+import android.view.KeyEvent;
 import android.widget.ImageButton;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.mediarouter.app.MediaRouteButton;
 import androidx.media3.cast.CastPlayer;
@@ -98,18 +197,64 @@ import com.google.android.gms.cast.framework.CastButtonFactory;
 import com.google.android.gms.cast.framework.CastContext;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class NativePlayerActivity extends AppCompatActivity {
     private static final long LOAD_TIMEOUT_MS = 20000; // certaines entrées de
     // playlist (séparateurs de catégorie décoratifs, chaînes mortes) ne
     // renvoient jamais d'erreur et resteraient bloquées indéfiniment sans ça.
 
+    // Durée d'affichage du bandeau de chaîne après un zapping, alignée sur
+    // celle du bandeau équivalent du lecteur web (showZapBanner).
+    private static final long BANNER_MS = 3000;
+    // Délai après la dernière touche numérique avant de rejoindre la chaîne :
+    // il faut laisser le temps de composer un numéro à deux ou trois chiffres.
+    private static final long NUMBER_MS = 1500;
+
+    // L'écran natif remplace complètement le lecteur web le temps de la
+    // lecture : sans les commandes ci-dessous, basculer en natif ferait
+    // perdre tout ce que la télécommande pilotait dans la page (chaîne +/−,
+    // numéro de chaîne, liste des chaînes, enregistrement), la page étant
+    // cachée derrière cette activité.
+    public static class Channel {
+        public final String name;
+        public final String url;
+        public final String chno;
+        public final String epgKey;
+
+        public Channel(String name, String url, String chno, String epgKey) {
+            this.name = name;
+            this.url = url;
+            this.chno = chno;
+            this.epgKey = epgKey;
+        }
+    }
+
+    // Instance visible du plugin : lui sert à pousser le programme en cours
+    // (setInfo) dans le bandeau. Une seule activité de lecture à la fois.
+    private static NativePlayerActivity currentInstance;
+
+    static NativePlayerActivity current() {
+        return currentInstance;
+    }
+
     private ExoPlayer localPlayer;
     private CastPlayer castPlayer;
     private PlayerView playerView;
     private TextView statusView;
+    private TextView titleView;
     private View topBar;
     private ImageButton tracksBtn;
+    private ImageButton listBtn;
+    private ImageButton recordBtn;
+    private View banner;
+    private TextView bannerName;
+    private TextView bannerProg;
+    private TextView progBar;
+    private TextView numberView;
+    private final StringBuilder numberBuffer = new StringBuilder();
+    private List<Channel> channels = new ArrayList<>();
+    private int channelIndex = -1;
     private String mediaUrl;
     private String mediaTitle;
     private boolean isLive; // Picture-in-Picture : proposé et auto-activé au
@@ -121,6 +266,23 @@ public class NativePlayerActivity extends AppCompatActivity {
         public void run() {
             statusView.setText("Le flux ne répond pas (délai dépassé) — probablement hors service ou une entrée de playlist invalide.");
             statusView.setVisibility(View.VISIBLE);
+        }
+    };
+
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private final Runnable hideBannerRunnable = new Runnable() {
+        @Override
+        public void run() {
+            banner.setVisibility(View.GONE);
+        }
+    };
+    private final Runnable numberRunnable = new Runnable() {
+        @Override
+        public void run() {
+            String composed = numberBuffer.toString();
+            numberBuffer.setLength(0);
+            numberView.setVisibility(View.GONE);
+            jumpToNumber(composed);
         }
     };
 
@@ -151,10 +313,20 @@ public class NativePlayerActivity extends AppCompatActivity {
         mediaTitle = title == null ? "" : title;
         isLive = getIntent().getBooleanExtra("live", false);
 
-        TextView titleView = findViewById(R.id.playerTitle);
+        // Liste de zapping déposée par le plugin (même processus).
+        channels = NativePlayerPlugin.channels;
+        channelIndex = NativePlayerPlugin.channelIndex;
+        currentInstance = this;
+
+        titleView = findViewById(R.id.playerTitle);
         titleView.setText(title == null ? "" : title);
 
         topBar = findViewById(R.id.playerTopBar);
+        banner = findViewById(R.id.playerBanner);
+        bannerName = findViewById(R.id.playerBannerName);
+        bannerProg = findViewById(R.id.playerBannerProg);
+        progBar = findViewById(R.id.playerProgBar);
+        numberView = findViewById(R.id.playerNumber);
 
         ImageButton closeBtn = findViewById(R.id.playerCloseBtn);
         closeBtn.setOnClickListener(new View.OnClickListener() {
@@ -184,6 +356,38 @@ public class NativePlayerActivity extends AppCompatActivity {
                 showTrackPicker();
             }
         });
+
+        // Liste des chaînes : équivalent natif du panneau « télécommande »
+        // du lecteur web, inaccessible tant que cette activité est au premier
+        // plan. Touche GUIDE/MENU de la télécommande également.
+        listBtn = findViewById(R.id.playerListBtn);
+        if (isLive && channels.size() >= 2) {
+            listBtn.setVisibility(View.VISIBLE);
+            listBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    showChannelList();
+                }
+            });
+        } else {
+            listBtn.setVisibility(View.GONE);
+        }
+
+        // Enregistrement : le service natif (RecordingService) est déjà celui
+        // qu'utilise le bouton du lecteur web, on le pilote directement.
+        recordBtn = findViewById(R.id.playerRecordBtn);
+        if (isLive) {
+            recordBtn.setVisibility(View.VISIBLE);
+            recordBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    toggleRecording();
+                }
+            });
+            updateRecordButton();
+        } else {
+            recordBtn.setVisibility(View.GONE);
+        }
 
         statusView = findViewById(R.id.playerStatusText);
         playerView = findViewById(R.id.playerView);
@@ -334,6 +538,243 @@ public class NativePlayerActivity extends AppCompatActivity {
         return MimeTypes.VIDEO_MP4;
     }
 
+    // ---------- Commandes de la télécommande ----------
+    // Les touches CHAÎNE +/− ne parviennent jamais à une WebView (le système
+    // les réserve au tuner de la télé, cf. ci/patch_tv_keys.py) mais une
+    // activité les reçoit dans dispatchKeyEvent avant tout le monde : le
+    // zapping est donc traité ici, directement sur la liste transmise par la
+    // page. Les flèches haut/bas ne servent au zapping que si les contrôles
+    // de lecture sont masqués, sinon elles doivent rester à la navigation
+    // entre les boutons de l'écran.
+    private static boolean isZapUp(int code) {
+        return code == KeyEvent.KEYCODE_CHANNEL_UP || code == KeyEvent.KEYCODE_PAGE_UP
+                || code == KeyEvent.KEYCODE_MEDIA_NEXT;
+    }
+
+    private static boolean isZapDown(int code) {
+        return code == KeyEvent.KEYCODE_CHANNEL_DOWN || code == KeyEvent.KEYCODE_PAGE_DOWN
+                || code == KeyEvent.KEYCODE_MEDIA_PREVIOUS;
+    }
+
+    private static boolean isDigit(int code) {
+        return code >= KeyEvent.KEYCODE_0 && code <= KeyEvent.KEYCODE_9;
+    }
+
+    private static boolean isMenuKey(int code) {
+        return code == KeyEvent.KEYCODE_GUIDE || code == KeyEvent.KEYCODE_MENU
+                || code == KeyEvent.KEYCODE_TV_CONTENTS_MENU;
+    }
+
+    private boolean canZap() {
+        return isLive && channels.size() >= 2;
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int code = event.getKeyCode();
+        boolean mine;
+        if (canZap() && (isZapUp(code) || isZapDown(code))) {
+            mine = true;
+        } else if (canZap() && (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN)
+                && playerView != null && !playerView.isControllerFullyVisible()) {
+            mine = true;
+        } else if (isDigit(code) && canZap()) {
+            mine = true;
+        } else {
+            mine = isMenuKey(code) && channels.size() >= 2 && isLive;
+        }
+        if (!mine) {
+            return super.dispatchKeyEvent(event);
+        }
+        // Le relâchement est consommé lui aussi : sinon le système rendrait la
+        // touche au tuner du téléviseur, ou provoquerait un second saut.
+        if (event.getAction() != KeyEvent.ACTION_DOWN) {
+            return true;
+        }
+        if (isDigit(code)) {
+            pushDigit(code - KeyEvent.KEYCODE_0);
+        } else if (isMenuKey(code)) {
+            showChannelList();
+        } else {
+            zap(isZapUp(code) || code == KeyEvent.KEYCODE_DPAD_UP ? 1 : -1);
+        }
+        return true;
+    }
+
+    private void zap(int delta) {
+        int size = channels.size();
+        if (size < 2) {
+            return;
+        }
+        // Chaîne ouverte hors bouquet (favoris, guide, recherche) : la page
+        // envoie index = −1, on entre alors dans la liste par un bout, comme
+        // le fait zapStep() côté web.
+        int next = channelIndex < 0
+                ? (delta > 0 ? 0 : size - 1)
+                : ((channelIndex + delta) % size + size) % size;
+        playChannel(next);
+    }
+
+    private void playChannel(int index) {
+        if (index < 0 || index >= channels.size()) {
+            return;
+        }
+        Channel channel = channels.get(index);
+        channelIndex = index;
+        NativePlayerPlugin.channelIndex = index;
+        mediaUrl = channel.url;
+        mediaTitle = channel.name == null ? "" : channel.name;
+        titleView.setText(mediaTitle);
+        statusView.setVisibility(View.GONE);
+
+        Player player = playerView.getPlayer();
+        if (player != null) {
+            player.setMediaItem(buildMediaItem(player == castPlayer));
+            player.prepare();
+            player.setPlayWhenReady(true);
+            timeoutHandler.removeCallbacks(timeoutRunnable);
+            timeoutHandler.postDelayed(timeoutRunnable, LOAD_TIMEOUT_MS);
+        }
+        showBanner(channel);
+        updateRecordButton();
+        NativePlayerPlugin.notifyZap(index, channel.url, mediaTitle);
+    }
+
+    private String channelLabel(Channel channel) {
+        String name = channel.name == null ? "" : channel.name;
+        return (channel.chno == null || channel.chno.isEmpty()) ? name : channel.chno + "  " + name;
+    }
+
+    private void showBanner(Channel channel) {
+        bannerName.setText(channelLabel(channel));
+        // Le programme en cours arrive juste après, poussé par la page
+        // (NativePlayerPlugin.setInfo) : l'EPG n'existe que côté web.
+        bannerProg.setText("");
+        bannerProg.setVisibility(View.GONE);
+        banner.setVisibility(View.VISIBLE);
+        uiHandler.removeCallbacks(hideBannerRunnable);
+        uiHandler.postDelayed(hideBannerRunnable, BANNER_MS);
+    }
+
+    // Deux affichages, comme côté web : le bandeau de zapping (temporaire) et
+    // le bandeau du bas (permanent tant que la chaîne joue, rafraîchi par la
+    // page puisque le programme change tout seul au fil du temps).
+    void setProgramInfo(String text) {
+        if (bannerProg == null) {
+            return;
+        }
+        boolean vide = text == null || text.isEmpty();
+        progBar.setText(vide ? "" : text);
+        progBar.setVisibility(vide ? View.GONE : View.VISIBLE);
+        if (vide) {
+            bannerProg.setVisibility(View.GONE);
+            return;
+        }
+        bannerProg.setText(text);
+        bannerProg.setVisibility(View.VISIBLE);
+        banner.setVisibility(View.VISIBLE);
+        uiHandler.removeCallbacks(hideBannerRunnable);
+        uiHandler.postDelayed(hideBannerRunnable, BANNER_MS);
+    }
+
+    // Numéro de chaîne composé au pavé numérique de la télécommande, comme
+    // sur un décodeur : les chiffres s'accumulent, le saut a lieu après une
+    // courte pause.
+    private void pushDigit(int digit) {
+        if (numberBuffer.length() >= 4) {
+            numberBuffer.setLength(0);
+        }
+        numberBuffer.append(digit);
+        numberView.setText(numberBuffer.toString());
+        numberView.setVisibility(View.VISIBLE);
+        uiHandler.removeCallbacks(numberRunnable);
+        uiHandler.postDelayed(numberRunnable, NUMBER_MS);
+    }
+
+    private static String normalizeNumber(String value) {
+        int i = 0;
+        while (i < value.length() - 1 && value.charAt(i) == '0') {
+            i++;
+        }
+        return value.substring(i);
+    }
+
+    private void jumpToNumber(String composed) {
+        if (composed.isEmpty()) {
+            return;
+        }
+        String wanted = normalizeNumber(composed);
+        for (int i = 0; i < channels.size(); i++) {
+            String chno = channels.get(i).chno;
+            if (chno != null && !chno.isEmpty() && normalizeNumber(chno).equals(wanted)) {
+                playChannel(i);
+                return;
+            }
+        }
+        Toast.makeText(this, "Aucune chaîne n° " + wanted, Toast.LENGTH_SHORT).show();
+    }
+
+    private void showChannelList() {
+        if (channels.isEmpty()) {
+            return;
+        }
+        String[] labels = new String[channels.size()];
+        for (int i = 0; i < channels.size(); i++) {
+            labels[i] = channelLabel(channels.get(i));
+        }
+        // setSingleChoiceItems plutôt que setItems : la liste s'ouvre
+        // directement sur la chaîne en cours (et le D-pad démarre dessus),
+        // indispensable dans un bouquet de plusieurs centaines d'entrées.
+        new AlertDialog.Builder(this)
+                .setTitle("Chaînes")
+                .setSingleChoiceItems(labels, channelIndex, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                        playChannel(which);
+                    }
+                })
+                .show();
+    }
+
+    // ---------- Enregistrement ----------
+    // Même service que le bouton du lecteur web (voir ci/patch_recorder.py) :
+    // il tourne en avant-plan et survit à la fermeture de cet écran.
+    private void toggleRecording() {
+        if (RecordingService.isRunning()) {
+            Intent stop = new Intent(this, RecordingService.class);
+            stop.setAction(RecordingService.ACTION_STOP);
+            startService(stop);
+            Toast.makeText(this, "Enregistrement arrêté", Toast.LENGTH_SHORT).show();
+        } else if (mediaUrl != null && !mediaUrl.isEmpty()) {
+            Intent start = new Intent(this, RecordingService.class);
+            start.setAction(RecordingService.ACTION_START);
+            start.putExtra("id", UUID.randomUUID().toString());
+            start.putExtra("url", mediaUrl);
+            start.putExtra("title", mediaTitle.isEmpty() ? "Enregistrement" : mediaTitle);
+            start.putExtra("channelKey", "");
+            // Même garde-fou que côté web : 4 h maximum pour un enregistrement
+            // lancé à la volée, sinon un oubli remplit le stockage.
+            start.putExtra("endAtMs", System.currentTimeMillis() + 4L * 60L * 60L * 1000L);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(start);
+            } else {
+                startService(start);
+            }
+            Toast.makeText(this, "Enregistrement démarré", Toast.LENGTH_SHORT).show();
+        }
+        updateRecordButton();
+    }
+
+    private void updateRecordButton() {
+        if (recordBtn == null || recordBtn.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        // Pas de second jeu d'icônes : l'enregistrement en cours se voit à la
+        // pastille pleinement opaque, à l'arrêt elle est estompée.
+        recordBtn.setAlpha(RecordingService.isRunning() ? 1f : 0.55f);
+    }
+
     private boolean pipAvailable() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
@@ -365,6 +806,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         topBar.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         playerView.setUseController(!isInPictureInPictureMode);
+        if (isInPictureInPictureMode) {
+            // Quelques centimètres carrés : tout l'habillage masquerait l'image.
+            banner.setVisibility(View.GONE);
+            numberView.setVisibility(View.GONE);
+            progBar.setVisibility(View.GONE);
+        }
     }
 
     // Liste à plat (audio puis sous-titres) plutôt qu'un dialogue à onglets :
@@ -458,6 +905,12 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (currentInstance == this) {
+            currentInstance = null;
+            NativePlayerPlugin.notifyClosed();
+        }
+        uiHandler.removeCallbacks(hideBannerRunnable);
+        uiHandler.removeCallbacks(numberRunnable);
         timeoutHandler.removeCallbacks(timeoutRunnable);
         if (castPlayer != null) {
             castPlayer.setSessionAvailabilityListener(null);
@@ -500,6 +953,11 @@ public class CastOptionsProvider implements OptionsProvider {
 """
 
 LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
+<!-- Habillage repris à l'identique du lecteur web (.player-top, .zap-banner,
+     .prog-bar, .player-status dans www/styles.css) : passer sur le lecteur
+     natif ne doit pas donner l'impression de changer d'application. Mêmes
+     couleurs (#0A1018 à 85 %, trait #223447, accent #3FC7C7), mêmes tailles
+     et mêmes emplacements. -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -516,8 +974,11 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#CC101A24"
-        android:padding="12dp">
+        android:background="#D90A1018"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
 
         <TextView
             android:id="@+id/playerTitle"
@@ -525,45 +986,154 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="#FFFFFF"
-            android:textSize="16sp"
+            android:textSize="14sp"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
 
         <androidx.mediarouter.app.MediaRouteButton
             android:id="@+id/playerCastBtn"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginEnd="4dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/bg_player_btn"
             android:contentDescription="Diffuser sur une TV" />
 
         <ImageButton
+            android:id="@+id/playerListBtn"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="10dp"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:background="@drawable/bg_player_btn"
+            android:src="@drawable/ic_channels"
+            android:contentDescription="Liste des chaînes"
+            android:visibility="gone" />
+
+        <ImageButton
+            android:id="@+id/playerRecordBtn"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="10dp"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:background="@drawable/bg_player_btn"
+            android:src="@drawable/ic_record"
+            android:contentDescription="Enregistrer"
+            android:visibility="gone" />
+
+        <ImageButton
             android:id="@+id/playerPipBtn"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginEnd="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="10dp"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:background="@drawable/bg_player_btn"
             android:src="@drawable/ic_pip"
             android:contentDescription="Picture-in-Picture"
             android:visibility="gone" />
 
         <ImageButton
             android:id="@+id/playerTracksBtn"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginEnd="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="10dp"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:background="@drawable/bg_player_btn"
             android:src="@drawable/ic_tracks"
             android:contentDescription="Langue et sous-titres" />
 
         <ImageButton
             android:id="@+id/playerCloseBtn"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="10dp"
+            android:padding="7dp"
+            android:scaleType="fitCenter"
+            android:background="@drawable/bg_player_btn"
+            android:src="@drawable/ic_close"
             android:contentDescription="Fermer" />
     </LinearLayout>
+
+    <!-- Bandeau de zapping : même position que celui du web (sous la barre,
+         à gauche), affiché quelques secondes à chaque prise d'antenne. -->
+    <LinearLayout
+        android:id="@+id/playerBanner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/playerTopBar"
+        android:layout_alignParentStart="true"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="10dp"
+        android:orientation="vertical"
+        android:background="@drawable/bg_player_card"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/playerBannerName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/playerBannerProg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#92A5BA"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- Numéro de chaîne en cours de composition (pavé numérique de la
+         télécommande) : même carte que le bandeau. -->
+    <TextView
+        android:id="@+id/playerNumber"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/playerTopBar"
+        android:layout_alignParentEnd="true"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_player_card"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:textColor="#FFFFFF"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- Bandeau permanent du programme en cours, comme .prog-bar côté web. -->
+    <TextView
+        android:id="@+id/playerProgBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:background="#D90A1018"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:textAlignment="center"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/playerStatusText"
@@ -571,11 +1141,64 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
         android:textColor="#FFB454"
+        android:textSize="13sp"
         android:textAlignment="center"
         android:padding="20dp"
         android:visibility="gone" />
 
 </RelativeLayout>
+"""
+
+# Fond des boutons de la barre : pastille arrondie translucide comme
+# .player-cast côté web, et teinte d'accent quand la télécommande s'y pose
+# (état « focus » — sans lui, impossible de voir où on est sur une télé).
+BTN_BG_XML = """<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="#3FC7C7" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="#3FC7C7" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="#1FFFFFFF" />
+        </shape>
+    </item>
+</selector>
+"""
+
+# Carte du bandeau / du numéro composé : mêmes fond, trait et rayon que
+# .zap-banner côté web.
+CARD_BG_XML = """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="12dp" />
+    <solid android:color="#E00A1018" />
+    <stroke android:width="1dp" android:color="#223447" />
+</shape>
+"""
+
+# Icône « close » — Google Material Icons (Apache License 2.0). Remplace
+# l'icône système, dont le style (contour gris) jure avec le reste.
+IC_CLOSE_XML = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z" />
+</vector>
 """
 
 # Icône « picture_in_picture » — Google Material Icons (Apache License 2.0).
@@ -589,6 +1212,36 @@ IC_PIP_XML = """<?xml version="1.0" encoding="utf-8"?>
     <path
         android:fillColor="#FF000000"
         android:pathData="M19,7h-8v6h8V7zM23,3H1v18h22V3zM21,19H3V5h18V19z" />
+</vector>
+"""
+
+# Icône « format_list_bulleted » — Google Material Icons (Apache License 2.0).
+IC_CHANNELS_XML = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M4,10.5c-0.83,0 -1.5,0.67 -1.5,1.5s0.67,1.5 1.5,1.5 1.5,-0.67 1.5,-1.5 -0.67,-1.5 -1.5,-1.5zM4,4.5c-0.83,0 -1.5,0.67 -1.5,1.5S3.17,7.5 4,7.5 5.5,6.83 5.5,6 4.83,4.5 4,4.5zM4,16.5c-0.83,0 -1.5,0.68 -1.5,1.5s0.68,1.5 1.5,1.5 1.5,-0.68 1.5,-1.5 -0.67,-1.5 -1.5,-1.5zM7,19h14v-2L7,17v2zM7,13h14v-2L7,11v2zM7,5v2h14L21,5L7,5z" />
+</vector>
+"""
+
+# Icône « fiber_manual_record » (pastille d'enregistrement) — Google Material
+# Icons (Apache License 2.0). Rouge plutôt que blanche : même code couleur que
+# le bouton ⏺ du lecteur web.
+IC_RECORD_XML = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FF5C5C">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" />
 </vector>
 """
 
@@ -783,6 +1436,11 @@ write_if_changed(PKG_DIR + "/CastOptionsProvider.java", CAST_OPTIONS_PROVIDER_JA
 write_if_changed(RES_DIR + "/layout/activity_native_player.xml", LAYOUT_XML)
 write_if_changed(RES_DIR + "/drawable/ic_pip.xml", IC_PIP_XML)
 write_if_changed(RES_DIR + "/drawable/ic_tracks.xml", IC_TRACKS_XML)
+write_if_changed(RES_DIR + "/drawable/ic_channels.xml", IC_CHANNELS_XML)
+write_if_changed(RES_DIR + "/drawable/ic_record.xml", IC_RECORD_XML)
+write_if_changed(RES_DIR + "/drawable/ic_close.xml", IC_CLOSE_XML)
+write_if_changed(RES_DIR + "/drawable/bg_player_btn.xml", BTN_BG_XML)
+write_if_changed(RES_DIR + "/drawable/bg_player_card.xml", CARD_BG_XML)
 patch_settings_gradle()
 patch_build_gradle()
 patch_manifest()

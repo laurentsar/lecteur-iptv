@@ -1211,12 +1211,94 @@
     });
   }
 
+  // Le lecteur natif occupe tout l'écran : cette page passe derrière, donc
+  // tout ce que la télécommande y pilotait (chaîne +/−, numéro de chaîne,
+  // liste des chaînes) doit être rejoué côté natif — ce qui suppose de lui
+  // transmettre le bouquet en cours. Voir ci/patch_native_player.py.
+  function nativeZapPayload(url) {
+    var list = (currentIsLive && global.AppZap && global.AppZap.list()) || [];
+    var channels = [], index = -1;
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!item || !item.url) continue;
+      if (item.url === url) index = channels.length;
+      channels.push({
+        name: item.name || '',
+        url: item.url,
+        chno: item.chno == null ? '' : String(item.chno),
+        epgKey: item.epgKey || ''
+      });
+    }
+    return { channels: channels, index: index };
+  }
+
+  // Un zapping fait dans l'écran natif ne passe pas par open() : on remet ici
+  // l'état du lecteur web d'équerre (chaîne courante, donc reprise correcte à
+  // la fermeture) et on renvoie le programme en cours, que seule la page
+  // connaît (l'EPG vit ici, pas dans le lecteur natif).
+  var nativeZapBound = false, nativeInfoTimer = 0;
+
+  function nativeProgramText(url) {
+    var list = (global.AppZap && global.AppZap.list()) || [];
+    var item = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].url === url) { item = list[i]; break; }
+    }
+    var epg = (item && global.AppZap && global.AppZap.epgNow)
+      ? global.AppZap.epgNow(item.epgKey, item.name) : null;
+    return epg && epg.now
+      ? '▶ ' + epg.now.titre + (epg.next ? ' · ensuite : ' + epg.next.titre : '')
+      : '';
+  }
+
+  function pushNativeInfo(plugin) {
+    if (!plugin.setInfo) return;
+    plugin.setInfo({ text: nativeProgramText(originalUrl) }).catch(function () {});
+  }
+
+  // Le programme affiché en bas de l'écran natif est rafraîchi comme celui du
+  // lecteur web (setupProgBarRefresh) : il change tout seul au fil du temps.
+  function startNativeInfoRefresh(plugin) {
+    clearInterval(nativeInfoTimer);
+    if (!currentIsLive) return;
+    pushNativeInfo(plugin);
+    nativeInfoTimer = setInterval(function () { pushNativeInfo(plugin); }, 60000);
+  }
+
+  function bindNativeZap(plugin) {
+    if (nativeZapBound || !plugin.addListener) return;
+    nativeZapBound = true;
+    plugin.addListener('zap', function (info) {
+      if (!info || !info.url) return;
+      originalUrl = info.url;
+      currentUrl = info.url;
+      originalTitle = info.title || '';
+      currentTitle = originalTitle;
+      var list = (global.AppZap && global.AppZap.list()) || [];
+      var item = null;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].url === info.url) { item = list[i]; break; }
+      }
+      currentLogo = (item && item.logo) || '';
+      pushNativeInfo(plugin);
+    });
+    plugin.addListener('closed', function () {
+      clearInterval(nativeInfoTimer);
+    });
+  }
+
   function tryNativePlayer(url, title, message) {
     var nativePlayer = nativePlayerPlugin();
     if (!nativePlayer) return false;
     setStatus(message || 'Échec — nouvelle tentative avec le lecteur vidéo natif de l’appareil…');
-    nativePlayer.open({ url: url, title: title || '', live: currentIsLive }).then(function () {
+    bindNativeZap(nativePlayer);
+    var zap = nativeZapPayload(url);
+    nativePlayer.open({
+      url: url, title: title || '', live: currentIsLive,
+      channels: zap.channels, index: zap.index
+    }).then(function () {
       close();
+      startNativeInfoRefresh(nativePlayer);
     }).catch(function () {
       setStatus('Lecture impossible, y compris avec le lecteur vidéo natif de l’appareil.');
     });
@@ -1293,6 +1375,7 @@
 
   function open(url, title, opts) {
     if (overlay) saveProgress(true); // mémorise la position du contenu quitté avant de basculer
+    clearInterval(nativeInfoTimer); // l'écran natif d'avant n'est plus à l'écran
     originalUrl = url;
     originalTitle = title || '';
     currentIsLive = !!(opts && opts.live);
