@@ -690,6 +690,7 @@
     confirmResolveCallback = null;
     if (cb) cb(result);
   }
+  $id('progModalCancel').addEventListener('click', closeProgModal);
   $id('confirmModalCancel').addEventListener('click', function () { closeConfirmModal(false); });
   $id('confirmModalOk').addEventListener('click', function () { closeConfirmModal(true); });
 
@@ -1351,6 +1352,72 @@
     return ensureAllDirectItems().then(function (items) { return excludeHidden(excludeRadio(items)); });
   }
 
+  // ---------- Actions sur une émission du Guide ----------
+  // Trois usages pour un même bloc : voir la chaîne tout de suite, lancer
+  // l'enregistrement immédiatement (jusqu'à la fin de l'émission), ou
+  // programmer celui d'une émission à venir.
+  function heure(ms) {
+    return new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function closeProgModal() { $id('progModal').style.display = 'none'; }
+
+  function progAction(box, libelle, onClick, primaire) {
+    var b = el('button', primaire ? 'primary' : 'ghost', libelle);
+    // Un <button> est déjà navigable au D-pad : pas de makeFocusable ici,
+    // qui rejouerait le clic par-dessus celui du navigateur.
+    b.addEventListener('click', function () { closeProgModal(); onClick(); });
+    box.appendChild(b);
+    return b;
+  }
+
+  function openProgActions(item, prog) {
+    var maintenant = Date.now();
+    var enCours = prog.start <= maintenant && prog.stop > maintenant;
+    var aVenir = prog.start > maintenant;
+    var chaine = { url: item.url, name: prog.titre || item.name, key: item.epgKey };
+
+    $id('progModalTitle').textContent = prog.titre || item.name;
+    $id('progModalSub').textContent = item.name + ' · ' + heure(prog.start) + ' → ' + heure(prog.stop) +
+      (enCours ? ' · en cours' : aVenir ? ' · à venir' : ' · terminé');
+
+    var box = $id('progModalActions');
+    box.innerHTML = '';
+    progAction(box, '▶ Regarder ' + item.name, function () {
+      Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
+    }, true);
+
+    if (Recorder.isAvailable()) {
+      if (enCours) {
+        // Jusqu'à la fin de l'émission, avec deux minutes de marge : les
+        // grilles EPG sont rarement à la seconde près.
+        var reste = prog.stop - maintenant + 2 * 60 * 1000;
+        progAction(box, '⏺ Enregistrer jusqu’à ' + heure(prog.stop), function () {
+          Recorder.startNow(chaine, reste).then(function () {
+            toast('Enregistrement en cours — « ' + chaine.name + ' »');
+          }).catch(function (err) { toast('Enregistrement impossible : ' + err.message); });
+        });
+      } else {
+        progAction(box, '⏺ Enregistrer maintenant (2 h)', function () {
+          Recorder.startNow(chaine, 2 * 60 * 60 * 1000).then(function () {
+            toast('Enregistrement en cours — « ' + item.name + ' »');
+          }).catch(function (err) { toast('Enregistrement impossible : ' + err.message); });
+        });
+      }
+      if (aVenir) {
+        progAction(box, '🕒 Programmer (' + heure(prog.start) + ' → ' + heure(prog.stop) + ')', function () {
+          Recorder.schedule(chaine, prog.start, prog.stop).then(function () {
+            toast('« ' + chaine.name + ' » programmé.');
+          }).catch(function (err) { toast('Programmation impossible : ' + err.message); });
+        });
+      }
+    }
+
+    $id('progModal').style.display = 'flex';
+    var premier = box.firstChild;
+    if (premier && premier.focus) premier.focus();
+  }
+
   function renderGuide(resetScroll) {
     var pl = state.playlist;
     var wrap = $id('guideWrap'), moreBtn = $id('plusGuide'), search = $id('rechGuide'), dayLabel = $id('guideDayLabel'), hintEl = $id('guideHint');
@@ -1375,6 +1442,10 @@
 
     directChannels().then(function (all) {
       var q = search.value.trim().toLowerCase();
+      // Position de défilement d'avant : « Charger plus » ajoute des lignes en
+      // bas, et la remise à zéro systématique qui suivait ramenait la vue en
+      // haut — le bouton paraissait ne rien faire.
+      var defilementAvant = wrap.scrollTop;
       var list = all.filter(function (it) { return matchesSearch(it, q); });
       // Un bouquet IPTV compte des milliers de chaînes dont la source EPG
       // n'en guide qu'une partie : sans ce filtre, le Guide s'ouvre sur des
@@ -1484,19 +1555,11 @@
             block.style.left = ((s - dayStart) / 60000 * PX_PER_MIN) + 'px';
             block.style.width = Math.max(28, (e - s) / 60000 * PX_PER_MIN) + 'px';
             block.title = p.titre || '';
-            block.addEventListener('click', function () { Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo }); });
-            if (p.start > now && Recorder.isAvailable()) {
-              var schedBtn = el('button', 'guide-rec-btn', '⏺');
-              schedBtn.title = 'Programmer l’enregistrement';
-              schedBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                Recorder.schedule({ url: item.url, name: p.titre || item.name, key: item.epgKey },
-                  p.start, p.stop).then(function () {
-                  toast('« ' + (p.titre || item.name) + ' » programmé.');
-                }).catch(function (err) { toast('Programmation impossible : ' + err.message); });
-              });
-              block.appendChild(schedBtn);
-            }
+            // Un clic sur une émission ne lance plus directement la chaîne :
+            // il ouvre le choix regarder / enregistrer maintenant / programmer.
+            // Le petit ⏺ posé dans le bloc était invisible sur une télé et
+            // ne proposait que la programmation.
+            block.addEventListener('click', function () { openProgActions(item, p); });
             timeline.appendChild(makeFocusable(block));
           });
         }
@@ -1512,17 +1575,12 @@
       wrap.appendChild(grid);
       moreBtn.style.display = list.length > shown ? '' : 'none';
 
-      // wrap.innerHTML a été entièrement vidé et reconstruit ci-dessus : la
-      // position de défilement verticale d'avant (ex. si l'utilisateur avait
-      // un peu scrollé pendant que l'EPG finissait de charger en arrière-
-      // plan, voir kickEpg) n'a plus de sens contre ce nouveau contenu — sans
-      // ce reset, les messages ⚠️/ℹ️/🔧 ajoutés en tête peuvent se retrouver
-      // scrollés hors champ, invisibles, alors même que kickEpg() a bien mis
-      // à jour l'état et rappelé renderGuide(false). Toujours réinitialisé,
-      // pas seulement quand resetScroll (qui ne contrôle que le défilement
-      // horizontal, pour garder l'heure affichée stable lors d'un simple
-      // rafraîchissement de données).
-      wrap.scrollTop = 0;
+      // Le contenu a été entièrement reconstruit : on remet le joueur là où il
+      // était, sinon « Charger plus » (qui rallonge la liste par le bas) et le
+      // rafraîchissement en arrière-plan de l'EPG renvoient tous les deux la
+      // vue en haut. Les messages ⚠️/ℹ️ ne craignent plus rien : ils vivent
+      // dans #guideHint, en dehors de cette zone défilante.
+      wrap.scrollTop = resetScroll ? 0 : Math.min(defilementAvant, Math.max(0, wrap.scrollHeight - wrap.clientHeight));
       if (resetScroll) {
         wrap.scrollLeft = state.guideDayOffset === 0 ? Math.max(0, (now - dayStart) / 60000 * PX_PER_MIN - 80) : 0;
       }

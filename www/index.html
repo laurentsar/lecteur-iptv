@@ -357,6 +357,19 @@
     </div>
   </div>
 
+  <!-- Actions sur une émission du Guide : regarder, enregistrer tout de suite,
+       ou programmer l'enregistrement. Ouvert au clic sur un bloc du Guide. -->
+  <div id="progModal" class="version-picker" style="display:none">
+    <div class="version-picker-card">
+      <h3 id="progModalTitle">Émission</h3>
+      <p class="hint" id="progModalSub"></p>
+      <div id="progModalActions" class="prog-actions"></div>
+      <div class="row" style="margin-top:4px">
+        <button id="progModalCancel" class="ghost">Fermer</button>
+      </div>
+    </div>
+  </div>
+
   <div id="pinModal" class="version-picker" style="display:none">
     <div class="version-picker-card">
       <h3>🔒 Code PIN requis</h3>
@@ -415,7 +428,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '1.98';
+    window.APP_VERSION = '1.99';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <script src="vendor/hls.min.js"></script>
