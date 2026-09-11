@@ -431,11 +431,15 @@
       // n'ait fini de parser la playlist) : dans ce cas rien à faire ici,
       // ensureM3uLoaded() rappelle kickEpg() lui-même une fois les données
       // (et l'éventuelle URL EPG déclarée en tête de M3U) disponibles.
-      ? ((state.m3uData && state.m3uData.epgUrl) || pl.epgUrl)
+      // Dernier recours avant d'abandonner : beaucoup de playlists M3U sont
+      // servies par un panel Xtream Codes (.../get.php?username=...) sans
+      // déclarer d'url-tvg. Le guide existe pourtant, au même endroit
+      // (.../xmltv.php) — c'est le cas le plus fréquent de « Guide vide ».
+      ? ((state.m3uData && state.m3uData.epgUrl) || pl.epgUrl || Xtream.xmltvFromM3uUrl(pl.m3uUrl))
       : Xtream.xmltvUrl(xtreamCfg(pl));
     if (!url) {
       state.epgError = (pl.type === 'm3u' && !state.m3uData) ? null // pas encore su, pas la peine d'inquiéter pour rien
-        : pl.type === 'm3u' ? 'Aucune URL de guide TV (EPG) trouvée — ni dans la playlist, ni renseignée dans Réglages.'
+        : pl.type === 'm3u' ? 'Aucune URL de guide TV (EPG) trouvée — ni dans la playlist, ni déduite du serveur, ni renseignée dans Réglages.'
         : 'Guide TV indisponible sur ce compte Xtream.';
       return;
     }
@@ -452,7 +456,11 @@
     // ci-dessus court-circuite alors silencieusement tous les appels
     // suivants, sans jamais afficher ni erreur ni diagnostic (le guide
     // reste vide sans aucune explication visible).
-    var EPG_TIMEOUT_MS = 15000;
+    // Un XMLTV de panel IPTV pèse couramment une vingtaine de mégaoctets :
+    // sur une télé ou un boîtier, téléchargement et analyse demandent bien
+    // plus que les quelques secondes d'une requête ordinaire — 15 s
+    // déclenchaient un faux « délai dépassé » alors que le guide arrivait.
+    var EPG_TIMEOUT_MS = 90000;
     var timedOut = false;
     var timeoutId = setTimeout(function () {
       timedOut = true;
@@ -1393,7 +1401,9 @@
         }
       }
       if (!list.length) {
-        hintEl.appendChild(el('div', 'hint', state.epgLoading ? 'Chargement du guide…' : 'Aucun résultat.'));
+        hintEl.appendChild(el('div', 'hint', state.epgLoading
+          ? 'Chargement du guide… (le fichier du fournisseur peut peser plusieurs dizaines de Mo)'
+          : 'Aucun résultat.'));
         moreBtn.style.display = 'none';
         return;
       }

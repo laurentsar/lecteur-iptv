@@ -41,23 +41,81 @@
       .replace(/[^a-z0-9]+/g, '');
   }
 
+  // Analyse du XMLTV « à la main » plutôt qu'avec DOMParser : ces fichiers
+  // pèsent couramment 20 Mo et en construire l'arbre DOM complet (plusieurs
+  // centaines de Mo en mémoire) fait ramer, voire tuer, la WebView d'une télé
+  // ou d'un boîtier. Un balayage par expressions régulières ne garde que ce
+  // qui sert : début, fin, titre.
+  var RE_PROGRAMME = /<programme\b([^>]*)>([\s\S]*?)<\/programme>/g;
+  var RE_CHANNEL = /<channel\b([^>]*)>([\s\S]*?)<\/channel>/g;
+  var RE_DISPLAY = /<display-name[^>]*>([\s\S]*?)<\/display-name>/g;
+  var RE_ATTR_CHANNEL = /channel="([^"]*)"/;
+  var RE_ATTR_ID = /id="([^"]*)"/;
+  var RE_ATTR_START = /start="([^"]*)"/;
+  var RE_ATTR_STOP = /stop="([^"]*)"/;
+  var RE_TITLE = /<title[^>]*>([\s\S]*?)<\/title>/;
+  var RE_CDATA = /<!\[CDATA\[([\s\S]*?)\]\]>/g;
+  var RE_ENTITY = /&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g;
+
+  // Fenêtre conservée : la veille et les huit jours suivants. Le Guide ne
+  // permet pas d'aller plus loin, et un XMLTV de fournisseur traîne souvent
+  // des semaines de passé — inutile à garder en mémoire.
+  var EPG_PASSE_MS = 24 * 60 * 60 * 1000;
+  var EPG_FUTUR_MS = 8 * 24 * 60 * 60 * 1000;
+
+  function decodeEntities(text) {
+    var s = text.replace(RE_CDATA, '$1');
+    if (s.indexOf('&') === -1) return s.trim();
+    return s.replace(RE_ENTITY, function (e) {
+      if (e === '&amp;') return '&';
+      if (e === '&lt;') return '<';
+      if (e === '&gt;') return '>';
+      if (e === '&quot;') return '"';
+      if (e === '&apos;') return "'";
+      var code = e[2] === 'x' || e[2] === 'X'
+        ? parseInt(e.slice(3, -1), 16)
+        : parseInt(e.slice(2, -1), 10);
+      return isNaN(code) ? e : String.fromCharCode(code);
+    }).trim();
+  }
+
   function parseXmltvText(text) {
-    var xml = new DOMParser().parseFromString(text, 'text/xml');
-    if (xml.querySelector('parsererror')) throw new Error('XMLTV invalide (ou EPG compressé .gz non pris en charge)');
+    if (text.indexOf('<programme') === -1 && text.indexOf('<tv') === -1) {
+      throw new Error('XMLTV invalide (ou EPG compressé .gz non pris en charge)');
+    }
+    var maintenant = Date.now();
+    var min = maintenant - EPG_PASSE_MS, max = maintenant + EPG_FUTUR_MS;
     var byChannel = {};
-    xml.querySelectorAll('programme').forEach(function (p) {
-      var ch = p.getAttribute('channel');
-      if (!ch) return;
-      var titleEl = p.querySelector('title');
-      var entry = {
-        start: parseXmltvDate(p.getAttribute('start')),
-        stop: parseXmltvDate(p.getAttribute('stop')),
-        titre: titleEl ? titleEl.textContent : ''
-      };
-      (byChannel[ch] = byChannel[ch] || []).push(entry);
-    });
+    var m;
+    RE_PROGRAMME.lastIndex = 0;
+    while ((m = RE_PROGRAMME.exec(text)) !== null) {
+      var attrs = m[1];
+      var chan = RE_ATTR_CHANNEL.exec(attrs);
+      if (!chan || !chan[1]) continue;
+      var debut = RE_ATTR_START.exec(attrs), fin = RE_ATTR_STOP.exec(attrs);
+      var start = debut ? parseXmltvDate(debut[1]) : null;
+      var stop = fin ? parseXmltvDate(fin[1]) : null;
+      if (start == null || stop == null || stop < min || start > max) continue;
+      var titre = RE_TITLE.exec(m[2]);
+      (byChannel[chan[1]] = byChannel[chan[1]] || []).push({
+        start: start, stop: stop, titre: titre ? decodeEntities(titre[1]) : ''
+      });
+    }
+    // Les XMLTV de panels IPTV répètent souvent la même grille (chaîne
+    // déclarée deux fois, agrégation de plusieurs sources) : sans ce
+    // dédoublonnage, « ensuite : » affiche l'émission en cours et la grille
+    // du Guide empile des blocs identiques.
     Object.keys(byChannel).forEach(function (ch) {
-      byChannel[ch].sort(function (a, b) { return (a.start || 0) - (b.start || 0); });
+      var liste = byChannel[ch];
+      liste.sort(function (a, b) { return (a.start || 0) - (b.start || 0); });
+      var propre = [];
+      for (var i = 0; i < liste.length; i++) {
+        var p = liste[i], precedent = propre[propre.length - 1];
+        if (precedent && precedent.start === p.start && precedent.stop === p.stop &&
+            precedent.titre === p.titre) continue;
+        propre.push(p);
+      }
+      byChannel[ch] = propre;
     });
     // Alias par nom d'affichage XMLTV (<channel id="X"><display-name>) : le
     // tvg-id d'une playlist M3U ne correspond pas toujours à l'identifiant
@@ -66,14 +124,17 @@
     // aucun programme alors que l'EPG s'est bien chargé. Repli par nom de
     // chaîne normalisé si la recherche par identifiant échoue, voir
     // progsFor() plus bas.
-    xml.querySelectorAll('channel').forEach(function (c) {
-      var id = c.getAttribute('id');
-      if (!id || !byChannel[id]) return;
-      c.querySelectorAll('display-name').forEach(function (dn) {
-        var norm = normalizeChanName(dn.textContent);
-        if (norm) byChannel['name:' + norm] = byChannel[id];
-      });
-    });
+    RE_CHANNEL.lastIndex = 0;
+    while ((m = RE_CHANNEL.exec(text)) !== null) {
+      var id = RE_ATTR_ID.exec(m[1]);
+      if (!id || !id[1] || !byChannel[id[1]]) continue;
+      var noms = m[2], nom;
+      RE_DISPLAY.lastIndex = 0;
+      while ((nom = RE_DISPLAY.exec(noms)) !== null) {
+        var norm = normalizeChanName(decodeEntities(nom[1]));
+        if (norm && !byChannel['name:' + norm]) byChannel['name:' + norm] = byChannel[id[1]];
+      }
+    }
     return byChannel;
   }
 

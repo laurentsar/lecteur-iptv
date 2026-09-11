@@ -46,6 +46,27 @@
       '&password=' + encodeURIComponent(cfg.motDePasse);
   }
 
+  // Une playlist M3U servie par un panel Xtream Codes (.../get.php?username=
+  // ...&password=...) expose son guide au même endroit, en XMLTV :
+  // .../xmltv.php avec les mêmes identifiants. Beaucoup de panels ne
+  // déclarent pas d'url-tvg en tête de M3U — le guide paraissait alors
+  // inexistant alors qu'il suffisait de le demander à la bonne adresse.
+  function xmltvFromM3uUrl(m3uUrl) {
+    if (!m3uUrl) return null;
+    try {
+      var u = new URL(m3uUrl);
+      if (!/\/get\.php$/i.test(u.pathname)) return null;
+      var utilisateur = u.searchParams.get('username');
+      var motDePasse = u.searchParams.get('password');
+      if (!utilisateur || !motDePasse) return null;
+      return u.origin + u.pathname.replace(/get\.php$/i, 'xmltv.php') +
+        '?username=' + encodeURIComponent(utilisateur) +
+        '&password=' + encodeURIComponent(motDePasse);
+    } catch (e) {
+      return null; // URL non analysable : pas de guide déductible
+    }
+  }
+
   function streamUrl(cfg, kind, streamId, ext) {
     var b = baseUrl(cfg.serveur);
     var u = encodeURIComponent(cfg.utilisateur), p = encodeURIComponent(cfg.motDePasse);
@@ -63,6 +84,7 @@
     liveCategories: liveCategories, liveStreams: liveStreams,
     vodCategories: vodCategories, vodStreams: vodStreams,
     seriesCategories: seriesCategories, seriesList: seriesList, seriesInfo: seriesInfo, vodInfo: vodInfo,
-    shortEpg: shortEpg, streamUrl: streamUrl, xmltvUrl: xmltvUrl, baseUrl: baseUrl, b64decode: b64decode
+    shortEpg: shortEpg, streamUrl: streamUrl, xmltvUrl: xmltvUrl, xmltvFromM3uUrl: xmltvFromM3uUrl,
+    baseUrl: baseUrl, b64decode: b64decode
   };
 })(window);
