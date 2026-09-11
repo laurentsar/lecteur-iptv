@@ -5,7 +5,7 @@
   'use strict';
 
   var PAGE_SIZE = 60;
-  var GUIDE_PAGE = 25;
+  var GUIDE_PAGE = 40;
   var PX_PER_MIN = 2; // échelle de l'agenda : 1h = 120px, 24h = 2880px
   var DAY_MS = 86400000;
 
@@ -1380,6 +1380,12 @@
     $id('progModalTitle').textContent = prog.titre || item.name;
     $id('progModalSub').textContent = item.name + ' · ' + heure(prog.start) + ' → ' + heure(prog.stop) +
       (enCours ? ' · en cours' : aVenir ? ' · à venir' : ' · terminé');
+    // Le résumé vient de la balise <desc> du XMLTV. Tous les fournisseurs n'en
+    // mettent pas, et il n'est gardé que sur 48 h (voir epg.js) : on le dit
+    // plutôt que de laisser un blanc inexpliqué.
+    var descEl = $id('progModalDesc');
+    descEl.textContent = prog.desc || 'Pas de descriptif fourni pour cette émission.';
+    descEl.style.opacity = prog.desc ? '' : '.6';
 
     var box = $id('progModalActions');
     box.innerHTML = '';
@@ -1446,6 +1452,11 @@
       // bas, et la remise à zéro systématique qui suivait ramenait la vue en
       // haut — le bouton paraissait ne rien faire.
       var defilementAvant = wrap.scrollTop;
+      // Ligne qui avait le focus : la grille est entièrement reconstruite, donc
+      // sans ça la télécommande repart en haut à chaque chargement de la suite
+      // — c'est ce qui donnait l'impression de ne pas pouvoir descendre.
+      var focusAvant = document.activeElement && document.activeElement.dataset
+        ? document.activeElement.dataset.guideRow : null;
       var list = all.filter(function (it) { return matchesSearch(it, q); });
       // Un bouquet IPTV compte des milliers de chaînes dont la source EPG
       // n'en guide qu'une partie : sans ce filtre, le Guide s'ouvre sur des
@@ -1516,8 +1527,9 @@
       }
       grid.appendChild(hoursHeader);
 
-      list.slice(0, shown).forEach(function (item) {
+      list.slice(0, shown).forEach(function (item, position) {
         var chan = el('div', 'guide-chan');
+        chan.dataset.guideRow = String(position);
         if (item.logo) {
           var img = document.createElement('img');
           img.loading = 'lazy'; img.src = item.logo; img.alt = '';
@@ -1581,6 +1593,10 @@
       // vue en haut. Les messages ⚠️/ℹ️ ne craignent plus rien : ils vivent
       // dans #guideHint, en dehors de cette zone défilante.
       wrap.scrollTop = resetScroll ? 0 : Math.min(defilementAvant, Math.max(0, wrap.scrollHeight - wrap.clientHeight));
+      if (!resetScroll && focusAvant != null) {
+        var reprise = wrap.querySelector('[data-guide-row="' + focusAvant + '"]');
+        if (reprise && reprise.focus) reprise.focus({ preventScroll: true });
+      }
       if (resetScroll) {
         wrap.scrollLeft = state.guideDayOffset === 0 ? Math.max(0, (now - dayStart) / 60000 * PX_PER_MIN - 80) : 0;
       }
@@ -1594,6 +1610,24 @@
 
   $id('rechGuide').addEventListener('input', function () { state.shown.guide = GUIDE_PAGE; renderGuide(false); });
   $id('plusGuide').addEventListener('click', function () { state.shown.guide += GUIDE_PAGE; renderGuide(false); });
+
+  // CHARGEMENT AUTOMATIQUE EN BAS DE LISTE. Sur une télé, le bouton « Charger
+  // plus » est sous la grille, donc sous la barre d'onglets : à la télécommande
+  // on ne l'atteint jamais. Arriver au bas du guide charge maintenant la suite
+  // tout seul (le bouton reste, pour la souris et le tactile).
+  var guideAutoEnCours = false;
+  $id('guideWrap').addEventListener('scroll', function () {
+    var wrap = this;
+    if (guideAutoEnCours) return;
+    if (wrap.scrollTop + wrap.clientHeight < wrap.scrollHeight - 120) return;
+    if ($id('plusGuide').style.display === 'none') return;
+    guideAutoEnCours = true;
+    state.shown.guide += GUIDE_PAGE;
+    renderGuide(false);
+    // Le rendu est asynchrone (directChannels) : on rouvre la porte un peu
+    // après, sinon un seul geste de défilement chargerait dix pages.
+    setTimeout(function () { guideAutoEnCours = false; }, 600);
+  });
   $id('guidePrevDay').addEventListener('click', function () { state.guideDayOffset--; state.shown.guide = GUIDE_PAGE; renderGuide(true); });
   $id('guideNextDay').addEventListener('click', function () { state.guideDayOffset++; state.shown.guide = GUIDE_PAGE; renderGuide(true); });
   $id('guideDayLabel').addEventListener('click', function () {

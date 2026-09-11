@@ -54,6 +54,7 @@
   var RE_ATTR_START = /start="([^"]*)"/;
   var RE_ATTR_STOP = /stop="([^"]*)"/;
   var RE_TITLE = /<title[^>]*>([\s\S]*?)<\/title>/;
+  var RE_DESC = /<desc[^>]*>([\s\S]*?)<\/desc>/;
   var RE_CDATA = /<!\[CDATA\[([\s\S]*?)\]\]>/g;
   var RE_ENTITY = /&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g;
 
@@ -62,6 +63,14 @@
   // des semaines de passé — inutile à garder en mémoire.
   var EPG_PASSE_MS = 24 * 60 * 60 * 1000;
   var EPG_FUTUR_MS = 8 * 24 * 60 * 60 * 1000;
+
+  // LES DESCRIPTIFS, EUX, NE SONT GARDÉS QUE SUR DEUX JOURS. Mesuré sur le
+  // XMLTV du fournisseur : 50 000 résumés, 11 Mo de texte — les garder sur
+  // huit jours doublait la mémoire du guide pour des lignes que personne ne
+  // lit à J+6. Sur 48 h, c'est une poignée de centaines de kilo-octets, et
+  // c'est la fenêtre où l'on clique vraiment sur une émission.
+  var EPG_DESC_MS = 48 * 60 * 60 * 1000;
+  var DESC_MAX = 600; // un résumé plus long ne tient de toute façon pas à l'écran
 
   function decodeEntities(text) {
     var s = text.replace(RE_CDATA, '$1');
@@ -96,10 +105,17 @@
       var start = debut ? parseXmltvDate(debut[1]) : null;
       var stop = fin ? parseXmltvDate(fin[1]) : null;
       if (start == null || stop == null || stop < min || start > max) continue;
-      var titre = RE_TITLE.exec(m[2]);
-      (byChannel[chan[1]] = byChannel[chan[1]] || []).push({
-        start: start, stop: stop, titre: titre ? decodeEntities(titre[1]) : ''
-      });
+      var corps = m[2];
+      var titre = RE_TITLE.exec(corps);
+      var prog = { start: start, stop: stop, titre: titre ? decodeEntities(titre[1]) : '' };
+      if (start <= maintenant + EPG_DESC_MS) {
+        var resume = RE_DESC.exec(corps);
+        if (resume) {
+          var texte = decodeEntities(resume[1]);
+          if (texte) prog.desc = texte.length > DESC_MAX ? texte.slice(0, DESC_MAX) + '…' : texte;
+        }
+      }
+      (byChannel[chan[1]] = byChannel[chan[1]] || []).push(prog);
     }
     // Les XMLTV de panels IPTV répètent souvent la même grille (chaîne
     // déclarée deux fois, agrégation de plusieurs sources) : sans ce
@@ -112,7 +128,11 @@
       for (var i = 0; i < liste.length; i++) {
         var p = liste[i], precedent = propre[propre.length - 1];
         if (precedent && precedent.start === p.start && precedent.stop === p.stop &&
-            precedent.titre === p.titre) continue;
+            precedent.titre === p.titre) {
+          // Deux annonces identiques : on garde celle qui porte un résumé.
+          if (!precedent.desc && p.desc) precedent.desc = p.desc;
+          continue;
+        }
         propre.push(p);
       }
       byChannel[ch] = propre;
