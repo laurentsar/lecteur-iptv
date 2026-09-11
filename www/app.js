@@ -1376,6 +1376,19 @@
     directChannels().then(function (all) {
       var q = search.value.trim().toLowerCase();
       var list = all.filter(function (it) { return matchesSearch(it, q); });
+      // Un bouquet IPTV compte des milliers de chaînes dont la source EPG
+      // n'en guide qu'une partie : sans ce filtre, le Guide s'ouvre sur des
+      // pages entières de « Pas de programme disponible » (les bouquets
+      // Disney+/événements en tête de playlist, sans tvg-id).
+      var totalAvant = list.length, guidees = null;
+      if (state.epgMap && Store.getGuideAvecProgramme()) {
+        guidees = list.filter(function (it) {
+          return (Epg.progsFor(state.epgMap, it.epgKey, it.name) || []).length > 0;
+        });
+        // Aucune chaîne guidée : on remontre tout plutôt qu'un écran vide,
+        // le message d'explication est affiché juste en dessous.
+        if (guidees.length) list = guidees;
+      }
       setZapList(list);
       wrap.innerHTML = '';
       // Messages de statut rendus hors de #guideWrap : ce conteneur se
@@ -1396,11 +1409,16 @@
         // précisément (identifiants/noms qui ne concordent pas avec la
         // source EPG) — sans ce chiffre, indiscernable d'un guide qui n'a
         // simplement pas encore chargé.
-        var matched = list.filter(function (it) { return (Epg.progsFor(state.epgMap, it.epgKey, it.name) || []).length > 0; }).length;
+        var matched = guidees ? guidees.length
+          : list.filter(function (it) { return (Epg.progsFor(state.epgMap, it.epgKey, it.name) || []).length > 0; }).length;
         if (matched === 0 && list.length > 0) {
           hintEl.appendChild(el('div', 'hint',
             'ℹ️ Guide chargé (' + state.epgDebug.channelCount + ' chaîne(s) dans le flux EPG) mais aucun programme ne correspond à tes ' +
             list.length + ' chaîne(s) — identifiants/noms différents entre la playlist et la source EPG.'));
+        } else if (guidees && matched < totalAvant) {
+          hintEl.appendChild(el('div', 'hint',
+            'ℹ️ ' + matched + ' chaîne(s) guidée(s) sur ' + totalAvant +
+            ' — décoche « Chaînes avec programme » pour afficher les autres.'));
         }
       }
       if (!list.length) {
@@ -2030,6 +2048,15 @@
 
   // Choix du lecteur (Réglages) : n'a de sens que dans l'APK, le lecteur natif
   // n'existant pas en PWA — la carte reste donc masquée sur le web.
+  function setupGuideFiltre() {
+    var box = $id('optGuideEpg');
+    box.checked = Store.getGuideAvecProgramme();
+    box.addEventListener('change', function () {
+      Store.setGuideAvecProgramme(box.checked);
+      renderGuide(true);
+    });
+  }
+
   function setupLecteurNatif() {
     var natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() &&
       window.Capacitor.Plugins && window.Capacitor.Plugins.NativePlayer);
@@ -2051,6 +2078,7 @@
     $id('verText').textContent = window.APP_VERSION || '';
     pruneHiddenFavoris();
     setupLecteurNatif();
+    setupGuideFiltre();
     var activeId = Store.getActivePlaylistId();
     if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
     renderAccueil();
