@@ -430,18 +430,29 @@
   // ---------- Écran maintenu allumé (Screen Wake Lock) ----------
   // Sans ça, le téléphone se verrouille tout seul après le délai de mise en
   // veille habituel dès qu'on ne touche plus l'écran en cours de lecture —
-  // exactement comme n'importe quelle page web. L'API standard Wake Lock
-  // (supportée par la WebView Android moderne, base Chromium) empêche ça
-  // tant que le lecteur est ouvert. Pas utile pour la radio (lecture pensée
-  // pour continuer écran éteint/appli en arrière-plan, voir
-  // setupRadioBackground ci-dessous) : on ne la demande que pour la vidéo.
-  // Le verrou est de toute façon relâché automatiquement par le navigateur
-  // dès que l'appli passe en arrière-plan (onglet/WebView non visible) —
-  // on le redemande alors au retour au premier plan si la vidéo est
-  // toujours ouverte.
+  // exactement comme n'importe quelle page web. Deux mécanismes combinés :
+  //  - APK Android : KeepAwakePlugin (natif, voir ci/patch_keep_awake.py) —
+  //    agit directement sur le flag FLAG_KEEP_SCREEN_ON de la fenêtre
+  //    Android, indépendamment de la WebView. Utilisé en priorité car
+  //    l'API web ci-dessous s'est révélée pas fiable à elle seule dans la
+  //    WebView embarquée par Capacitor sur certains appareils (écran
+  //    verrouillé constaté malgré tout).
+  //  - API standard Wake Lock (PWA/navigateur, et en renfort sur l'APK) —
+  //    relâchée automatiquement par le navigateur dès que l'appli passe en
+  //    arrière-plan (onglet/WebView non visible) : redemandée au retour au
+  //    premier plan si la vidéo est toujours ouverte.
+  // Pas utile pour la radio (lecture pensée pour continuer écran éteint/
+  // appli en arrière-plan, voir setupRadioBackground ci-dessous) : on ne
+  // les demande que pour la vidéo.
   var wakeLock = null;
 
+  function keepAwakePlugin() {
+    return (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.KeepAwake) || null;
+  }
+
   function requestWakeLock() {
+    var ka = keepAwakePlugin();
+    if (ka) ka.keepAwake().catch(function () {});
     if (!(global.navigator && navigator.wakeLock)) return;
     navigator.wakeLock.request('screen').then(function (wl) {
       wakeLock = wl;
@@ -450,6 +461,8 @@
   }
 
   function releaseWakeLock() {
+    var ka = keepAwakePlugin();
+    if (ka) ka.allowSleep().catch(function () {});
     if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
   }
 
