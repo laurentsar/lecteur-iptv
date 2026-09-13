@@ -7,6 +7,7 @@ android/
 .gradle/
 native/*/build/
 native/*/.cxx/
+__pycache__/
 
 # Signature applicative versionnée volontairement (voir signing/README.md).
 !signing/release.keystore
