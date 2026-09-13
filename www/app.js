@@ -989,7 +989,15 @@
     return order.map(function (fam) {
       var versions = byKey[fam];
       var logo = versions.map(function (v) { return v.logo; }).filter(Boolean)[0] || null;
-      return Object.assign({}, versions[0], { logo: logo, versions: versions });
+      // La source jouée par défaut reste celle que la playlist annonce en
+      // premier — le fournisseur y met en général la plus fiable, et la
+      // changer sans raison serait une régression silencieuse. En revanche la
+      // LISTE est triée par qualité décroissante : c'est ce qui permet aux
+      // lecteurs, quand une source se coupe sans arrêt, de basculer sur la
+      // suivante en sachant qu'elle est de qualité inférieure ou égale (voir
+      // source-quality.js).
+      var principal = versions[0];
+      return Object.assign({}, principal, { logo: logo, versions: SourceQuality.ordonner(versions) });
     });
   }
 

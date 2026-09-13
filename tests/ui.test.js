@@ -60,7 +60,7 @@ for (let i = 1; i <= NB; i++) {
 w.localStorage.setItem('iptv:playlists', JSON.stringify([{ id: 'p1', nom: 'Test', type: 'm3u', m3uUrl: 'http://example.invalid/pl.m3u', creeLe: 1 }]));
 w.localStorage.setItem('iptv:active', JSON.stringify('p1'));
 
-['net.js', 'hls-native-loader.js', 'store.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'player.js', 'recorder.js', 'app.js'].forEach(charger);
+['net.js', 'hls-native-loader.js', 'source-quality.js', 'store.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'player.js', 'recorder.js', 'app.js'].forEach(charger);
 
 // Net est chargé : on court-circuite le réseau pour servir la playlist de test.
 w.Net.fetchText = () => Promise.resolve(m3u);
@@ -216,6 +216,53 @@ function verifie(nom, cond, detail) {
     await attendre(60);
     verifie('aucune reconnexion pendant une pause voulue',
             !/reconnexion/i.test($('playerStatus').textContent), $('playerStatus').textContent);
+    w.Player.close();
+    await attendre(60);
+  }
+
+  console.log('\n— Bascule vers une source de qualité inférieure —');
+  {
+    // Une chaîne à plusieurs sources : quand la meilleure se coupe sans arrêt,
+    // le lecteur doit descendre d'un cran plutôt que d'abandonner — et ne
+    // jamais remonter, ce qui serait absurde sur une ligne qui ne suit pas.
+    const versions = [
+      { name: 'Chaine 90 FHD', url: 'http://example.invalid/live/90-fhd.ts' },
+      { name: 'Chaine 90 HD', url: 'http://example.invalid/live/90-hd.ts' },
+      { name: 'Chaine 90 SD', url: 'http://example.invalid/live/90-sd.ts' }
+    ];
+    w.Player.open(versions[0].url, versions[0].name, { live: true, versions: versions });
+    await attendre(200);
+    const statut = $('playerStatus');
+    const video = w.document.querySelector('#playerOverlay video');
+
+    // Épuise les tentatives de la source FHD (2 à froid).
+    video.dispatchEvent(new w.Event('error'));
+    await attendre(1700);
+    video.dispatchEvent(new w.Event('error'));
+    await attendre(3300);
+    video.dispatchEvent(new w.Event('error'));
+    await attendre(120);
+    verifie('bascule annoncée vers la source inférieure',
+            /bascule/i.test(statut.textContent), statut.textContent);
+    verifie('c\'est bien la HD qui est visée, pas la SD ni un retour en FHD',
+            /Chaine 90 HD/.test(statut.textContent), statut.textContent);
+
+    // Vraie panne : quand TOUTES les sources sont tombées, l'app doit le dire
+    // au lieu de tourner en rond. Les reprises ne doivent jamais masquer un
+    // échec réel — c'est la contrepartie de leur existence.
+    for (let i = 0; i < 12; i++) {
+      video.dispatchEvent(new w.Event('error'));
+      await attendre(1700);
+      video.dispatchEvent(new w.Event('error'));
+      await attendre(3300);
+    }
+    video.dispatchEvent(new w.Event('error'));
+    await attendre(150);
+    const fin = statut.textContent;
+    verifie('abandon annoncé une fois toutes les sources épuisées',
+            !!fin && !/bascule/i.test(fin) && !/reconnexion/i.test(fin), fin);
+    verifie('le message d\'abandon explique la panne', /impossible|hors service|ne répond|interrompu/i.test(fin), fin);
+
     w.Player.close();
     await attendre(60);
   }

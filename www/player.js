@@ -1342,6 +1342,8 @@
   var recoverTimer = null;
   var everPlayed = false;
   var userPaused = false;
+  // Sources déjà tombées pour CETTE chaîne : on n'y revient pas en boucle.
+  var sourcesEchouees = [];
 
   function resetRecovery() {
     clearTimeout(recoverTimer);
@@ -1349,6 +1351,36 @@
     recoverCount = 0;
     everPlayed = false;
     userPaused = false;
+    sourcesEchouees = [];
+  }
+
+  // Quand une source se coupe sans arrêt, insister n'apporte rien alors qu'une
+  // variante moins gourmande passerait peut-être. currentVersions est triée par
+  // qualité décroissante (voir groupChannels dans app.js), donc « la suivante »
+  // est toujours de qualité inférieure ou égale : on ne remonte jamais, ce qui
+  // serait absurde sur une ligne qui ne suit déjà pas.
+  function basculerSource() {
+    if (!currentVersions || currentVersions.length < 2) return false;
+    if (sourcesEchouees.indexOf(originalUrl) === -1) sourcesEchouees.push(originalUrl);
+    var cand = SourceQuality.suivante(currentVersions, originalUrl, sourcesEchouees);
+    if (!cand) return false;
+    originalUrl = cand.url;
+    originalTitle = cand.name || originalTitle;
+    titleEl.textContent = originalTitle;
+    // Compteurs remis à zéro : la nouvelle source a droit à ses propres essais.
+    clearTimeout(recoverTimer);
+    recoverTimer = null;
+    recoverCount = 0;
+    everPlayed = false;
+    triedM3u8Fallback = false;
+    startPlayback(cand.url, originalTitle);
+    // APRÈS startPlayback, qui écrit son propre « Connexion au flux… » : sans
+    // ça le message de bascule était remplacé dans la foulée et l'utilisateur
+    // voyait la source changer sans savoir pourquoi. Le bandeau de chaîne
+    // reste affiché quelques secondes, comme après un zapping.
+    setStatus('Source instable — bascule sur « ' + (cand.name || 'une autre source') + ' »…');
+    showZapBanner(originalTitle, currentEpgKey, currentLogo);
+    return true;
   }
 
   function cancelRecovery() {
@@ -1361,7 +1393,9 @@
   function tryRecover(cause, relancer) {
     if (userPaused) return true;   // pause voulue : rien à réparer
     var max = everPlayed ? RECOVER_MAX : RECOVER_MAX_COLD;
-    if (recoverCount >= max) return false;
+    // Tentatives épuisées sur cette source : avant de renoncer, essayer une
+    // autre source de la même chaîne.
+    if (recoverCount >= max) return basculerSource();
     recoverCount++;
     var delai = Math.min(RECOVER_MAX_MS, RECOVER_BASE_MS * Math.pow(2, Math.min(recoverCount - 1, 6)));
     setStatus(cause + ' — reconnexion… (' + recoverCount + ')');

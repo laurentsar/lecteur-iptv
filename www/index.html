@@ -328,7 +328,7 @@
       <details class="saison">
         <summary class="saison-titre">🔁 Coupures et reconnexion</summary>
         <div class="accordion-body">
-          <p class="hint">Un flux IPTV en direct s'interrompt régulièrement — micro-coupure du fournisseur, réseau saturé, segment manquant. La lecture se relance désormais <strong>toute seule</strong> au lieu de rester figée : une première tentative après 1,5 s, puis un délai qui double à chaque échec d'affilée (plafonné à 15 s) pour ne pas marteler un serveur en panne, et remis à zéro dès que l'image revient. Un blocage silencieux — le lecteur attend des données sans jamais signaler d'erreur, ce qu'on prend pour une pause — est traité de la même façon au bout de 12 s. Une pause que <em>tu</em> demandes n'est jamais relancée dans ton dos. Après une douzaine d'échecs consécutifs, l'app arrête d'insister et te le dit ; une chaîne qui n'a jamais donné d'image, elle, abandonne après deux essais — c'est en général une entrée de playlist périmée.</p>
+          <p class="hint">Un flux IPTV en direct s'interrompt régulièrement — micro-coupure du fournisseur, réseau saturé, segment manquant. La lecture se relance désormais <strong>toute seule</strong> au lieu de rester figée : une première tentative après 1,5 s, puis un délai qui double à chaque échec d'affilée (plafonné à 15 s) pour ne pas marteler un serveur en panne, et remis à zéro dès que l'image revient. Un blocage silencieux — le lecteur attend des données sans jamais signaler d'erreur, ce qu'on prend pour une pause — est traité de la même façon au bout de 12 s. Une pause que <em>tu</em> demandes n'est jamais relancée dans ton dos. Après une douzaine d'échecs consécutifs, l'app ne s'arrête pas pour autant : si la chaîne existe sous <strong>plusieurs sources</strong> (les entrées en double d'une playlist, regroupées sous une même carte), elle bascule sur la suivante — toujours de qualité <strong>inférieure ou égale</strong>, jamais supérieure : insister en 4K sur une ligne qui ne suit pas n'aurait aucun sens. Une source déjà tombée n'est pas reproposée. Ce n'est qu'une fois toutes les sources épuisées que l'app renonce et te le dit clairement : les reprises automatiques ne masquent jamais une vraie panne. Une chaîne qui n'a jamais donné d'image, elle, abandonne après deux essais — c'est en général une entrée de playlist périmée.</p>
         </div>
       </details>
 
@@ -472,7 +472,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.20';
+    window.APP_VERSION = '2.21';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
@@ -484,6 +484,7 @@
        les précharge en tâche de fond quand c'est le lecteur web qui servira.
        Ils restent dans le cache hors-ligne du service worker (sw.js). -->
   <script src="vr-link.js"></script>
+  <script src="source-quality.js"></script>
   <script src="net.js"></script>
   <script src="hls-native-loader.js"></script>
   <script>window.BACKUP_APP = 'lecteur-iptv';

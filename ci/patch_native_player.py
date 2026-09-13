@@ -382,6 +382,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     // insister douze fois ferait patienter pour rien. Une chaîne qui jouait et
     // s'est coupée, elle, mérite qu'on s'accroche.
     private boolean everReady = false;
+    // Sources déjà tombées pour la chaîne en cours : on n'y revient pas en
+    // boucle. Vidé à chaque changement de chaîne (playUrl).
+    private final Set<String> sourcesEchouees = new HashSet<>();
     private final Handler reconnectHandler = new Handler(Looper.getMainLooper());
 
     private final Runnable reconnectRunnable = new Runnable() {
@@ -426,7 +429,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         timeoutHandler.removeCallbacks(timeoutRunnable);
         int maxTentatives = everReady ? RECONNECT_MAX_ATTEMPTS : RECONNECT_MAX_ATTEMPTS_COLD;
         if (reconnectAttempts >= maxTentatives) {
-            statusView.setText(cause + " — la chaîne ne revient pas. Essaie une autre source ou une autre chaîne.");
+            // Avant de renoncer : une autre source de la même chaîne passe
+            // peut-être là où celle-ci se coupe sans arrêt.
+            if (basculerSource(cause)) {
+                return;
+            }
+            statusView.setText(cause + " — la chaîne ne revient pas, et aucune autre source ne répond.");
             statusView.setVisibility(View.VISIBLE);
             return;
         }
@@ -436,6 +444,47 @@ public class NativePlayerActivity extends AppCompatActivity {
         statusView.setText(cause + " — reconnexion… (" + reconnectAttempts + ")");
         statusView.setVisibility(View.VISIBLE);
         reconnectHandler.postDelayed(reconnectRunnable, delai);
+    }
+
+    /**
+     * Bascule sur la source suivante de la même chaîne.
+     *
+     * La liste `versions` arrive DÉJÀ TRIÉE par qualité décroissante depuis le
+     * JS (voir source-quality.js et groupChannels dans app.js) : avancer d'un
+     * cran donne donc toujours une qualité inférieure ou égale, ce qui est ce
+     * qu'on veut sur une ligne qui ne suit déjà pas. Inutile de refaire ici
+     * l'analyse des noms de chaînes — elle est écrite et testée une seule
+     * fois, côté JS.
+     */
+    private boolean basculerSource(String cause) {
+        if (versions == null || versions.size() < 2) {
+            return false;
+        }
+        sourcesEchouees.add(mediaUrl);
+        int depart = -1;
+        for (int i = 0; i < versions.size(); i++) {
+            if (versions.get(i) != null && mediaUrl != null && mediaUrl.equals(versions.get(i).url)) {
+                depart = i;
+                break;
+            }
+        }
+        for (int j = depart + 1; j < versions.size(); j++) {
+            Channel cand = versions.get(j);
+            if (cand == null || cand.url == null || cand.url.isEmpty()) {
+                continue;
+            }
+            if (sourcesEchouees.contains(cand.url)) {
+                continue;
+            }
+            statusView.setText(cause + " — bascule sur « " + cand.name + " »…");
+            statusView.setVisibility(View.VISIBLE);
+            // playUrl remet les compteurs à zéro : la nouvelle source a droit
+            // à ses propres tentatives. Les sources déjà tombées, elles,
+            // doivent survivre à cette remise à zéro (voir playUrl).
+            playUrl(cand.url, cand.name);
+            return true;
+        }
+        return false;
     }
 
     private void reconnectNow() {
@@ -1041,6 +1090,20 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void playUrl(String url, String title) {
+        // Changement de CHAÎNE (et non bascule de source au sein de la même) :
+        // les sources tombées de la précédente ne concernent pas la nouvelle.
+        boolean memeChaine = false;
+        if (versions != null) {
+            for (int i = 0; i < versions.size(); i++) {
+                if (versions.get(i) != null && url != null && url.equals(versions.get(i).url)) {
+                    memeChaine = true;
+                    break;
+                }
+            }
+        }
+        if (!memeChaine) {
+            sourcesEchouees.clear();
+        }
         reportProgress();
         // Nouvelle chaîne : les échecs de la précédente ne la concernent pas.
         cancelRecovery();
