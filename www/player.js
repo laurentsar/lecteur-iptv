@@ -201,6 +201,7 @@
     setupTapFullscreen();
     setupSelectFullscreen();
     setupRadioBackground();
+    setupWakeLock();
     setupResume();
     setupChnoKeys();
     setupZapKeys();
@@ -423,6 +424,38 @@
       if (onOwnControl) return;
       e.preventDefault();
       toggleFullscreen();
+    });
+  }
+
+  // ---------- Écran maintenu allumé (Screen Wake Lock) ----------
+  // Sans ça, le téléphone se verrouille tout seul après le délai de mise en
+  // veille habituel dès qu'on ne touche plus l'écran en cours de lecture —
+  // exactement comme n'importe quelle page web. L'API standard Wake Lock
+  // (supportée par la WebView Android moderne, base Chromium) empêche ça
+  // tant que le lecteur est ouvert. Pas utile pour la radio (lecture pensée
+  // pour continuer écran éteint/appli en arrière-plan, voir
+  // setupRadioBackground ci-dessous) : on ne la demande que pour la vidéo.
+  // Le verrou est de toute façon relâché automatiquement par le navigateur
+  // dès que l'appli passe en arrière-plan (onglet/WebView non visible) —
+  // on le redemande alors au retour au premier plan si la vidéo est
+  // toujours ouverte.
+  var wakeLock = null;
+
+  function requestWakeLock() {
+    if (!(global.navigator && navigator.wakeLock)) return;
+    navigator.wakeLock.request('screen').then(function (wl) {
+      wakeLock = wl;
+      wakeLock.addEventListener('release', function () { wakeLock = null; });
+    }).catch(function () {}); // refusé (rare) : tant pis, pas bloquant
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
+  }
+
+  function setupWakeLock() {
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && isOpen() && !currentIsRadio && !wakeLock) requestWakeLock();
     });
   }
 
@@ -1482,6 +1515,7 @@
     if (currentIsLive) showZapBanner(originalTitle, opts && opts.epgKey, opts && opts.logo);
     else if (zapBanner) zapBanner.classList.remove('show');
     setupProgBarRefresh(originalTitle, opts && opts.epgKey);
+    if (currentIsRadio) releaseWakeLock(); else requestWakeLock();
   }
 
   function close() {
@@ -1495,6 +1529,7 @@
     if (tracksMenu) tracksMenu.style.display = 'none';
     if (remotePanel) closeRemote();
     releaseNativeLandscapeLock();
+    releaseWakeLock();
     if (currentIsRadio) { var rp = radioPlayerPlugin(); if (rp) rp.stop().catch(function () {}); }
     clearTimeout(uiHideTimer);
     if (overlay) overlay.classList.remove('show');
