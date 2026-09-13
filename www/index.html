@@ -274,7 +274,7 @@
         <summary class="saison-titre">📡 TV Android &amp; casque VR (Quest 3)</summary>
         <div class="accordion-body">
           <p class="hint"><strong>TV Android / boîtiers IPTV</strong> : l'app s'installe et se lance normalement (pas d'écran tactile requis), et tous les éléments cliquables (cartes, grille du Guide) sont navigables à la télécommande — Entrée/OK activent l'élément sélectionné, avec un contour visible. Pas de lanceur Leanback dédié à grosses tuiles.</p>
-          <p class="hint"><strong>Meta Quest 3</strong> : deux usages, à ne pas confondre. L'<strong>APK</strong> side-loadée fonctionne telle quelle, exécutée par Horizon OS dans un panneau 2D flottant, sans adaptation. Le <strong>mode cinéma VR</strong>, lui, demande d'ouvrir la <strong>version web (PWA)</strong> dans le navigateur du casque : un bouton 🥽 apparaît alors dans le lecteur et projette la chaîne sur un grand écran incurvé (rayon 6 m, 16/9) dans une salle sombre, avec les chaînes du bouquet pointables à la manette sur la gauche. Les <strong>chaînes 3D</strong> (côte-à-côte ou haut-bas) y sont vues en vrai relief : le format est reconnu au nom de la chaîne et corrigeable d'un bouton sous l'écran. C'est le seul endroit où le relief fonctionne — il demande deux images distinctes, donc deux yeux séparés, ce qu'aucun téléviseur du salon ne fait ici. Ce bouton est volontairement absent de l'APK : la WebView d'Android n'expose pas WebXR, l'API qui rend la VR possible — seul un vrai navigateur le fait.</p>
+          <p class="hint"><strong>Meta Quest 3</strong> : deux usages, à ne pas confondre. L'<strong>APK</strong> side-loadée fonctionne telle quelle, exécutée par Horizon OS dans un panneau 2D flottant, sans adaptation. Le <strong>mode cinéma VR</strong>, lui, demande d'ouvrir la <strong>version web (PWA)</strong> dans le navigateur du casque : un bouton 🥽 apparaît alors dans le lecteur et projette la chaîne sur un grand écran incurvé (rayon 6 m, 16/9) dans une salle sombre, avec les chaînes du bouquet pointables à la manette sur la gauche. Les <strong>chaînes 3D</strong> (côte-à-côte ou haut-bas) y sont vues en vrai relief : le format est reconnu au nom de la chaîne et corrigeable d'un bouton sous l'écran. C'est le seul endroit où le relief fonctionne — il demande deux images distinctes, donc deux yeux séparés, ce qu'aucun téléviseur du salon ne fait ici. Depuis l'<strong>APK</strong>, ce même bouton 🥽 sert de <strong>passerelle</strong> : il ouvre cette page dans le navigateur du casque, chaîne en cours déjà chargée, plutôt que de tenter un relief que la WebView d'Android ne sait pas produire (elle n'expose pas WebXR). Il n'apparaît que sur un appareil pourvu d'un navigateur — jamais sur une télé qui n'en a pas.</p>
         </div>
       </details>
 
@@ -465,13 +465,18 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.17';
+    window.APP_VERSION = '2.18';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
+    // Adresse de la version web, utilisée par la passerelle VR de l'APK :
+    // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
+    // player.js). Doit rester alignée sur le déploiement GitHub Pages.
+    window.PWA_URL = 'https://laurentsar.github.io/lecteur-iptv/';
   </script>
   <!-- hls.js et mpegts.js (835 Ko à eux deux) ne sont volontairement PAS
        chargés ici : player.js les demande au premier flux qui en a besoin, et
        les précharge en tâche de fond quand c'est le lecteur web qui servira.
        Ils restent dans le cache hors-ligne du service worker (sw.js). -->
+  <script src="vr-link.js"></script>
   <script src="net.js"></script>
   <script src="hls-native-loader.js"></script>
   <script>window.BACKUP_APP = 'lecteur-iptv';

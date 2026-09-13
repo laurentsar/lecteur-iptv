@@ -1337,16 +1337,55 @@
   // de zapping passe par sessionStorage — même origine, donc lisible tel quel
   // par la page VR, sans la ré-encoder dans l'URL.
   function setupVr() {
-    if (nativePlayerPlugin() || !global.navigator || !navigator.xr) return;
-    vrBtn.style.display = '';
-    vrBtn.addEventListener('click', function () {
-      try {
-        var liste = (global.AppZap && global.AppZap.list()) || [];
-        sessionStorage.setItem('vrZapList', JSON.stringify(liste));
-      } catch (e) { /* quota ou mode privé : la page VR marchera sans liste */ }
-      global.open('vr.html?url=' + encodeURIComponent(originalUrl) +
-        '&title=' + encodeURIComponent(originalTitle || ''), '_blank');
-    });
+    // Cas 1 — navigateur (PWA) capable de WebXR : la page VR s'ouvre sur
+    // place, et la liste de zapping passe par sessionStorage (même origine).
+    if (!nativePlayerPlugin() && global.navigator && navigator.xr) {
+      vrBtn.style.display = '';
+      vrBtn.title = 'Cinéma VR';
+      vrBtn.addEventListener('click', function () {
+        try {
+          var liste = (global.AppZap && global.AppZap.list()) || [];
+          sessionStorage.setItem('vrZapList', JSON.stringify(liste));
+        } catch (e) { /* quota ou mode privé : la page VR marchera sans liste */ }
+        global.open(VrLink.construire('vr.html', originalUrl, originalTitle || ''), '_blank');
+      });
+      return;
+    }
+    setupPontVr();
+  }
+
+  // Cas 2 — passerelle depuis l'APK. Sur un casque, l'application tourne dans
+  // un panneau 2D d'Horizon OS : les deux yeux y voient la même image, donc
+  // aucun relief n'est possible quoi que l'app dessine — il faudrait être une
+  // application OpenXR native, ce qu'une WebView ne peut pas être. Le
+  // navigateur du casque, lui, sait ouvrir une session WebXR. Le bouton passe
+  // donc la main, avec la chaîne en cours déjà chargée.
+  //
+  // Affiché seulement si une application sait ouvrir un lien web : beaucoup de
+  // téléviseurs Android n'ont aucun navigateur, et le bouton n'y produirait
+  // qu'un message d'erreur.
+  function setupPontVr() {
+    var P = updatePlugin();
+    if (!P || !P.canOpenExternal || !global.PWA_URL) return;
+    P.canOpenExternal().then(function (r) {
+      if (!r || !r.value) return;
+      vrBtn.style.display = '';
+      vrBtn.title = 'Ouvrir dans le casque VR';
+      vrBtn.addEventListener('click', function () {
+        var lien = VrLink.construire(global.PWA_URL, originalUrl, originalTitle || '');
+        P.openExternalUrl({ url: lien }).then(function () {
+          setStatus('Cinéma VR ouvert dans le navigateur du casque.');
+        }).catch(function (e) {
+          setStatus('Impossible d\'ouvrir le navigateur : ' + ((e && e.message) || e));
+        });
+      });
+    }).catch(function () { /* plugin d'une version antérieure : pas de bouton */ });
+  }
+
+  function updatePlugin() {
+    var cap = global.Capacitor;
+    if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
+    return (cap.Plugins && cap.Plugins.UpdatePlugin) || null;
   }
 
   // Le lecteur natif occupe tout l'écran : cette page passe derrière, donc

@@ -14,6 +14,7 @@
   <script src="vendor/hls.min.js"></script>
   <script src="vendor/mpegts.min.js"></script>
   <script src="stereo-uv.js"></script>
+  <script src="vr-link.js"></script>
   <style>
     body { margin: 0; background: #05080e; color: #e7eef7; font: 14px system-ui, sans-serif; }
     #demarrer {
@@ -85,9 +86,13 @@
 
   <script>
   (function () {
-    var params = new URLSearchParams(location.search);
-    var url = params.get('url') || '';
-    var titre = params.get('title') || 'Chaîne';
+    // Paramètres lus dans le fragment (#…) : l'URL d'un flux porte les
+    // identifiants du compte Xtream, et un fragment n'est jamais transmis au
+    // serveur qui héberge la page — contrairement à ?url=, qui les aurait
+    // déposés dans les journaux de GitHub Pages. Voir vr-link.js.
+    var recu = VrLink.lire(location.search, location.hash);
+    var url = recu.url;
+    var titre = recu.titre || 'Chaîne';
     var video = document.getElementById('vrVideo');
     var erreur = document.getElementById('erreur');
     document.getElementById('titre').textContent = titre;

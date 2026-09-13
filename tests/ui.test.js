@@ -147,6 +147,20 @@ function verifie(nom, cond, detail) {
   w.document.querySelector('#directViewToggle [data-view="3d"]').click();
   await attendre(200);
 
+  console.log('\n— Bouton VR : ni WebXR ni plugin natif ici —');
+  {
+    // L'interface du lecteur n'est bâtie qu'à la première ouverture.
+    w.Player.open('http://example.invalid/live/1.ts', 'Test', { live: true });
+    await attendre(120);
+    const vr = $('playerVr');
+    verifie('bouton 🥽 présent dans le lecteur', !!vr);
+    // Sans navigator.xr (pas de casque) et sans plugin natif (pas d'APK), ni
+    // le cinéma VR ni la passerelle n'ont de sens : le bouton reste caché.
+    verifie('bouton 🥽 masqué dans un navigateur ordinaire', vr && vr.style.display === 'none', vr && vr.style.display);
+    w.Player.close();
+    await attendre(60);
+  }
+
   console.log('\n— Erreurs JS survenues pendant le test —');
   verifie('aucune erreur', erreurs.length === 0, erreurs.join(' | '));
 

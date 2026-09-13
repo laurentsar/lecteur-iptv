@@ -90,6 +90,48 @@ public class UpdatePlugin extends Plugin {
         }).start();
     }
 
+    /* ── Ouverture dans le navigateur du système ──────────────────────────
+     * Sert la passerelle vers le cinéma VR : sur un casque, l'APK tourne dans
+     * un panneau 2D et ne peut pas faire de relief (il faudrait une app
+     * OpenXR native), alors que le navigateur du casque, lui, sait ouvrir une
+     * session WebXR. Le bouton envoie donc la chaîne en cours vers la PWA.
+     *
+     * Un <a href> ou un window.open ne suffisent pas : la WebView les traite
+     * elle-même au lieu de laisser Android choisir l'application capable
+     * d'ouvrir le lien. Il faut un vrai Intent, lancé hors WebView.
+     */
+    @PluginMethod
+    public void openExternalUrl(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null || url.isEmpty()) { call.reject("URL manquante"); return; }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Aucune application ne peut ouvrir ce lien : " + e.getMessage());
+        }
+    }
+
+    /**
+     * Y a-t-il une application capable d'ouvrir un lien web ?
+     * Beaucoup de téléviseurs Android n'ont aucun navigateur installé : sans
+     * cette question, le bouton de passerelle s'afficherait sur la télé du
+     * salon pour n'y produire qu'un message d'erreur.
+     */
+    @PluginMethod
+    public void canOpenExternal(PluginCall call) {
+        JSObject ret = new JSObject();
+        boolean possible = false;
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com"));
+            possible = intent.resolveActivity(getContext().getPackageManager()) != null;
+        } catch (Exception ignored) {}
+        ret.put("value", possible);
+        call.resolve(ret);
+    }
+
     /** Version installée, pour l'écran Réglages (évite de la coder en dur deux fois). */
     @PluginMethod
     public void currentVersion(PluginCall call) {
