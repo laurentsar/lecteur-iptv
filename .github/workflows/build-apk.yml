@@ -11,7 +11,21 @@ on:
 # pour les icônes et la bannière TV, et la liste ordonnée des patches — l'ordre
 # compte, patch_signing.py doit passer avant que Gradle lise sa configuration.
 jobs:
+  # L'interface est vérifiée dans jsdom AVANT de produire une APK : une
+  # release verte mais dont l'écran reste vide coûte bien plus cher qu'un
+  # build refusé (elle part sur les téléviseurs, où le diagnostic est pénible).
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+
   build:
+    needs: test
     # Un workflow appelé ne peut pas s'octroyer plus de droits que son
     # appelant : sans ce bloc, la publication de la release échoue au parsing
     # (« nested job is requesting contents: write, but is only allowed

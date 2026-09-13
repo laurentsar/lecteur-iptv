@@ -196,7 +196,9 @@
     var panel = document.querySelector('.panel.active');
     if (!panel) return null;
     // Une tuile d'abord ; à défaut seulement (liste encore vide), un filtre.
-    var found = pick(panel.querySelectorAll('.carte')) || pick(panel.querySelectorAll('.chip, .version-item'));
+    var found = pick(panel.querySelectorAll('.scene3d')) ||
+      pick(panel.querySelectorAll('.carte')) ||
+      pick(panel.querySelectorAll('.chip, .version-item'));
     return found;
 
     function pick(nodes) {
@@ -325,7 +327,7 @@
     // retour ramène à la grille des bouquets — l'étape de navigation
     // intermédiaire équivalente aux fiches film/série ci-dessus — avant de
     // quitter l'onglet au retour suivant.
-    if (activeTab && activeTab.dataset.tab === 'direct' && state.directView === 'liste') { switchDirectView('bouquets'); return; }
+    if (activeTab && activeTab.dataset.tab === 'direct' && (state.directView === 'liste' || state.directView === '3d')) { switchDirectView('bouquets'); return; }
     if (activeTab && activeTab.dataset.tab !== 'accueil') { goTab('accueil'); return; }
     if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App && Capacitor.Plugins.App.exitApp) Capacitor.Plugins.App.exitApp();
   }
@@ -1212,6 +1214,9 @@
     var searchId = kindKey === 'direct' ? 'rechDirect' : kindKey === 'films' ? 'rechFilms' : 'rechSeries';
     var container = $id(listId), moreBtn = $id(moreId), chips = $id(chipsId), search = $id(searchId);
     if (kindKey === 'direct') {
+      var en3d = state.directView === '3d';
+      $id('scene3d').style.display = en3d ? '' : 'none';
+      container.style.display = en3d ? 'none' : '';
       container.classList.toggle('liste', state.directView === 'liste');
       container.classList.toggle('bouquets', state.directView === 'bouquets');
       kickEpg();
@@ -1261,6 +1266,7 @@
           var itemsLock = filterAdultLocked(items);
           items = itemsLock.visible;
           if (kindKey === 'direct' || kindKey === 'films') items = groupChannels(items);
+          if (afficheImmersion(kindKey, items, { onOpen: openChannelVersions }, moreBtn)) return;
           renderList(container, moreBtn, items, kindKey, {
             onOpen: kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null,
             epgBadge: epgBadge
@@ -1290,6 +1296,7 @@
         var xtreamLock = filterAdultLocked(filtered);
         filtered = xtreamLock.visible;
         if (kindKey === 'direct' || kindKey === 'films') filtered = groupChannels(filtered);
+        if (afficheImmersion(kindKey, filtered, { onOpen: openChannelVersions }, moreBtn)) return;
         renderList(container, moreBtn, filtered, kindKey, {
           onOpen: kindKey === 'series' ? openSerieXtream : kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null,
           epgBadge: kindKey === 'direct' ? epgBadge : null
@@ -1297,6 +1304,205 @@
         appendLockedCards(container, xtreamLock.locked, function () { renderKind(kindKey); });
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
     }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
+  }
+
+
+  // ---------- Immersion 3D (onglet En direct) ----------
+  // Troisième façon de parcourir les chaînes, à côté de Bouquets et Liste :
+  // un carrousel en perspective, une chaîne à la fois et en grand, avec son
+  // émission en cours. Pensé pour la télé et la télécommande, où une grille de
+  // vignettes de 13 px se lit mal à trois mètres et où le pouce n'existe pas.
+  //
+  // Le point clé : seules les quelques cartes autour de la position courante
+  // existent dans le DOM (VOISINS_3D de chaque côté). Un bouquet de dix mille
+  // chaînes coûte donc exactement autant qu'un bouquet de dix — sans quoi cette
+  // vue aurait réintroduit, en pire, le problème que la v2.14 venait de
+  // supprimer. C'est aussi pourquoi elle n'a pas de « Charger plus » : la
+  // pagination n'a plus de raison d'être quand rien n'est construit d'avance.
+  var VOISINS_3D = 4;
+  var etat3d = { items: [], index: 0, onOpen: null, nodes: {}, sig: null };
+
+  function scene3dEls() {
+    var scene = $id('scene3d');
+    if (scene._piste) return scene;
+    scene.tabIndex = 0;   // cible du curseur D-pad : c'est elle qui reçoit les flèches
+    scene._piste = el('div', 'scene3d-piste');
+    scene.appendChild(scene._piste);
+
+    var prec = el('button', 'scene3d-nav prec', '‹');
+    prec.type = 'button'; prec.setAttribute('aria-label', 'Chaîne précédente');
+    prec.addEventListener('click', function (e) { e.stopPropagation(); aller3d(-1); });
+    scene.appendChild(prec);
+    var suiv = el('button', 'scene3d-nav suiv', '›');
+    suiv.type = 'button'; suiv.setAttribute('aria-label', 'Chaîne suivante');
+    suiv.addEventListener('click', function (e) { e.stopPropagation(); aller3d(1); });
+    scene.appendChild(suiv);
+    scene._prec = prec; scene._suiv = suiv;
+
+    var info = el('div', 'scene3d-info');
+    scene._prog = el('div', 'scene3d-prog');
+    scene._pos = el('div', 'scene3d-pos');
+    info.appendChild(scene._prog); info.appendChild(scene._pos);
+    scene.appendChild(info);
+
+    scene.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); aller3d(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); aller3d(1); }
+      else if (e.key === 'PageUp') { e.preventDefault(); aller3d(-10); }
+      else if (e.key === 'PageDown') { e.preventDefault(); aller3d(10); }
+      else if (isSelectKey(e)) { e.preventDefault(); ouvrir3d(); }
+    });
+
+    // Molette et pavé tactile : un geste horizontal comme vertical fait
+    // défiler le carrousel, sans emporter la page avec lui.
+    var rouleAt = 0;
+    scene.addEventListener('wheel', function (e) {
+      var d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (!d) return;
+      e.preventDefault();
+      var now = Date.now();
+      if (now - rouleAt < 140) return;   // une molette crante bien plus vite qu'on ne lit
+      rouleAt = now;
+      aller3d(d > 0 ? 1 : -1);
+    }, { passive: false });
+
+    // Balayage au doigt. Seuil à 40 px pour ne pas confondre avec le
+    // défilement vertical de la page, laissé libre (touch-action: pan-y).
+    var x0 = null, y0 = null;
+    scene.addEventListener('pointerdown', function (e) { x0 = e.clientX; y0 = e.clientY; });
+    scene.addEventListener('pointerup', function (e) {
+      if (x0 === null) return;
+      var dx = e.clientX - x0, dy = e.clientY - y0;
+      x0 = null;
+      if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+      aller3d(dx < 0 ? 1 : -1);
+    });
+    scene.addEventListener('pointercancel', function () { x0 = null; });
+    return scene;
+  }
+
+  function carte3d(item, i) {
+    var c = el('div', 'carte3d');
+    var thumb = el('div', 'carte3d-thumb');
+    if (item.logo) {
+      var img = document.createElement('img');
+      img.loading = 'lazy'; img.src = item.logo; img.alt = '';
+      img.onerror = function () { img.remove(); thumb.textContent = iconFor(item.kind); };
+      thumb.appendChild(img);
+    } else {
+      thumb.textContent = iconFor(item.kind);
+    }
+    c.appendChild(thumb);
+    if (item.chno) c.appendChild(el('div', 'carte3d-chno', String(item.chno)));
+    c.appendChild(el('div', 'carte3d-nom', item.name));
+    c.addEventListener('click', function () {
+      // Une carte de côté sert de raccourci : on s'y rend, on ne la lance pas.
+      if (i === etat3d.index) ouvrir3d(); else { etat3d.index = i; dessiner3d(); }
+    });
+    return c;
+  }
+
+  function placer3d(node, d) {
+    var abs = Math.abs(d);
+    node.style.transform = 'translateX(' + (d * 58) + '%) translateZ(' + (-abs * 130) + 'px) rotateY(' + (-d * 34) + 'deg)';
+    node.style.opacity = String(Math.max(0, 1 - abs * 0.2));
+    node.style.zIndex = String(50 - abs);
+    node.classList.toggle('actif', d === 0);
+  }
+
+  function dessiner3d() {
+    var scene = scene3dEls();
+    var n = etat3d.items.length;
+    if (etat3d.index < 0) etat3d.index = 0;
+    if (etat3d.index > n - 1) etat3d.index = Math.max(0, n - 1);
+    var vus = {};
+    for (var d = -VOISINS_3D; d <= VOISINS_3D; d++) {
+      var i = etat3d.index + d;
+      if (i < 0 || i >= n) continue;
+      vus[i] = true;
+      var node = etat3d.nodes[i];
+      if (!node) {
+        node = carte3d(etat3d.items[i], i);
+        etat3d.nodes[i] = node;
+        // Positionnée AVANT l'insertion : un noeud qui entre en scène ne doit
+        // pas s'animer depuis le centre.
+        placer3d(node, d);
+        scene._piste.appendChild(node);
+      } else {
+        placer3d(node, d);
+      }
+    }
+    Object.keys(etat3d.nodes).forEach(function (k) {
+      if (vus[k]) return;
+      var nd = etat3d.nodes[k];
+      if (nd.parentNode) nd.parentNode.removeChild(nd);
+      delete etat3d.nodes[k];
+    });
+    scene._prec.disabled = etat3d.index <= 0;
+    scene._suiv.disabled = etat3d.index >= n - 1;
+    majInfo3d();
+  }
+
+  function majInfo3d() {
+    var scene = $id('scene3d');
+    var item = etat3d.items[etat3d.index];
+    if (!item) { scene._prog.textContent = ''; scene._pos.textContent = ''; return; }
+    var info = nowNextFor(item);
+    scene._prog.textContent = info && info.now ? '▶ ' + info.now.titre : item.group || '';
+    scene._pos.textContent = (etat3d.index + 1) + ' / ' + etat3d.items.length;
+  }
+
+  function aller3d(delta) {
+    var n = etat3d.items.length;
+    if (!n) return;
+    // Bornée plutôt que circulaire : un carrousel qui saute de la dernière
+    // chaîne à la première donne l'impression d'avoir raté quelque chose.
+    var i = Math.min(n - 1, Math.max(0, etat3d.index + delta));
+    if (i === etat3d.index) return;
+    etat3d.index = i;
+    dessiner3d();
+  }
+
+  function ouvrir3d() {
+    var item = etat3d.items[etat3d.index];
+    if (!item) return;
+    if (etat3d.onOpen) etat3d.onOpen(item);
+    else Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
+  }
+
+  function render3d(items, opts) {
+    var scene = scene3dEls();
+    etat3d.onOpen = (opts && opts.onOpen) || null;
+    var sig = signatureListe(items);
+    if (etat3d.sig !== sig) {
+      // Liste différente (autre bouquet, autre recherche) : on repart du début
+      // et on jette les cartes, qui ne correspondent plus à rien.
+      etat3d.sig = sig;
+      etat3d.index = 0;
+      scene._piste.innerHTML = '';
+      etat3d.nodes = {};
+    }
+    etat3d.items = items;
+    if (!items.length) {
+      scene._piste.innerHTML = '';
+      etat3d.nodes = {};
+      scene._prog.textContent = 'Aucune chaîne à afficher.';
+      scene._pos.textContent = '';
+      scene._prec.disabled = scene._suiv.disabled = true;
+      return;
+    }
+    dessiner3d();
+  }
+
+  // Aiguillage commun aux deux sources (M3U et Xtream) : la vue Immersion
+  // remplace la grille, sans toucher au reste du pipeline (catégories,
+  // recherche, regroupement des doublons s'appliquent de la même façon).
+  function afficheImmersion(kindKey, items, opts, moreBtn) {
+    if (kindKey !== 'direct' || state.directView !== '3d') return false;
+    setZapList(items);
+    render3d(items, opts);
+    moreBtn.style.display = 'none';
+    return true;
   }
 
   // ---------- Vue « Bouquets » (En direct) ----------
@@ -1344,6 +1550,8 @@
   function renderBouquets() {
     var pl = state.playlist;
     var container = $id('listeDirect'), moreBtn = $id('plusDirect'), chips = $id('chipsDirect'), search = $id('rechDirect');
+    $id('scene3d').style.display = 'none';
+    container.style.display = '';
     moreBtn.style.display = 'none';
     chips.innerHTML = '';
     chips.style.display = 'none';
@@ -1490,6 +1698,10 @@
     if (view === 'bouquets') state.bouquetsAllCountries = false;
     Array.prototype.forEach.call(document.querySelectorAll('#directViewToggle .view-btn'), function (x) { x.classList.toggle('active', x.dataset.view === view); });
     renderKind('direct');
+    if (view === '3d') {
+      // Après le rendu : la scène n'est visible qu'à ce moment-là.
+      setTimeout(function () { var sc = $id('scene3d'); if (sc && sc.style.display !== 'none') sc.focus(); }, 60);
+    }
   }
   $id('directViewToggle').addEventListener('click', function (e) {
     var b = e.target.closest('.view-btn');
