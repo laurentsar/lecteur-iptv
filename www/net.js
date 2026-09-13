@@ -54,13 +54,47 @@
     return (cap.Plugins && cap.Plugins.CapacitorHttp) || null;
   }
 
+  // Certains réseaux/boîtiers filtrent le trafic sortant d'une appli tierce
+  // sur la base d'heuristiques anti-piratage (parfois juste l'en-tête
+  // User-Agent générique envoyé par défaut par le client HTTP natif
+  // d'Android, très différent de celui d'un navigateur) — constaté sur un
+  // boîtier TV où l'appli échouait à joindre un serveur Xtream alors que
+  // d'autres applis du même boîtier, sur le même réseau, y arrivaient très
+  // bien. Se faire passer pour un navigateur ordinaire ne coûte rien sur les
+  // appareils où ça fonctionne déjà, et peut débloquer ceux où ce filtrage
+  // existe.
+  var BROWSER_UA = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
+
+  // Repli sur fetch() du navigateur si le réseau natif échoue (erreur de
+  // connexion, pas un simple statut HTTP d'erreur) : sur un boîtier dont le
+  // système bloque les sockets natifs d'une appli tierce tout en laissant
+  // passer la WebView, ce chemin peut réussir là où CapacitorHttp échoue.
+  // S'il échoue aussi (probable si c'est vraiment le réseau qui est en
+  // cause, ou par CORS si le serveur ne renvoie pas les en-têtes
+  // nécessaires), on remonte l'erreur native d'origine — plus parlante
+  // ("Failed to connect...") qu'une erreur CORS générique ("Failed to
+  // fetch").
+  function withNativeFallback(nativeAttempt, browserAttempt) {
+    return nativeAttempt.catch(function (nativeErr) {
+      return browserAttempt().catch(function () { throw nativeErr; });
+    });
+  }
+
   function fetchText(url) {
     var http = nativeHttp();
     if (http) {
-      return withTimeout(http.request({ url: url, method: 'GET', responseType: 'text' }).then(function (res) {
-        if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
-        return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-      }));
+      return withNativeFallback(
+        withTimeout(http.request({ url: url, method: 'GET', responseType: 'text', headers: { 'User-Agent': BROWSER_UA } }).then(function (res) {
+          if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
+          return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+        })),
+        function () {
+          return withTimeout(fetch(url).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+          }));
+        }
+      );
     }
     return withTimeout(fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -75,13 +109,21 @@
   function fetchBytes(url) {
     var http = nativeHttp();
     if (http) {
-      return withTimeout(http.request({ url: url, method: 'GET', responseType: 'arraybuffer' }).then(function (res) {
-        if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
-        var bin = atob(res.data);
-        var bytes = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        return bytes.buffer;
-      }));
+      return withNativeFallback(
+        withTimeout(http.request({ url: url, method: 'GET', responseType: 'arraybuffer', headers: { 'User-Agent': BROWSER_UA } }).then(function (res) {
+          if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
+          var bin = atob(res.data);
+          var bytes = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          return bytes.buffer;
+        })),
+        function () {
+          return withTimeout(fetch(url).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.arrayBuffer();
+          }));
+        }
+      );
     }
     return withTimeout(fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -92,10 +134,18 @@
   function fetchJson(url) {
     var http = nativeHttp();
     if (http) {
-      return withTimeout(http.request({ url: url, method: 'GET' }).then(function (res) {
-        if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
-        return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-      }));
+      return withNativeFallback(
+        withTimeout(http.request({ url: url, method: 'GET', headers: { 'User-Agent': BROWSER_UA } }).then(function (res) {
+          if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
+          return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+        })),
+        function () {
+          return withTimeout(fetch(url).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          }));
+        }
+      );
     }
     return withTimeout(fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
