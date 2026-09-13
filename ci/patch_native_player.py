@@ -211,6 +211,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Rational;
+import android.app.UiModeManager;
 import android.view.View;
 import android.view.KeyEvent;
 import android.view.WindowManager;
@@ -398,6 +399,28 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     };
 
+    // Certaines télévisions (notamment plus anciennes) recadrent
+    // (« overscan ») quelques pourcents de l'image sur les bords, coupant
+    // aussi bien les informations du contrôleur de lecture intégré
+    // d'ExoPlayer (position/durée en bas de l'écran) que nos propres
+    // bandeaux (titre, zapping, numéro de chaîne, programme en cours) —
+    // constaté en usage réel sur une TV branchée à un boîtier Android TV.
+    // Android ne peut pas savoir si LA TV fait de l'overscan ; on applique
+    // donc, uniquement en mode TV (un téléphone/une tablette n'a jamais ce
+    // problème), une marge de sécurité sur le conteneur racine : tout le
+    // contenu (vidéo comprise, très légèrement réduite plutôt que rognée)
+    // s'en trouve poussé hors de la zone recadrée — les bandeaux alignés
+    // sur les bords du parent (alignParentTop/Start/End/Bottom) respectent
+    // automatiquement son padding.
+    private void applyTvOverscanSafeMargin() {
+        UiModeManager uiModeManager = (UiModeManager) getSystemService(UI_MODE_SERVICE);
+        if (uiModeManager == null || uiModeManager.getCurrentModeType() != Configuration.UI_MODE_TYPE_TELEVISION) return;
+        View root = findViewById(R.id.playerRoot);
+        if (root == null) return;
+        int margin = Math.round(24 * getResources().getDisplayMetrics().density);
+        root.setPadding(margin, margin, margin, margin);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -510,6 +533,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         statusView = findViewById(R.id.playerStatusText);
         playerView = findViewById(R.id.playerView);
+        applyTvOverscanSafeMargin();
 
         // PREFER : utilise l'extension FFmpeg (native/decoder-ffmpeg) pour
         // l'audio AC3/E-AC3/DTS/TrueHD quand le décodeur de l'appareil ne
@@ -1400,6 +1424,7 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
      couleurs (#0A1018 à 85 %, trait #223447, accent #3FC7C7), mêmes tailles
      et mêmes emplacements. -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/playerRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000">
