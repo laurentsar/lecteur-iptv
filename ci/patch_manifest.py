@@ -39,6 +39,29 @@ else:
 # claire. Aucun code Java supplémentaire n'est nécessaire pour ce cas (le
 # déclenchement reste un geste utilisateur explicite, comme l'exige l'API) ;
 # c'est WebView qui gère la fenêtre PiP elle-même.
+# Clavier virtuel qui cache le champ en cours de saisie (constaté sur le
+# formulaire "Ajouter une playlist", assez bas dans l'onglet Réglages) : sans
+# adjustResize, la WebView ne réduit pas sa propre fenêtre quand le clavier
+# apparaît (comportement par défaut d'Android pour une activité sans thème
+# précis) — le navigateur ne sait donc pas que la zone visible a rétréci et ne
+# fait pas remonter le champ actif au-dessus du clavier. Avec adjustResize, la
+# fenêtre (donc le viewport CSS) se redimensionne réellement, ce qui laisse le
+# comportement standard du navigateur (défilement automatique vers le champ
+# actif) fonctionner correctement — complété côté JS par un défilement
+# explicite en renfort, voir focusin sur les champs dans app.js.
+s = open(mf).read()
+if "windowSoftInputMode" not in s:
+    def _add_resize(m):
+        return m.group(0).replace("<activity", '<activity\n            android:windowSoftInputMode="adjustResize"', 1)
+    s2, n = re.subn(r'<activity\b[^>]*android:name="\.MainActivity"[^>]*>', _add_resize, s, count=1)
+    if n:
+        open(mf, "w").write(s2)
+        print("MainActivity : windowSoftInputMode=adjustResize activé (clavier ne cache plus les champs)")
+    else:
+        print("MainActivity introuvable dans le manifeste — adjustResize non ajouté")
+else:
+    print("windowSoftInputMode déjà présent")
+
 s = open(mf).read()
 if "supportsPictureInPicture" not in s:
     def _add_pip(m):

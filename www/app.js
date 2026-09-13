@@ -236,6 +236,20 @@
     var cible = firstContentItem() || document.querySelector('.tab.active');
     if (cible) cible.focus();
   });
+
+  // Clavier virtuel qui recouvre le champ actif (constaté sur le formulaire
+  // « Ajouter une playlist », assez bas dans l'onglet Réglages) : en renfort
+  // de android:windowSoftInputMode="adjustResize" côté natif (voir
+  // ci/patch_manifest.py, qui laisse la WebView se redimensionner
+  // correctement quand le clavier apparaît), on fait aussi remonter
+  // explicitement le champ visé une fois le clavier animé à l'écran —
+  // utile aussi sur la PWA, où adjustResize n'existe pas.
+  document.addEventListener('focusin', function (e) {
+    var t = e.target;
+    if (!t || !/^(INPUT|TEXTAREA)$/.test(t.tagName)) return;
+    setTimeout(function () { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 300);
+  });
+
   function scheduleStartFocus() {
     var jeton = ++focusToken;
     [0, 150, 400, 900, 1600].forEach(function (d) {
