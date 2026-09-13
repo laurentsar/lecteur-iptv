@@ -28,6 +28,7 @@ jobs:
       ci_scripts: >-
         ci/patch_signing.py
         ci/patch_manifest.py
+        ci/patch_config_intent.py
         ci/patch_native_player.py
         ci/patch_recorder.py
         ci/patch_radio_background.py
