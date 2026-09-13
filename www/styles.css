@@ -2,6 +2,7 @@
    grilles de chaînes/affiches et regarder la vidéo dans de bonnes conditions. */
 
 :root {
+  color-scheme: dark;
   --bg: #0b1420;
   --card: #101c2b;
   --card2: #16273a;
@@ -89,6 +90,7 @@ label {
 }
 input[type="text"], input[type="search"], input[type="number"], input[type="password"], select, textarea {
   background: var(--card2); border: 1px solid var(--line); color: var(--text);
+  caret-color: var(--text);
   border-radius: 10px; padding: 9px 10px; font-size: 15px; font-family: inherit;
 }
 textarea { resize: vertical; }
