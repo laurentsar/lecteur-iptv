@@ -213,6 +213,7 @@ import android.os.Looper;
 import android.util.Rational;
 import android.view.View;
 import android.view.KeyEvent;
+import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -401,6 +402,14 @@ public class NativePlayerActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_native_player);
+        // Empêche l'écran de se verrouiller pendant la lecture : cette Activity
+        // (pas la WebView de MainActivity) est ce qui est réellement affiché
+        // par défaut sur l'APK (voir startPlayback dans player.js — le lecteur
+        // natif est utilisé en priorité). Le KeepAwakePlugin posé côté
+        // MainActivity (voir ci/patch_keep_awake.py) n'a donc aucun effet ici,
+        // sur une fenêtre/Activity différente : le flag doit être posé
+        // directement sur cette fenêtre-ci.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         mediaUrl = getIntent().getStringExtra("url");
         String title = getIntent().getStringExtra("title");
