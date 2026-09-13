@@ -9,5 +9,10 @@ native/*/build/
 native/*/.cxx/
 __pycache__/
 
-# Signature applicative versionnée volontairement (voir signing/README.md).
-!signing/release.keystore
+# La clé de signature vit HORS du dépôt depuis le 2026-09-05 : secrets GitHub
+# Actions ANDROID_KEYSTORE_B64 / ANDROID_KEYSTORE_PASSWORD, copie de référence
+# dans ~/app-kit/keys (voir signing/README.md). L'exception qui autorisait
+# auparavant `signing/release.keystore` a été retirée : ce dépôt est PUBLIC, et
+# la laisser suffisait à ce qu'une clé privée redéposée un jour à cet endroit
+# reparte en ligne sans que rien ne s'y oppose. Une clé publiée permet de
+# signer un APK qu'Android installe par-dessus l'app légitime.

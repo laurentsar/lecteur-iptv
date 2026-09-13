@@ -21,7 +21,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm install --no-audit --no-fund
+      # npm ci, pas npm install : installe exactement ce que package-lock.json
+      # décrit, et échoue si le verrou et package.json divergent — sur un dépôt
+      # public, c'est aussi ce qui empêche une dépendance de changer sous nos
+      # pieds d'un build à l'autre.
+      - run: npm ci --no-audit --no-fund
       - run: npm test
 
   build:
