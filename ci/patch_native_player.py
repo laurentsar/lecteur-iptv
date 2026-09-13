@@ -256,6 +256,26 @@ public class NativePlayerActivity extends AppCompatActivity {
     // playlist (séparateurs de catégorie décoratifs, chaînes mortes) ne
     // renvoient jamais d'erreur et resteraient bloquées indéfiniment sans ça.
 
+    // ---------- Reprise automatique après une coupure ----------
+    // Un flux IPTV en direct s'interrompt souvent : micro-coupure du
+    // fournisseur, réseau saturé, segment manquant. ExoPlayer, lui, s'arrête à
+    // la PREMIÈRE erreur et n'y revient jamais — l'image se fige, et il faut
+    // relancer la chaîne à la main. Sur une télé, c'est ce qui rendait
+    // l'application pénible : la chaîne « se met en pause » toute seule.
+    //
+    // On relance donc la lecture sans intervention, avec un délai qui double à
+    // chaque échec consécutif pour ne pas marteler un serveur réellement en
+    // panne, et remis à zéro dès que l'image revient.
+    private static final long RECONNECT_BASE_MS = 1500;
+    private static final long RECONNECT_MAX_MS = 15000;
+    private static final int RECONNECT_MAX_ATTEMPTS = 12;
+    private static final int RECONNECT_MAX_ATTEMPTS_COLD = 2;
+    // Le blocage le plus pénible n'émet AUCUNE erreur : le lecteur reste en
+    // mise en mémoire tampon indéfiniment, image figée — exactement ce qu'on
+    // prend pour une pause. Au-delà de ce délai sans image, on le traite comme
+    // une coupure.
+    private static final long STALL_TIMEOUT_MS = 12000;
+
     // Durée d'affichage du bandeau de chaîne après un zapping, alignée sur
     // celle du bandeau équivalent du lecteur web (showZapBanner).
     private static final long BANNER_MS = 3000;
@@ -348,10 +368,92 @@ public class NativePlayerActivity extends AppCompatActivity {
     private final Runnable timeoutRunnable = new Runnable() {
         @Override
         public void run() {
-            statusView.setText("Le flux ne répond pas (délai dépassé) — probablement hors service ou une entrée de playlist invalide.");
-            statusView.setVisibility(View.VISIBLE);
+            // Le délai de premier chargement est lui aussi une coupure : une
+            // chaîne qui ne répond pas maintenant répond souvent trente
+            // secondes plus tard. On réessaie au lieu de rester sur un message.
+            scheduleReconnect("Le flux ne répond pas");
         }
     };
+
+    private int reconnectAttempts = 0;
+    private boolean userPaused = false;
+    // Une chaîne qui n'a JAMAIS donné d'image depuis qu'on l'a ouverte est
+    // probablement morte (entrée de playlist périmée, séparateur décoratif) :
+    // insister douze fois ferait patienter pour rien. Une chaîne qui jouait et
+    // s'est coupée, elle, mérite qu'on s'accroche.
+    private boolean everReady = false;
+    private final Handler reconnectHandler = new Handler(Looper.getMainLooper());
+
+    private final Runnable reconnectRunnable = new Runnable() {
+        @Override
+        public void run() {
+            reconnectNow();
+        }
+    };
+
+    private final Runnable stallRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (userPaused) {
+                return;
+            }
+            scheduleReconnect("Réception interrompue");
+        }
+    };
+
+    /** Un direct n'a pas de durée connue : c'est ce qui le distingue d'un film. */
+    private boolean isLiveStream() {
+        Player p = playerView == null ? null : playerView.getPlayer();
+        if (p == null) {
+            return false;
+        }
+        return p.isCurrentMediaItemLive() || p.getDuration() == C.TIME_UNSET;
+    }
+
+    private void cancelRecovery() {
+        reconnectHandler.removeCallbacks(reconnectRunnable);
+        reconnectHandler.removeCallbacks(stallRunnable);
+    }
+
+    private void scheduleReconnect(String cause) {
+        Player p = playerView == null ? null : playerView.getPlayer();
+        // Une pause demandée par l'utilisateur n'est pas une panne : ne rien
+        // relancer derrière son dos.
+        if (p == null || userPaused) {
+            return;
+        }
+        cancelRecovery();
+        timeoutHandler.removeCallbacks(timeoutRunnable);
+        int maxTentatives = everReady ? RECONNECT_MAX_ATTEMPTS : RECONNECT_MAX_ATTEMPTS_COLD;
+        if (reconnectAttempts >= maxTentatives) {
+            statusView.setText(cause + " — la chaîne ne revient pas. Essaie une autre source ou une autre chaîne.");
+            statusView.setVisibility(View.VISIBLE);
+            return;
+        }
+        reconnectAttempts++;
+        long delai = Math.min(RECONNECT_MAX_MS,
+                RECONNECT_BASE_MS * (1L << Math.min(reconnectAttempts - 1, 6)));
+        statusView.setText(cause + " — reconnexion… (" + reconnectAttempts + ")");
+        statusView.setVisibility(View.VISIBLE);
+        reconnectHandler.postDelayed(reconnectRunnable, delai);
+    }
+
+    private void reconnectNow() {
+        Player p = playerView == null ? null : playerView.getPlayer();
+        if (p == null) {
+            return;
+        }
+        // Sur un direct, reprendre à l'ancienne position n'a aucun sens : elle
+        // est probablement sortie de la fenêtre que le serveur garde encore.
+        // On repart du bord direct.
+        if (isLiveStream()) {
+            p.seekToDefaultPosition();
+        }
+        p.prepare();
+        p.setPlayWhenReady(true);
+        timeoutHandler.removeCallbacks(timeoutRunnable);
+        timeoutHandler.postDelayed(timeoutRunnable, LOAD_TIMEOUT_MS);
+    }
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private final Runnable hideBannerRunnable = new Runnable() {
@@ -386,15 +488,50 @@ public class NativePlayerActivity extends AppCompatActivity {
         @Override
         public void onPlayerError(PlaybackException error) {
             timeoutHandler.removeCallbacks(timeoutRunnable);
-            statusView.setText("Lecture impossible : " + error.getErrorCodeName());
-            statusView.setVisibility(View.VISIBLE);
+            // Cas courant et bénin du direct : le lecteur a pris du retard et
+            // la position demandée est sortie de la fenêtre encore disponible
+            // côté serveur. Repartir du bord suffit, sans compter un échec —
+            // sinon quelques décrochages normaux épuiseraient les tentatives.
+            if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                reconnectNow();
+                return;
+            }
+            scheduleReconnect("Lecture interrompue (" + error.getErrorCodeName() + ")");
         }
 
         @Override
         public void onPlaybackStateChanged(int state) {
             if (state == Player.STATE_READY) {
                 timeoutHandler.removeCallbacks(timeoutRunnable);
+                cancelRecovery();
+                reconnectAttempts = 0;   // l'image est revenue : on repart de zéro
+                everReady = true;
                 statusView.setVisibility(View.GONE);
+            } else if (state == Player.STATE_BUFFERING) {
+                reconnectHandler.removeCallbacks(stallRunnable);
+                if (!userPaused) {
+                    reconnectHandler.postDelayed(stallRunnable, STALL_TIMEOUT_MS);
+                }
+            } else if (state == Player.STATE_ENDED) {
+                // Un direct ne « se termine » pas : c'est la source qui a
+                // lâché. Un film, si — celui-là on le laisse finir.
+                if (isLiveStream()) {
+                    scheduleReconnect("Flux terminé par la source");
+                }
+            }
+        }
+
+        @Override
+        public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+            // Distinguer la pause VOULUE (touche Pause) de l'arrêt SUBI : sans
+            // ça, la reprise automatique redémarrerait la chaîne juste après
+            // que l'utilisateur l'a mise en pause.
+            if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
+                userPaused = !playWhenReady;
+                if (userPaused) {
+                    cancelRecovery();
+                    statusView.setVisibility(View.GONE);
+                }
             }
         }
     };
@@ -905,6 +1042,11 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void playUrl(String url, String title) {
         reportProgress();
+        // Nouvelle chaîne : les échecs de la précédente ne la concernent pas.
+        cancelRecovery();
+        reconnectAttempts = 0;
+        userPaused = false;
+        everReady = false;
         dernierProgramme = "";
         startPositionMs = 0;
         qualiteForcee = false;

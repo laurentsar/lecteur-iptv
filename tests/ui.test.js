@@ -27,6 +27,24 @@ w.APP_VERSION = VERSION;
 w.UPDATE_REPO = 'laurentsar/lecteur-iptv';
 w.fetch = () => Promise.reject(new Error('réseau coupé dans le test'));
 
+// jsdom n'implémente pas la lecture média ni le chargement des scripts
+// externes. Sans ces deux garnitures, startPlayback reste bloqué en attente de
+// hls.js et video.play() lève au lieu de rendre une promesse.
+w.HTMLMediaElement.prototype.play = function () { return Promise.resolve(); };
+w.HTMLMediaElement.prototype.pause = function () {};
+w.HTMLMediaElement.prototype.load = function () {};
+w.HTMLMediaElement.prototype.canPlayType = function () { return ''; };
+const vraiCreate = w.document.createElement.bind(w.document);
+w.document.createElement = function (tag) {
+  const el = vraiCreate(tag);
+  if (String(tag).toLowerCase() === 'script') {
+    // Échec de chargement simulé : le code de repli continue au lieu d'attendre
+    // indéfiniment un fichier que jsdom n'ira jamais chercher.
+    setTimeout(() => { if (el.onerror) el.onerror(new w.Event('error')); }, 0);
+  }
+  return el;
+};
+
 function charger(f) {
   const code = fs.readFileSync(WWW + '/' + f, 'utf8');
   try { vm.runInContext(code, dom.getInternalVMContext(), { filename: f }); }
@@ -157,6 +175,47 @@ function verifie(nom, cond, detail) {
     // Sans navigator.xr (pas de casque) et sans plugin natif (pas d'APK), ni
     // le cinéma VR ni la passerelle n'ont de sens : le bouton reste caché.
     verifie('bouton 🥽 masqué dans un navigateur ordinaire', vr && vr.style.display === 'none', vr && vr.style.display);
+    w.Player.close();
+    await attendre(60);
+  }
+
+  console.log('\n— Reprise automatique après une coupure —');
+  {
+    // Symptôme corrigé : à la première erreur de flux, la lecture s'arrêtait
+    // définitivement (« la chaîne se met en pause »). Elle doit maintenant se
+    // relancer d'elle-même avant d'envisager d'abandonner.
+    w.Player.open('http://example.invalid/live/77.ts', 'Chaine 77', { live: true });
+    await attendre(200);
+    const statut = $('playerStatus');
+    const video = w.document.querySelector('#playerOverlay video');
+    verifie('lecteur ouvert avec son élément vidéo', !!video && !!statut);
+
+    video.dispatchEvent(new w.Event('error'));
+    await attendre(60);
+    verifie('une reconnexion est annoncée, pas un abandon',
+            /reconnexion/i.test(statut.textContent), statut.textContent);
+    verifie('la tentative est numérotée', /\(1\)/.test(statut.textContent), statut.textContent);
+
+    // Deuxième échec d'affilée sur une chaîne qui n'a jamais donné d'image :
+    // au-delà de deux essais on passe aux replis plutôt que d'insister.
+    await attendre(1700);
+    video.dispatchEvent(new w.Event('error'));
+    await attendre(60);
+    verifie('deuxième tentative comptée', /\(2\)/.test(statut.textContent), statut.textContent);
+    await attendre(3200);
+    video.dispatchEvent(new w.Event('error'));
+    await attendre(80);
+    verifie('abandon après les tentatives à froid',
+            !/reconnexion/i.test(statut.textContent), statut.textContent);
+
+    // Une pause demandée ne doit rien relancer derrière l'utilisateur.
+    w.Player.open('http://example.invalid/live/78.ts', 'Chaine 78', { live: true });
+    await attendre(200);
+    video.dispatchEvent(new w.Event('pause'));
+    video.dispatchEvent(new w.Event('error'));
+    await attendre(60);
+    verifie('aucune reconnexion pendant une pause voulue',
+            !/reconnexion/i.test($('playerStatus').textContent), $('playerStatus').textContent);
     w.Player.close();
     await attendre(60);
   }

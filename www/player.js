@@ -224,9 +224,41 @@
     });
     video.addEventListener('error', function () {
       clearLoadTimeout();
-      attemptFallbackOrFail('Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error));
+      var cause = 'Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error);
+      if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
+      attemptFallbackOrFail(cause);
     });
-    video.addEventListener('playing', function () { clearLoadTimeout(); setStatus(''); armAudioWatchdog(); });
+    video.addEventListener('playing', function () {
+      clearLoadTimeout();
+      cancelRecovery();
+      recoverCount = 0;      // l'image est revenue : on repart de zéro
+      everPlayed = true;
+      setStatus('');
+      armAudioWatchdog();
+    });
+    // Blocage muet : le navigateur n'émet aucune erreur, il attend simplement
+    // des données qui n'arrivent plus — l'image reste figée, ce qu'on prend
+    // pour une pause. Au-delà du délai, on traite ça comme une coupure.
+    var STALL_MS = 12000;
+    var stallTimer = null;
+    function armStall() {
+      clearTimeout(stallTimer);
+      if (userPaused) return;
+      stallTimer = setTimeout(function () {
+        if (userPaused || !video.paused && video.readyState >= 3) return;
+        var cause = 'Réception interrompue';
+        if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
+        attemptFallbackOrFail(cause + ' — le flux ne renvoie plus de données.');
+      }, STALL_MS);
+    }
+    ['waiting', 'stalled'].forEach(function (evt) { video.addEventListener(evt, armStall); });
+    ['playing', 'timeupdate'].forEach(function (evt) {
+      video.addEventListener(evt, function () { clearTimeout(stallTimer); });
+    });
+    // Distinguer la pause VOULUE de l'arrêt SUBI : sans ça, la reprise
+    // automatique relancerait la chaîne juste après une mise en pause.
+    video.addEventListener('pause', function () { if (!video.ended) userPaused = true; });
+    video.addEventListener('play', function () { userPaused = false; });
     setupAirplay();
     setupChromecast();
     updateCastAvailability();
@@ -1293,6 +1325,54 @@
     return base + '.m3u8' + (m && m[2] ? m[2] : '');
   }
 
+  // ---------- Reprise automatique après une coupure ----------
+  // Un flux IPTV en direct s'interrompt souvent : micro-coupure du
+  // fournisseur, réseau saturé, segment manquant. Le lecteur abandonnait à la
+  // PREMIÈRE erreur fatale — image figée, à relancer à la main. On réessaie
+  // d'abord, avec un délai qui double à chaque échec consécutif, et on ne
+  // bascule sur la chaîne de replis (lecteur natif, HLS transcodé) que si la
+  // chaîne ne revient vraiment pas.
+  var RECOVER_BASE_MS = 1500;
+  var RECOVER_MAX_MS = 15000;
+  var RECOVER_MAX = 8;
+  // Une chaîne qui n'a jamais donné d'image depuis qu'on l'a ouverte est
+  // probablement morte : insister n'apporte rien, autant passer aux replis.
+  var RECOVER_MAX_COLD = 2;
+  var recoverCount = 0;
+  var recoverTimer = null;
+  var everPlayed = false;
+  var userPaused = false;
+
+  function resetRecovery() {
+    clearTimeout(recoverTimer);
+    recoverTimer = null;
+    recoverCount = 0;
+    everPlayed = false;
+    userPaused = false;
+  }
+
+  function cancelRecovery() {
+    clearTimeout(recoverTimer);
+    recoverTimer = null;
+  }
+
+  // Renvoie true si une nouvelle tentative a été programmée — l'appelant doit
+  // alors s'arrêter là plutôt que de déclencher les replis.
+  function tryRecover(cause, relancer) {
+    if (userPaused) return true;   // pause voulue : rien à réparer
+    var max = everPlayed ? RECOVER_MAX : RECOVER_MAX_COLD;
+    if (recoverCount >= max) return false;
+    recoverCount++;
+    var delai = Math.min(RECOVER_MAX_MS, RECOVER_BASE_MS * Math.pow(2, Math.min(recoverCount - 1, 6)));
+    setStatus(cause + ' — reconnexion… (' + recoverCount + ')');
+    cancelRecovery();
+    recoverTimer = setTimeout(function () {
+      recoverTimer = null;
+      try { relancer(); } catch (e) { attemptFallbackOrFail(cause); }
+    }, delai);
+    return true;
+  }
+
   function attemptFallbackOrFail(reasonMsg) {
     if (!triedNativeFallback) {
       triedNativeFallback = true;
@@ -1570,7 +1650,22 @@
         useNativeLoader ? { loader: global.CapacitorHttpLoader } : {});
       hls = new global.Hls(hlsConfig);
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
-        if (data && data.fatal) attemptFallbackOrFail('Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ') — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
+        if (!data || !data.fatal) return;
+        var cause = 'Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ')';
+        // hls.js sait se remettre seul de la plupart des pannes, à condition
+        // qu'on le lui demande : relancer le chargement après une erreur
+        // réseau, reconstruire le tampon après une erreur de média. Sans ces
+        // deux appels, une simple coupure de quelques secondes tuait la
+        // lecture définitivement.
+        var type = global.Hls.ErrorTypes;
+        if (data.type === type.NETWORK_ERROR) {
+          if (tryRecover(cause, function () { hls.startLoad(); })) return;
+        } else if (data.type === type.MEDIA_ERROR) {
+          if (tryRecover(cause, function () { hls.recoverMediaError(); })) return;
+        } else if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) {
+          return;
+        }
+        attemptFallbackOrFail(cause + ' — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
       hls.on(global.Hls.Events.AUDIO_TRACKS_UPDATED, function () { updateTracksVisibility(); checkHlsAudioCodec(); });
       hls.on(global.Hls.Events.SUBTITLE_TRACKS_UPDATED, updateTracksVisibility);
@@ -1593,7 +1688,11 @@
       setStatus('Connexion au flux (mpeg-ts)…');
       mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: url }, MPEGTS_LOW_BANDWIDTH_CONFIG);
       mpegtsPlayer.on(global.mpegts.Events.ERROR, function () {
-        attemptFallbackOrFail('Flux mpeg-ts interrompu — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
+        var cause = 'Flux mpeg-ts interrompu';
+        // mpegts.js n'a pas de reprise intégrée : on rejoue le flux depuis le
+        // début, ce qui pour un direct revient à se rebrancher au bord.
+        if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
+        attemptFallbackOrFail(cause + ' — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
       });
       // mpegts.js ne démultiplexe que l'AAC et le MP3. Une chaîne en MPEG-1
       // Layer 2 (la norme du DVB hertzien) ou en AC-3 passe donc en silence,
@@ -1629,6 +1728,10 @@
     triedM3u8Fallback = false;
     triedAudioFallback = false;
     skipNativeDefault = false;
+    // Nouveau contenu : les échecs et la pause du précédent ne le concernent
+    // pas. (Volontairement ici et non dans startPlayback, qui est justement
+    // rappelée PAR les tentatives de reprise.)
+    resetRecovery();
     ensureDom();
     overlay.classList.add('show');
     showPlayerUi();
@@ -1646,6 +1749,7 @@
   }
 
   function close() {
+    cancelRecovery();
     clearLoadTimeout();
     clearAudioWatchdog();
     clearInterval(progBarTimer);
