@@ -15,6 +15,39 @@
 (function (global) {
   'use strict';
 
+  // Aucune des deux voies réseau ci-dessous (CapacitorHttp natif ou fetch()
+  // du navigateur) n'a de délai par défaut : une requête qui ne répond
+  // jamais (DNS qui traîne, connexion TCP ouverte mais silencieuse, serveur
+  // hors service qui ne renvoie ni erreur ni fermeture...) reste sinon en
+  // attente indéfiniment, avec l'appli bloquée sur « Chargement… » sans
+  // jamais afficher d'erreur ni permettre de réessayer — constaté sur un
+  // boîtier TV Android dont le réseau vers le serveur Xtream restait
+  // silencieux. Au-delà de ce délai, on abandonne et on remonte une erreur
+  // exploitable plutôt que de rester bloqué pour toujours.
+  var REQUEST_TIMEOUT_MS = 20000;
+
+  function withTimeout(promise) {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reject(new Error('le serveur ne répond pas (délai dépassé)'));
+      }, REQUEST_TIMEOUT_MS);
+      promise.then(function (v) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(v);
+      }, function (err) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
   function nativeHttp() {
     var cap = global.Capacitor;
     if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
@@ -24,15 +57,15 @@
   function fetchText(url) {
     var http = nativeHttp();
     if (http) {
-      return http.request({ url: url, method: 'GET', responseType: 'text' }).then(function (res) {
+      return withTimeout(http.request({ url: url, method: 'GET', responseType: 'text' }).then(function (res) {
         if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
         return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-      });
+      }));
     }
-    return fetch(url).then(function (r) {
+    return withTimeout(fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
-    });
+    }));
   }
 
   // Octets bruts (pour l'EPG XMLTV, potentiellement gzip — voir epg.js) :
@@ -42,32 +75,32 @@
   function fetchBytes(url) {
     var http = nativeHttp();
     if (http) {
-      return http.request({ url: url, method: 'GET', responseType: 'arraybuffer' }).then(function (res) {
+      return withTimeout(http.request({ url: url, method: 'GET', responseType: 'arraybuffer' }).then(function (res) {
         if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
         var bin = atob(res.data);
         var bytes = new Uint8Array(bin.length);
         for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         return bytes.buffer;
-      });
+      }));
     }
-    return fetch(url).then(function (r) {
+    return withTimeout(fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.arrayBuffer();
-    });
+    }));
   }
 
   function fetchJson(url) {
     var http = nativeHttp();
     if (http) {
-      return http.request({ url: url, method: 'GET' }).then(function (res) {
+      return withTimeout(http.request({ url: url, method: 'GET' }).then(function (res) {
         if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
         return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-      });
+      }));
     }
-    return fetch(url).then(function (r) {
+    return withTimeout(fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
-    });
+    }));
   }
 
   global.Net = { fetchText: fetchText, fetchJson: fetchJson, fetchBytes: fetchBytes, isNative: function () { return !!nativeHttp(); } };
