@@ -57,6 +57,17 @@ let m3u = '#EXTM3U url-tvg="http://example.invalid/epg.xml"\n';
 for (let i = 1; i <= NB; i++) {
   m3u += `#EXTINF:-1 tvg-id="c${i}" tvg-chno="${i}" group-title="Bouquet FR ${i % 7}",Chaine ${i}\nhttp://example.invalid/live/${i}.ts\n`;
 }
+// Films et séries, pour exercer les menus VR au-delà du direct. Les chaînes en
+// direct restent au nombre de 500 dans 7 bouquets : les tests d'affichage
+// précédents ne doivent pas bouger.
+for (let i = 1; i <= 30; i++) {
+  m3u += `#EXTINF:-1 group-title="Films FR",Film Numero ${i} (202${i % 5})\nhttp://example.invalid/vod/${i}.mp4\n`;
+}
+for (let se = 1; se <= 3; se++) {
+  for (let ep = 1; ep <= 8; ep++) {
+    m3u += `#EXTINF:-1 group-title="Series FR",Ma Serie ${se} S01E0${ep}\nhttp://example.invalid/series/${se}-${ep}.mp4\n`;
+  }
+}
 w.localStorage.setItem('iptv:playlists', JSON.stringify([{ id: 'p1', nom: 'Test', type: 'm3u', m3uUrl: 'http://example.invalid/pl.m3u', creeLe: 1 }]));
 w.localStorage.setItem('iptv:active', JSON.stringify('p1'));
 
@@ -296,6 +307,36 @@ function verifie(nom, cond, detail) {
 
     const fav = w.AppZap.vrFavoris();
     verifie('favoris exposés sous forme de tableau', Array.isArray(fav));
+  }
+
+  console.log('\n— Menus VR : films, séries, épisodes, radio —');
+  {
+    const idxF = await w.AppZap.vrIndex('films');
+    verifie('catégories de films exposées', Array.isArray(idxF) && idxF.length >= 1, JSON.stringify(idxF));
+    const pf = await w.AppZap.vrPage('films', idxF[0].id, 0, 5);
+    verifie('page de films bornée', pf.items.length <= 5 && pf.total === 30, pf.items.length + '/' + pf.total);
+
+    const idxS = await w.AppZap.vrIndex('series');
+    verifie('catégories de séries exposées', Array.isArray(idxS) && idxS.length >= 1);
+    // Un compte par groupe compterait des ÉPISODES, pas des séries : on
+    // préfère ne rien annoncer plutôt qu'un chiffre faux.
+    verifie('aucun compte trompeur sur les séries', idxS.every(c => c.count === null), JSON.stringify(idxS));
+
+    const ps = await w.AppZap.vrSeries(idxS[0].id, 0, 10);
+    verifie('séries regroupées, pas listées épisode par épisode', ps.total === 3, 'total=' + ps.total);
+    verifie('une série est marquée comme telle et n\'a pas d\'URL',
+            ps.items[0].estSerie === true && !ps.items[0].url, JSON.stringify(ps.items[0]));
+
+    const eps = await w.AppZap.vrEpisodes({ serie: ps.items[0].serie }, 0, 5);
+    verifie('épisodes résolus et bornés', eps.items.length === 5 && eps.total === 8, eps.items.length + '/' + eps.total);
+    verifie('un épisode porte une URL jouable', !!eps.items[0].url, JSON.stringify(eps.items[0]));
+    verifie('épisodes nommés S/E', /^S\d+E\d+/.test(eps.items[0].name), eps.items[0].name);
+    const eps2 = await w.AppZap.vrEpisodes({ serie: ps.items[0].serie }, 0, 99999);
+    verifie('demande démesurée d\'épisodes plafonnée', eps2.items.length <= 40, 'n=' + eps2.items.length);
+
+    const radios = await w.AppZap.vrRadios();
+    verifie('radios exposées', Array.isArray(radios) && radios.length > 0, 'n=' + radios.length);
+    verifie('une radio porte une URL', radios.every(r => !!r.url));
   }
 
   console.log('\n— Erreurs JS survenues pendant le test —');

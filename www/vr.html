@@ -11,8 +11,11 @@
        flux et dépose la liste de zapping dans sessionStorage (même origine).
        Le rendu VR passe par WebXR : à ouvrir dans le navigateur du casque. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.7.0/aframe.min.js"></script>
-  <script src="vendor/hls.min.js"></script>
-  <script src="vendor/mpegts.min.js"></script>
+  <!-- hls.js (603 Ko) et mpegts.js (213 Ko) ne sont PAS chargés d'office : un
+       casque autonome paie ce téléchargement, cette analyse et cette mémoire à
+       chaque ouverture, alors qu'un flux donné n'utilise qu'UN des deux — et
+       aucun des deux pour un mp4 lu directement. Ils sont demandés par lire()
+       au moment où le format l'exige. -->
   <script src="stereo-uv.js"></script>
   <script src="vr-link.js"></script>
   <style>
@@ -189,6 +192,21 @@
     function isM3u8(u) { return /\.m3u8(\?|#|$)/i.test(u); }
     function isTs(u) { return /\.(ts|mpegts)(\?|#|$)/i.test(u) || /\/live\//i.test(u); }
 
+    // Chargement d'un moteur au moment où il sert, une seule fois.
+    var moteurs = {};
+    function charger(src) {
+      if (moteurs[src]) return moteurs[src];
+      moteurs[src] = new Promise(function (resolve) {
+        var sc = document.createElement('script');
+        sc.src = src;
+        sc.onload = function () { resolve(true); };
+        // Un échec ne bloque pas : on retombe sur la lecture directe.
+        sc.onerror = function () { resolve(false); };
+        document.head.appendChild(sc);
+      });
+      return moteurs[src];
+    }
+
     function detruire() {
       if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
       if (mpegts) { try { mpegts.destroy(); } catch (e) {} mpegts = null; }
@@ -200,6 +218,19 @@
     // le MPEG-TS brut, lecture directe sinon.
     function lire(u, nom) {
       if (!u) { erreur.textContent = 'Aucun flux à lire.'; return; }
+      // Le moteur nécessaire est chargé d'abord, puis la lecture reprend son
+      // cours normal (lireMaintenant). Rien n'est chargé pour un mp4.
+      var besoin = isM3u8(u) ? 'vendor/hls.min.js' : isTs(u) ? 'vendor/mpegts.min.js' : null;
+      if (besoin && !moteurs[besoin]) {
+        erreur.textContent = 'Préparation du lecteur…';
+        charger(besoin).then(function () { erreur.textContent = ''; lireMaintenant(u, nom); });
+        return;
+      }
+      if (besoin) { charger(besoin).then(function () { lireMaintenant(u, nom); }); return; }
+      lireMaintenant(u, nom);
+    }
+
+    function lireMaintenant(u, nom) {
       detruire();
       url = u;
       document.getElementById('titre').textContent = nom || '';
@@ -258,6 +289,8 @@
     var TYPES = [
       { id: 'direct', libelle: 'Chaines' },
       { id: 'films', libelle: 'Films' },
+      { id: 'series', libelle: 'Series' },
+      { id: 'radio', libelle: 'Radio' },
       { id: 'favoris', libelle: 'Favoris' }
     ];
     var vue = { type: 'liste', bouquet: null, bouquetNom: '', page: 0, total: 0, entrees: [], index: [] };
@@ -297,16 +330,17 @@
     function ongletsVr(panneau) {
       if (!appli) return;
       var y = 2.86;
+      var large = 3.6 / TYPES.length;
       TYPES.forEach(function (t, i) {
-        var actif = (vue.type === 'bouquets' || vue.type === 'entrees') && vue.kind === t.id
-          || (vue.type === 'favoris' && t.id === 'favoris');
+        var actif = vue.kind === t.id;
         var e = document.createElement('a-entity');
-        e.setAttribute('position', (-1.2 + i * 1.2) + ' ' + y + ' 0');
-        e.appendChild(ligneFond(1.1, actif ? '#3fc7c7' : '#16273a', 0.92, function () {
-          if (t.id === 'favoris') ouvrirFavoris(); else ouvrirBouquets(t.id);
+        e.setAttribute('position', (-1.8 + large / 2 + i * large) + ' ' + y + ' 0');
+        e.appendChild(ligneFond(large - 0.06, actif ? '#3fc7c7' : '#16273a', 0.92, function () {
+          if (t.id === 'favoris') ouvrirListeSimple('favoris', 'Favoris', appli.vrFavoris);
+          else if (t.id === 'radio') ouvrirListeSimple('radio', 'Radio', appli.vrRadios);
+          else ouvrirBouquets(t.id);
         }));
-        var txt = ligneTexte(t.libelle, actif ? '#06181c' : '#e7eef7', -0.45, 4.5);
-        e.appendChild(txt);
+        e.appendChild(ligneTexte(t.libelle, actif ? '#06181c' : '#e7eef7', -(large - 0.06) / 2 + 0.05, 5.5));
         panneau.appendChild(e);
       });
     }
@@ -327,21 +361,38 @@
       chargerPage();
     }
 
-    function ouvrirFavoris() {
+    // Favoris et radios : des listes courtes, sans bouquets ni pagination
+    // distante — on les tient d'un bloc sans risque pour la mémoire.
+    function ouvrirListeSimple(kind, titre, source) {
       if (!appli) return;
-      vue = { type: 'favoris', kind: 'favoris', bouquet: null, bouquetNom: 'Favoris', page: 0, total: 0, entrees: [], index: [] };
+      vue = { type: 'favoris', kind: kind, bouquet: null, bouquetNom: titre, page: 0, total: 0, entrees: [], index: [] };
       majPanneau();
-      Promise.resolve(appli.vrFavoris()).then(function (f) {
+      Promise.resolve(source()).then(function (f) {
         vue.entrees = f || [];
         vue.total = vue.entrees.length;
         majPanneau();
       }).catch(function () { majPanneau(); });
     }
 
+    // Une série n'a pas d'URL : il faut d'abord résoudre ses épisodes, ce qui
+    // demande une requête de plus chez Xtream. D'où cette vue intermédiaire.
+    function ouvrirSerie(entree) {
+      if (!appli) return;
+      var ref = entree.seriesId ? { seriesId: entree.seriesId } : { serie: entree.serie || entree.name };
+      vue = { type: 'episodes', kind: 'series', bouquet: vue.bouquet, bouquetNom: entree.name,
+        serieRef: ref, page: 0, total: 0, entrees: [], index: vue.index };
+      chargerPage();
+    }
+
     function chargerPage() {
-      if (!appli || vue.type !== 'entrees') { majPanneau(); return; }
+      if (!appli) { majPanneau(); return; }
       majPanneau();   // affiche « Chargement… » pendant la requête
-      appli.vrPage(vue.kind, vue.bouquet, vue.page * PAGE, PAGE).then(function (r) {
+      var demande;
+      if (vue.type === 'episodes') demande = appli.vrEpisodes(vue.serieRef, vue.page * PAGE, PAGE);
+      else if (vue.kind === 'series') demande = appli.vrSeries(vue.bouquet, vue.page * PAGE, PAGE);
+      else if (vue.type === 'entrees') demande = appli.vrPage(vue.kind, vue.bouquet, vue.page * PAGE, PAGE);
+      else { majPanneau(); return; }
+      demande.then(function (r) {
         vue.entrees = (r && r.items) || [];
         vue.total = (r && r.total) || 0;
         majPanneau();
@@ -353,7 +404,7 @@
       var p = Math.min(pages - 1, Math.max(0, vue.page + delta));
       if (p === vue.page) return;
       vue.page = p;
-      if (vue.type === 'entrees') chargerPage(); else majPanneau();
+      if (vue.type === 'entrees' || vue.type === 'episodes') chargerPage(); else majPanneau();
     }
 
     function majPanneau() {
@@ -364,10 +415,15 @@
       // Titre + retour
       var titre = vue.type === 'liste' ? 'Chaines en cours'
         : vue.type === 'bouquets' ? 'Bouquets'
-        : vue.type === 'favoris' ? 'Favoris'
         : vue.bouquetNom || 'Bouquet';
       var yTitre = 2.44;
-      if (vue.type === 'entrees') {
+      if (vue.type === 'episodes') {
+        ajouterLigne(panneau, yTitre, '< ' + titre, '#0e2436', '#3fc7c7', function () {
+          vue = { type: 'entrees', kind: 'series', bouquet: vue.bouquet, bouquetNom: '',
+            page: 0, total: 0, entrees: [], index: vue.index };
+          chargerPage();
+        });
+      } else if (vue.type === 'entrees') {
         ajouterLigne(panneau, yTitre, '< ' + titre, '#0e2436', '#3fc7c7', function () {
           ouvrirBouquets(vue.kind);
         });
@@ -402,16 +458,22 @@
         });
         if (!vue.index.length) lignes.push({ libelle: 'Chargement…', actif: false, action: null });
       } else {
-        var debutE = vue.type === 'favoris' ? vue.page * PAGE : 0;
-        var tranche = vue.type === 'favoris' ? vue.entrees.slice(debutE, debutE + PAGE) : vue.entrees;
+        // Favoris et radios sont tenus d'un bloc : c'est court. Les autres
+        // vues, elles, ne détiennent QUE la page en cours.
+        var localement = vue.type === 'favoris';
+        var debutE = localement ? vue.page * PAGE : 0;
+        var tranche = localement ? vue.entrees.slice(debutE, debutE + PAGE) : vue.entrees;
         tranche.forEach(function (c) {
           lignes.push({
-            libelle: (c.chno ? c.chno + '  ' : '') + (c.name || ''),
-            actif: c.url === url,
+            libelle: (c.chno ? c.chno + '  ' : '') + (c.name || '') + (c.estSerie ? '  >' : ''),
+            actif: !!c.url && c.url === url,
             action: function () {
+              // Une série ne se lit pas : elle s'ouvre sur ses épisodes.
+              if (c.estSerie) { ouvrirSerie(c); return; }
               // Sortir du mode « liste transmise » : on zappe désormais dans
-              // ce que l'utilisateur a choisi ici.
-              liste = vue.type === 'favoris' ? vue.entrees : vue.entrees;
+              // ce que l'utilisateur a choisi ici. La liste reste bornée à la
+              // page affichée, jamais au bouquet entier.
+              liste = vue.entrees.filter(function (e) { return e.url; });
               index = liste.indexOf(c);
               lire(c.url, c.name);
             }

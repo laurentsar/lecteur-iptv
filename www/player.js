@@ -1458,8 +1458,19 @@
       vrBtn.title = 'Cinéma VR';
       vrBtn.addEventListener('click', function () {
         try {
-          var liste = (global.AppZap && global.AppZap.list()) || [];
-          sessionStorage.setItem('vrZapList', JSON.stringify(liste));
+          // FENÊTRE autour de la chaîne en cours, pas la liste entière : un
+          // bouquet de dix mille chaînes était sérialisé ici puis reparsé dans
+          // la page VR, où il restait en mémoire pour rien. Le casque n'a ni
+          // la mémoire ni l'usage d'un tel tableau — les menus (voir vr.html)
+          // vont chercher le reste à la demande, page par page.
+          var toutes = (global.AppZap && global.AppZap.list()) || [];
+          var ici = -1;
+          for (var i = 0; i < toutes.length; i++) {
+            if (toutes[i] && toutes[i].url === originalUrl) { ici = i; break; }
+          }
+          var FENETRE = 150;
+          var debut = Math.max(0, (ici === -1 ? 0 : ici) - Math.floor(FENETRE / 2));
+          sessionStorage.setItem('vrZapList', JSON.stringify(toutes.slice(debut, debut + FENETRE)));
         } catch (e) { /* quota ou mode privé : la page VR marchera sans liste */ }
         global.open(VrLink.construire('vr.html', originalUrl, originalTitle || ''), '_blank');
       });

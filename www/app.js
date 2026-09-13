@@ -88,7 +88,7 @@
     var pl = state.playlist;
     if (!pl) return Promise.resolve([]);
     if (pl.type === 'm3u') {
-      var m3uKind = kind === 'films' ? 'vod' : 'live';
+      var m3uKind = kind === 'films' ? 'vod' : kind === 'radio' ? 'radio' : kind === 'series' ? 'series' : 'live';
       return ensureM3uLoaded().then(function (data) {
         return (data.items || []).filter(function (it) {
           return it.kind === m3uKind && it.url && !looksLikeSeparator(it.name) && !isHiddenChannel(it.name);
@@ -100,11 +100,14 @@
     }
     // Xtream : une catégorie à la fois, comme le fait déjà l'onglet En direct.
     // Demander « tout » ferait justement ce qu'on cherche à éviter.
-    return ensureXtreamCats(kind).then(function () {
-      return ensureXtreamItems(kind, catId || '');
+    var xtKind = kind === 'radio' ? 'direct' : kind;
+    return ensureXtreamCats(xtKind).then(function () {
+      return ensureXtreamItems(xtKind, catId || '');
     }).then(function (items) {
       return items.filter(function (it) {
-        return it.url && it.kind !== 'radio' && !isHiddenChannel(it.name);
+        if (isHiddenChannel(it.name)) return false;
+        if (kind === 'radio') return it.kind === 'radio' && it.url;
+        return it.url && it.kind !== 'radio';
       }).map(function (it) {
         return { name: it.name, url: it.url, logo: it.logo || null, chno: it.chno || '',
           epgKey: it.epgKey || null, group: it.group || '' };
@@ -125,6 +128,7 @@
     vrIndex: function (kind) {
       var pl = state.playlist;
       if (!pl) return Promise.resolve([]);
+      if (kind === 'radio') return Promise.resolve([]);   // pas de bouquets : une seule liste
       if (pl.type === 'm3u') {
         return vrPool(kind).then(function (pool) {
           var compte = {}, ordre = [];
@@ -133,7 +137,9 @@
             if (compte[g] === undefined) { compte[g] = 0; ordre.push(g); }
             compte[g]++;
           });
-          return ordre.map(function (g) { return { id: g, label: g, count: compte[g] }; });
+          return ordre.map(function (g) {
+            return { id: g, label: g, count: kind === 'series' ? null : compte[g] };
+          });
         });
       }
       return ensureXtreamCats(kind).then(function (cats) {
@@ -158,6 +164,87 @@
       });
     },
     vrFavoris: function () { return zapFavoris().map(vrEntrees); },
+    // Radio : les stations de la playlist plus celles fournies par défaut,
+    // exactement comme l'onglet Radio. Assez courtes pour tenir d'un bloc.
+    vrRadios: function () {
+      return vrPool('radio').then(function (pool) {
+        return pool.concat(DEFAULT_RADIOS).map(vrEntrees);
+      }).catch(function () { return DEFAULT_RADIOS.map(vrEntrees); });
+    },
+    // Séries : une liste de séries n'a pas d'URL — il faut d'abord résoudre
+    // ses épisodes, ce qui demande une requête de plus chez Xtream. D'où deux
+    // étapes, et jamais le catalogue entier d'un coup.
+    vrSeries: function (catId, offset, limit) {
+      var pl = state.playlist;
+      if (!pl) return Promise.resolve({ total: 0, items: [] });
+      var n = Math.min(VR_PAGE_MAX, Math.max(1, limit || 10));
+      var d = Math.max(0, offset || 0);
+      if (pl.type === 'm3u') {
+        return ensureM3uLoaded().then(function (data) {
+          var pool = (data.items || []).filter(function (it) {
+            return it.kind === 'series' && (!catId || it.groupTitle === catId);
+          });
+          var series = M3U.groupSeries(pool);
+          return {
+            total: series.length,
+            items: series.slice(d, d + n).map(function (se) {
+              return { name: se.nom, serie: se.nom, logo: se.logo || null, estSerie: true };
+            })
+          };
+        });
+      }
+      return ensureXtreamCats('series').then(function () {
+        return ensureXtreamItems('series', catId || '');
+      }).then(function (items) {
+        var utiles = items.filter(function (it) { return it.seriesId && !isHiddenChannel(it.name); });
+        return {
+          total: utiles.length,
+          items: utiles.slice(d, d + n).map(function (it) {
+            return { name: it.name, seriesId: it.seriesId, logo: it.logo || null, estSerie: true };
+          })
+        };
+      });
+    },
+    // Épisodes d'une série, aplatis en une seule liste ordonnée : dans un
+    // casque, dérouler un accordéon de saisons à la manette serait pénible.
+    vrEpisodes: function (ref, offset, limit) {
+      var pl = state.playlist;
+      if (!pl || !ref) return Promise.resolve({ total: 0, items: [] });
+      var n = Math.min(VR_PAGE_MAX, Math.max(1, limit || 10));
+      var d = Math.max(0, offset || 0);
+      function page(tout) { return { total: tout.length, items: tout.slice(d, d + n) }; }
+
+      if (pl.type === 'm3u') {
+        return ensureM3uLoaded().then(function (data) {
+          var pool = (data.items || []).filter(function (it) { return it.kind === 'series'; });
+          var serie = M3U.groupSeries(pool).filter(function (se) { return se.nom === ref.serie; })[0];
+          if (!serie) return { total: 0, items: [] };
+          var tout = [];
+          Object.keys(serie.saisons).sort(function (a, b) { return a - b; }).forEach(function (num) {
+            serie.saisons[num].slice().sort(function (a, b) { return a.episode - b.episode; }).forEach(function (ep) {
+              tout.push({ name: 'S' + num + 'E' + ep.episode + (ep.name && ep.name !== serie.nom ? ' — ' + ep.name : ''),
+                url: ep.url, logo: null, chno: '', epgKey: null });
+            });
+          });
+          return page(tout);
+        });
+      }
+      var cfg = xtreamCfg(pl);
+      return Xtream.seriesInfo(cfg, ref.seriesId).then(function (info) {
+        var parSaison = (info && info.episodes) || {};
+        var tout = [];
+        Object.keys(parSaison).sort(function (a, b) { return a - b; }).forEach(function (num) {
+          (parSaison[num] || []).forEach(function (ep) {
+            tout.push({
+              name: 'S' + num + 'E' + (ep.episode_num || '?') + (ep.title ? ' — ' + ep.title : ''),
+              url: Xtream.streamUrl(cfg, 'series', ep.id, ep.container_extension || 'mp4'),
+              logo: null, chno: '', epgKey: null
+            });
+          });
+        });
+        return page(tout);
+      }).catch(function () { return { total: 0, items: [] }; });
+    },
     epgNow: function (epgKey, name) { return (epgKey || name) ? Epg.nowNext(state.epgMap, epgKey, name) : null; },
     byNumber: function (num) {
       num = String(num).replace(/^0+(?=\d)/, '');
