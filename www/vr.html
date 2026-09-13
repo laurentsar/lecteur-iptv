@@ -13,6 +13,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.7.0/aframe.min.js"></script>
   <script src="vendor/hls.min.js"></script>
   <script src="vendor/mpegts.min.js"></script>
+  <script src="stereo-uv.js"></script>
   <style>
     body { margin: 0; background: #05080e; color: #e7eef7; font: 14px system-ui, sans-serif; }
     #demarrer {
@@ -27,6 +28,7 @@
       padding: 14px 22px; font-size: 16px; font-weight: 700; cursor: pointer;
     }
     #erreur { color: #ffb454; min-height: 18px; }
+    #format3d { color: #3fc7c7; font-weight: 700; min-height: 18px; }
   </style>
 </head>
 <body>
@@ -34,8 +36,9 @@
        l'utilisateur, et le casque demande le même geste pour entrer en VR. -->
   <div id="demarrer">
     <h1>Cinéma VR — <span id="titre">chaîne</span></h1>
-    <p>Lance la lecture, puis appuie sur <strong>VR</strong> en bas à droite pour entrer dans le casque. Les chaînes du bouquet sont pointables à la manette, à gauche de l'écran.</p>
+    <p>Lance la lecture, puis appuie sur <strong>VR</strong> en bas à droite pour entrer dans le casque. Les chaînes du bouquet sont pointables à la manette, à gauche de l'écran. Une chaîne 3D (côte-à-côte ou haut-bas) est reconnue à son nom et passée en relief automatiquement ; le bouton <strong>3D</strong> sous l'écran permet de corriger le format.</p>
     <button id="btnLancer">▶ Lancer</button>
+    <div id="format3d"></div>
     <div id="erreur"></div>
   </div>
 
@@ -95,6 +98,89 @@
 
     var hls = null, mpegts = null;
 
+    // ---------- Relief (3D stéréoscopique) ----------
+    // Un flux « 3D » d'un fournisseur IPTV est une image ordinaire qui
+    // contient deux vues : côte à côte, ou l'une au-dessus de l'autre. Le
+    // relief consiste à ne montrer à chaque œil que sa moitié.
+    //
+    // Comment : deux copies de l'écran cylindrique, aux coordonnées UV
+    // différentes (voir stereo-uv.js), rangées dans les COUCHES de rendu 1 et
+    // 2 de three.js. En WebXR, three active la couche 1 sur la caméra de
+    // l'œil gauche et la couche 2 sur celle de l'œil droit : chaque copie
+    // n'est donc visible que d'un seul œil, sans rien avoir à synchroniser.
+    // L'écran d'origine reste en couche 0, vue par les deux yeux — c'est lui
+    // qui sert en 2D, et hors du casque où les couches 1 et 2 n'existent pas.
+    var mode3d = '2d';        // '2d' | 'sbs' | 'ou'
+    var autoFormat = true;    // coupé dès que l'utilisateur choisit lui-même
+    var enVR = false;
+    var ecranEl = document.getElementById('ecran');
+    var meshMono = null, meshG = null, meshD = null, geoBase = null;
+    var btn3dTexte = null;
+
+    var LIBELLE_3D = { '2d': '2D (plat)', sbs: 'Relief cote-a-cote', ou: 'Relief haut-bas' };
+
+    function preparerStereo() {
+      var mesh = ecranEl.getObject3D('mesh');
+      if (!mesh || meshMono) return;
+      var THREE = window.AFRAME && AFRAME.THREE;
+      if (!THREE) return;
+      meshMono = mesh;
+      // Copie intacte : chaque changement de mode repart des UV d'origine
+      // plutôt que d'empiler les transformations sur celles d'avant.
+      geoBase = mesh.geometry.clone();
+      meshG = new THREE.Mesh(geoBase.clone(), mesh.material);
+      meshD = new THREE.Mesh(geoBase.clone(), mesh.material);
+      [meshG, meshD].forEach(function (m) {
+        m.position.copy(mesh.position);
+        m.quaternion.copy(mesh.quaternion);
+        m.scale.copy(mesh.scale);
+        m.visible = false;
+        ecranEl.object3D.add(m);
+      });
+      meshG.layers.set(1);   // œil gauche
+      meshD.layers.set(2);   // œil droit
+      appliquerMode();
+    }
+
+    function decouper(geo, droit) {
+      var src = geoBase.attributes.uv, dst = geo.attributes.uv;
+      for (var i = 0; i < src.count; i++) {
+        var r = StereoUV.uvOeil(src.getX(i), src.getY(i), mode3d, droit);
+        dst.setXY(i, r[0], r[1]);
+      }
+      dst.needsUpdate = true;
+    }
+
+    function appliquerMode() {
+      if (btn3dTexte) btn3dTexte.setAttribute('value', '3D : ' + LIBELLE_3D[mode3d]);
+      var f = document.getElementById('format3d');
+      if (f) f.textContent = mode3d === '2d' ? '' : LIBELLE_3D[mode3d] + (autoFormat ? ' (détecté)' : '');
+      if (!meshG) return;
+      var stereo = mode3d !== '2d' && enVR;
+      if (stereo) { decouper(meshG.geometry, false); decouper(meshD.geometry, true); }
+      meshG.visible = meshD.visible = stereo;
+      // Hors du casque, les couches 1 et 2 ne sont activées par personne :
+      // sans ce repli l'écran serait simplement noir dans la fenêtre.
+      meshMono.visible = !stereo;
+    }
+
+    function choisirMode(m, manuel) {
+      if (manuel) autoFormat = false;
+      mode3d = m;
+      appliquerMode();
+    }
+
+    function cycler3d() {
+      var suite = { '2d': 'sbs', sbs: 'ou', ou: '2d' };
+      choisirMode(suite[mode3d], true);
+    }
+
+    var scene = document.querySelector('a-scene');
+    scene.addEventListener('enter-vr', function () { enVR = true; appliquerMode(); });
+    scene.addEventListener('exit-vr', function () { enVR = false; appliquerMode(); });
+    if (ecranEl.getObject3D('mesh')) preparerStereo();
+    else ecranEl.addEventListener('object3dset', preparerStereo);
+
     function isM3u8(u) { return /\.m3u8(\?|#|$)/i.test(u); }
     function isTs(u) { return /\.(ts|mpegts)(\?|#|$)/i.test(u) || /\/live\//i.test(u); }
 
@@ -124,6 +210,13 @@
         mpegts.load();
       } else {
         video.src = u;
+      }
+      // Le format de relief n'est annoncé nulle part ailleurs que dans le nom
+      // de la chaîne : on le relit à chaque zapping, tant que l'utilisateur
+      // n'a pas imposé son propre choix.
+      if (autoFormat) {
+        mode3d = StereoUV.detecterFormat(nom || '') || '2d';
+        appliquerMode();
       }
       video.play().catch(function () { erreur.textContent = 'Appuie sur ▶ Lancer pour démarrer la lecture.'; });
       majPanneau();
@@ -169,9 +262,9 @@
     }
 
     // --- commandes sous l'écran ---
-    function bouton(parent, x, largeur, libelle, action) {
+    function bouton(parent, x, largeur, libelle, action, y) {
       var e = document.createElement('a-entity');
-      e.setAttribute('position', x + ' 0 0');
+      e.setAttribute('position', x + ' ' + (y || 0) + ' 0');
       var p = document.createElement('a-plane');
       p.setAttribute('width', largeur); p.setAttribute('height', 0.5);
       p.setAttribute('color', '#16273a'); p.setAttribute('class', 'clic');
@@ -183,6 +276,7 @@
       t.setAttribute('position', '0 0 0.01');
       e.appendChild(t);
       parent.appendChild(e);
+      return t;
     }
 
     var commandes = document.getElementById('commandes');
@@ -190,6 +284,10 @@
     bouton(commandes, -0.8, 1.2, 'Pause', function () { if (video.paused) video.play(); else video.pause(); });
     bouton(commandes, 0.8, 1.2, 'Suivante ▶', function () { zap(1); });
     bouton(commandes, 2.6, 1.6, 'Quitter', function () { location.href = 'index.html'; });
+    // Deuxième rangée : le relief se règle moins souvent que le zapping, il ne
+    // doit pas se trouver sur le passage de la manette.
+    btn3dTexte = bouton(commandes, 0, 2.6, '3D : 2D (plat)', cycler3d, -0.62);
+    appliquerMode();
 
     document.getElementById('btnLancer').addEventListener('click', function () {
       document.getElementById('demarrer').style.display = 'none';
