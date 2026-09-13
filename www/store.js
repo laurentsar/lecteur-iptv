@@ -58,6 +58,9 @@
   // réellement des programmes (cas courant : un bouquet de plusieurs
   // milliers de chaînes dont seules quelques centaines sont guidées).
   var K_GUIDE_EPG = 'iptv:guideAvecProgramme';
+  // Affichage « TV » : caractères et cibles agrandis pour une lecture à
+  // plusieurs mètres (voir body.tv dans styles.css).
+  var K_MODE_TV = 'iptv:modeTv';
 
   // ---------- Miroir natif (Capacitor Preferences) ----------
   // Symptôme corrigé ici : les playlists disparaissaient à chaque mise à jour
@@ -73,7 +76,7 @@
   // recopie donc les CLÉS LÉGÈRES (playlists, favoris, réglages — pas les
   // caches de chaînes, trop volumineux et reconstructibles), et on rehydrate
   // le localStorage au démarrage quand il revient vide.
-  var MIROIR = [K_PLAYLISTS, K_ACTIVE, K_FAVORIS, K_TMDB, K_PIN, K_NATIF, K_GUIDE_EPG];
+  var MIROIR = [K_PLAYLISTS, K_ACTIVE, K_FAVORIS, K_TMDB, K_PIN, K_NATIF, K_GUIDE_EPG, K_MODE_TV];
   var PREFIXE_MIROIR = 'mirror:';
 
   function prefsPlugin() {
@@ -161,6 +164,9 @@
   function getLecteurNatif() { return lsGet(K_NATIF, true) !== false; }
   function setLecteurNatif(actif) { return lsSet(K_NATIF, !!actif); }
 
+  function getModeTv() { return lsGet(K_MODE_TV, false) === true; }
+  function setModeTv(actif) { return lsSet(K_MODE_TV, !!actif); }
+
   function getGuideAvecProgramme() { return lsGet(K_GUIDE_EPG, true) !== false; }
   function setGuideAvecProgramme(actif) { return lsSet(K_GUIDE_EPG, !!actif); }
 
@@ -233,6 +239,23 @@
     }
     lsSet(K_PROGRESS, map);
   }
+  // Lectures en cours, de la plus récente à la plus ancienne — pour la section
+  // « Reprendre » de l'accueil. Les entrées à peine commencées ou quasiment
+  // terminées sont écartées : les proposer n'a pas de sens (mêmes seuils que
+  // la barre de progression des vignettes).
+  function getEnCours(max) {
+    var map = getProgressMap();
+    return Object.keys(map)
+      .map(function (url) { return Object.assign({ url: url }, map[url]); })
+      .filter(function (e) {
+        if (!e.duration || !e.position) return false;
+        var r = e.position / e.duration;
+        return r > 0.03 && r < 0.95;
+      })
+      .sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); })
+      .slice(0, max || 12);
+  }
+
   function clearProgress(url) {
     var map = getProgressMap();
     if (url in map) { delete map[url]; lsSet(K_PROGRESS, map); }
@@ -317,8 +340,10 @@
     getParentalPin: getParentalPin, setParentalPin: setParentalPin,
     getLecteurNatif: getLecteurNatif, setLecteurNatif: setLecteurNatif,
     getGuideAvecProgramme: getGuideAvecProgramme, setGuideAvecProgramme: setGuideAvecProgramme,
+    getModeTv: getModeTv, setModeTv: setModeTv,
     getFavoris: getFavoris, setFavoris: setFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
     getProgress: getProgress, setProgress: setProgress, clearProgress: clearProgress,
+    getEnCours: getEnCours,
     exportConfig: exportConfig, importConfig: importConfig,
     cacheGet: function (playlistId) { return idbGet('cache:' + playlistId); },
     cacheSet: function (playlistId, data) { return idbSet('cache:' + playlistId, data); },

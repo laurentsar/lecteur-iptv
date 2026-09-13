@@ -171,6 +171,13 @@
         <p class="hint">Les favoris sont partagés entre le téléphone et les télés via l'entité <code>sensor.lecteur_iptv_favoris</code> de Home Assistant. Fusion dans les deux sens : un ajout ou une suppression faite sur un appareil se retrouve sur les autres. Le jeton se crée dans HA : profil → Jetons d'accès longue durée.</p>
         <div id="haSyncPanel"></div>
       </div>
+      <div class="cat-title">🖥️ Affichage</div>
+      <div class="card">
+        <h2>Affichage TV</h2>
+        <p class="hint">Agrandit les noms de chaînes, les libellés d'onglets et les cibles du curseur pour une lecture à plusieurs mètres, sur un téléviseur ou un boîtier. Sans effet sur la mise en page ni sur le lecteur vidéo. À activer soi-même : rien ne permet de reconnaître un téléviseur de façon fiable depuis l'app (un boîtier Android TV se présente comme un téléphone).</p>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optModeTv" /> Grands caractères (mode TV)</label>
+      </div>
+
       <div class="cat-title" id="cat-lecture" style="display:none">▶️ Lecture</div>
       <div class="card" id="card-lecture" style="display:none">
         <h2>Lecteur vidéo natif</h2>
@@ -446,7 +453,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.14';
+    window.APP_VERSION = '2.15';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
   <!-- hls.js et mpegts.js (835 Ko à eux deux) ne sont volontairement PAS

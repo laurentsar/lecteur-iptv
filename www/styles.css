@@ -257,6 +257,98 @@ button.ghost { background: var(--card2); color: var(--text); }
 .film-badge-age { background: var(--bad); border-color: var(--bad); color: #fff; }
 .film-plot { color: var(--text); font-size: 13.5px; line-height: 1.5; margin: 0; }
 
+/* ---------- accueil : reprise, favoris, en ce moment ---------- */
+.accueil-tete { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.accueil-tete .cat-title { margin-bottom: 0; }
+.lien-action {
+  background: none; border: none; color: var(--accent); font-family: inherit;
+  font-size: 12.5px; font-weight: 700; cursor: pointer; padding: 4px 2px; flex: none;
+}
+/* Rangée qui défile horizontalement : garde l'accueil court quand il y a
+   beaucoup de reprises ou de favoris, au lieu d'empiler des écrans de
+   cartes. À la télécommande, le focus fait défiler la rangée tout seul. */
+.rangee-h {
+  display: flex; gap: 10px; overflow-x: auto; margin-top: 8px; padding-bottom: 4px;
+  scrollbar-width: none; scroll-snap-type: x proximity;
+}
+.rangee-h::-webkit-scrollbar { display: none; }
+.rangee-h > .carte { flex: 0 0 150px; scroll-snap-align: start; }
+.carte-reprise .carte-thumb { font-size: 26px; }
+
+.now-liste { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.now-ligne {
+  display: flex; align-items: center; gap: 10px; padding: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+}
+.now-ligne:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.now-ligne img { width: 44px; height: 30px; object-fit: contain; flex: none; }
+.now-txt { flex: 1; min-width: 0; }
+.now-chaine { font-size: 12px; color: var(--muted); font-weight: 700; }
+.now-prog { font-size: 14px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-bar { height: 3px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.now-bar-fill { height: 100%; background: var(--accent); }
+
+/* ---------- champ de recherche : bouton d'effacement ---------- */
+/* Sur une télé, effacer une recherche caractère par caractère à la
+   télécommande est le geste le plus pénible de l'app — et la croix native de
+   <input type="search"> n'existe pas dans la WebView Android. */
+.champ-rech { position: relative; display: flex; }
+.champ-rech input { flex: 1; padding-right: 38px; width: 100%; }
+.rech-clear {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  background: var(--card); border: 1px solid var(--line); color: var(--muted);
+  width: 28px; height: 28px; border-radius: 8px; cursor: pointer; font-size: 14px;
+  line-height: 1; display: none; align-items: center; justify-content: center; padding: 0;
+}
+.rech-clear.on { display: flex; }
+.rech-clear:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Repère de fin de liste : invisible, sert seulement à détecter qu'on arrive
+   en bas pour charger la suite (voir autoCharger dans app.js). */
+.auto-sentinelle { height: 1px; margin: 0; }
+
+/* ---------- squelettes de chargement ---------- */
+/* Un texte « Chargement… » ne dit pas ce qui arrive ni combien de temps ça
+   prend ; des cartes grisées donnent la forme de ce qui va s'afficher et
+   rendent l'attente moins longue — utile surtout sur un compte Xtream, où
+   la liste des chaînes met plusieurs secondes à venir. */
+.squelette { pointer-events: none; }
+.squelette .sq-thumb, .squelette .sq-l1, .squelette .sq-l2 {
+  background: linear-gradient(90deg, var(--card2) 25%, #1c3047 37%, var(--card2) 63%);
+  background-size: 400% 100%; animation: sq 1.2s ease-in-out infinite;
+}
+.squelette .sq-l1, .squelette .sq-l2 { height: 10px; border-radius: 4px; }
+.squelette .sq-l1 { width: 85%; }
+.squelette .sq-l2 { width: 55%; margin-top: 8px; }
+@keyframes sq { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) { .squelette .sq-thumb, .squelette .sq-l1, .squelette .sq-l2 { animation: none; } }
+
+/* ---------- mode TV (grands caractères) ---------- */
+/* Une interface de téléphone lue à trois mètres : les noms de chaînes en
+   13 px et les libellés d'onglets en 10,5 px deviennent illisibles. Ce mode
+   agrandit ce qui se lit de loin, et espace les cibles du curseur D-pad,
+   sans changer la mise en page. Réglage manuel : aucune détection fiable de
+   « je suis sur une télé » n'existe côté WebView. */
+body.tv { font-size: 17px; }
+body.tv .carte-nom { font-size: 16px; -webkit-line-clamp: 2; }
+body.tv .carte-groupe { font-size: 13px; }
+body.tv .carte-epg { font-size: 13px; }
+body.tv .tab-lb { font-size: 13px; }
+body.tv .tab-ic { font-size: 22px; }
+body.tv .hint { font-size: 14.5px; }
+body.tv .chip, body.tv .view-btn { font-size: 14.5px; padding: 9px 16px; }
+body.tv .cat-title { font-size: 14px; }
+body.tv .now-prog { font-size: 16px; }
+body.tv .now-chaine { font-size: 13.5px; }
+body.tv .grid-cartes:not(.liste):not(.bouquets) { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+body.tv .rangee-h > .carte { flex: 0 0 200px; }
+body.tv .grid-cartes.liste .carte-thumb { width: 130px; }
+body.tv .carte:focus, body.tv .carte-lock:focus,
+body.tv .guide-chan:focus, body.tv .guide-prog:focus, body.tv .now-ligne:focus {
+  outline-width: 3px; outline-offset: 3px;
+}
+body.tv .version-item, body.tv .episode-row { font-size: 16px; padding: 14px; }
+
 /* ---------- accueil ---------- */
 .projets-home { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .projet-home {

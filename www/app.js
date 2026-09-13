@@ -24,7 +24,9 @@
     directView: 'bouquets',   // 'liste' | 'bouquets'
     guideDayOffset: 0,
     unlockedAdult: {}, // catégories « adulte » déverrouillées cette session (code PIN) — remis à zéro à chaque lancement de l'app
-    zapList: [], // chaînes en direct actuellement listées (Direct + Guide) — pour le swipe/télécommande de zapping dans le lecteur
+    zapSource: [], // chaînes en direct actuellement listées (Direct + Guide), telles quelles
+    zapList: null, // version prête pour le zapping du lecteur, construite à la demande (voir zapList())
+    groupesM3u: {}, // groupes d'une playlist M3U par type, triés une fois (voir renderKind)
     searchCache: {}, // pools chargés pour la recherche universelle (Accueil), par kindKey — voir searchPool()
     xtreamAllDirectCache: null, // Promise mémorisée du fetch « toutes les chaînes » (Xtream), voir ensureAllDirectItems()
     bouquetsAllCountries: false // vue Bouquets : false = seulement les bouquets français par défaut (voir renderBouquetTiles)
@@ -33,10 +35,21 @@
   // Liste consultée par player.js pour zapper à la chaîne suivante/précédente
   // (swipe, télécommande virtuelle, numéro de chaîne) : mise à jour à chaque
   // rendu d'une liste de chaînes en direct, dans l'ordre affiché.
+  // Construite à la DEMANDE : elle n'est lue que par le lecteur (zapping), et
+  // la fabriquer à chaque rendu allouait dix mille objets pour une liste que
+  // l'on ne consulte qu'en ouvrant une chaîne — filtrage et copie compris.
+  // On garde ici la source, et la liste n'est calculée qu'au premier accès.
   function setZapList(items) {
-    state.zapList = items
-      .filter(function (it) { return it.url && !looksLikeSeparator(it.name); })
-      .map(function (it) { return { url: it.url, name: it.name, epgKey: it.epgKey || null, logo: it.logo || null, chno: it.chno || '' }; });
+    state.zapSource = items;
+    state.zapList = null;
+  }
+  function zapList() {
+    if (!state.zapList) {
+      state.zapList = (state.zapSource || [])
+        .filter(function (it) { return it.url && !looksLikeSeparator(it.name); })
+        .map(function (it) { return { url: it.url, name: it.name, epgKey: it.epgKey || null, logo: it.logo || null, chno: it.chno || '' }; });
+    }
+    return state.zapList;
   }
   // Chaînes favorites (direct uniquement), pour la section « Favoris » de la
   // télécommande virtuelle du lecteur — toujours disponible via Store, même
@@ -58,12 +71,12 @@
   };
 
   window.AppZap = {
-    list: function () { return state.zapList; },
+    list: zapList,
     favoris: zapFavoris,
     epgNow: function (epgKey, name) { return (epgKey || name) ? Epg.nowNext(state.epgMap, epgKey, name) : null; },
     byNumber: function (num) {
       num = String(num).replace(/^0+(?=\d)/, '');
-      return state.zapList.filter(function (it) { return it.chno; })
+      return zapList().filter(function (it) { return it.chno; })
         .find(function (it) { return String(it.chno).replace(/^0+(?=\d)/, '') === num; }) || null;
     }
   };
@@ -356,6 +369,8 @@
     state.searchCache = {};
     state.xtreamAllDirectCache = null;
     state.bouquetsAllCountries = false;
+    state.groupesM3u = {};
+    resetNameCaches();
     updateHeader();
   }
 
@@ -414,6 +429,7 @@
   function ensureM3uLoaded(force) {
     var pl = state.playlist;
     if (!pl || pl.type !== 'm3u') return Promise.resolve(null);
+    if (force) { state.groupesM3u = {}; resetNameCaches(); }
     if (state.m3uData && !force) return Promise.resolve(state.m3uData);
     var got = force ? Promise.resolve(null) : Store.cacheGet(pl.id);
     return got.then(function (cached) {
@@ -606,12 +622,36 @@
     if (!input) return;
     var timer = null;
     var dernier = input.value;
+    var croix = ajouterBoutonEffacer(input, function () { dernier = ''; fn(); });
     input.addEventListener('input', function () {
+      if (croix) croix.classList.toggle('on', !!input.value);
       if (input.value === dernier) return;
       dernier = input.value;
       clearTimeout(timer);
       timer = setTimeout(fn, SEARCH_DEBOUNCE_MS);
     });
+  }
+
+  // Croix d'effacement : indispensable à la télécommande, où vider un champ
+  // revient sinon à appuyer autant de fois qu'il y a de caractères. La
+  // WebView Android n'affiche pas la croix native de <input type="search">.
+  function ajouterBoutonEffacer(input, apres) {
+    if (!input || !input.parentNode) return null;
+    var wrap = el('div', 'champ-rech');
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    var b = el('button', 'rech-clear', '✕');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Effacer la recherche');
+    if (input.value) b.classList.add('on');
+    b.addEventListener('click', function () {
+      input.value = '';
+      b.classList.remove('on');
+      input.focus();
+      apres();
+    });
+    wrap.appendChild(b);
+    return b;
   }
 
   function matchesSearch(item, q) {
@@ -880,8 +920,28 @@
   // accents/casse retirés, tout caractère non alphanumérique supprimé — un
   // simple test de sous-chaîne ne peut alors plus être mis en échec par la
   // ponctuation ou l'espacement, quels qu'ils soient.
+  // Ces deux fonctions sont appelées une fois PAR ENTRÉE à chaque rendu d'une
+  // grille — donc jusqu'à dix mille fois par affichage, et de nouveau à chaque
+  // recherche. Or elles sont coûteuses : normalizeChanName fait une
+  // normalisation Unicode NFD complète, et channelFamilyKey enchaîne cinq
+  // expressions régulières. Les noms, eux, ne changent pas tant qu'on reste
+  // sur la même playlist : on mémorise le résultat par nom (vidé en changeant
+  // de playlist, voir resetNameCaches).
+  var hiddenCache = Object.create(null);
+  var familyCache = Object.create(null);
+  function resetNameCaches() {
+    hiddenCache = Object.create(null);
+    familyCache = Object.create(null);
+  }
+
   function isHiddenChannel(name) {
-    return Epg.normalizeChanName(name).indexOf('welcomeultimate') !== -1;
+    var k = name || '';
+    var v = hiddenCache[k];
+    if (v === undefined) {
+      v = Epg.normalizeChanName(k).indexOf('welcomeultimate') !== -1;
+      hiddenCache[k] = v;
+    }
+    return v;
   }
 
   // Beaucoup de playlists (surtout M3U) listent la même chaîne ou le même
@@ -894,6 +954,8 @@
   // liste pleine de doublons.
   var CHANNEL_QUALITY_TAGS = /\b(4k|uhd|fhd|full ?hd|hd|sd|hevc|h ?265|h ?264|vostfr|vf|vo|multi)\b/gi;
   function channelFamilyKey(name) {
+    var memo = familyCache[name || ''];
+    if (memo !== undefined) return memo;
     var key = String(name || '')
       .toLowerCase()
       .replace(/\([^)]*\)/g, ' ')
@@ -902,7 +964,9 @@
       .replace(/[^a-z0-9+]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    return key || String(name || '').toLowerCase().trim();
+    key = key || String(name || '').toLowerCase().trim();
+    familyCache[name || ''] = key;
+    return key;
   }
 
   // Exclut les entrées radio (catégorie détectée par nom, voir kind:'radio'
@@ -1075,6 +1139,24 @@
   // par renderKind — comparer les références ne dirait rien). Longueur plus
   // trois clés échantillonnées : assez pour distinguer deux filtres
   // différents, et de coût constant même sur un bouquet de 10 000 chaînes.
+  // Remplace le texte « Chargement… » : même forme que les cartes à venir,
+  // donc la page ne saute pas quand les vraies arrivent.
+  function afficherSquelettes(container, combien) {
+    container.innerHTML = '';
+    container._listeSig = null;
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < (combien || 8); i++) {
+      var c = el('div', 'carte squelette');
+      c.appendChild(el('div', 'carte-thumb sq-thumb'));
+      var corps = el('div', 'carte-corps');
+      corps.appendChild(el('div', 'sq-l1'));
+      corps.appendChild(el('div', 'sq-l2'));
+      c.appendChild(corps);
+      frag.appendChild(c);
+    }
+    container.appendChild(frag);
+  }
+
   function signatureListe(items) {
     function cle(i) { var it = items[i]; return it ? (it.key || it.name || '') : ''; }
     return items.length + '·' + cle(0) + '·' + cle(items.length >> 1) + '·' + cle(items.length - 1);
@@ -1149,7 +1231,14 @@
       var m3uKind = kindKey === 'direct' ? 'live' : kindKey === 'films' ? 'vod' : 'series';
       ensureM3uLoaded().then(function (data) {
         var pool = data.items.filter(function (it) { return it.kind === m3uKind; });
-        var groups = uniqueSorted(pool.map(function (it) { return it.groupTitle; }));
+        // Le tri des groupes passe par localeCompare (coûteux) sur des
+        // centaines de catégories : refait à chaque rendu, donc à chaque
+        // frappe de recherche, alors que la playlist n'a pas bougé.
+        var groups = state.groupesM3u[m3uKind];
+        if (!groups) {
+          groups = uniqueSorted(pool.map(function (it) { return it.groupTitle; }));
+          state.groupesM3u[m3uKind] = groups;
+        }
         var onPickCat = function (g) { state.activeCategory[kindKey] = g; state.shown[kindKey] = PAGE_SIZE; renderKind(kindKey); };
         if (kindKey === 'direct') renderCategorySelect(chips, groups.map(function (g) { return { id: g, label: g }; }), kindKey, onPickCat);
         else renderChips(chips, groups.map(function (g) { return { id: g, label: g }; }), kindKey, onPickCat);
@@ -1192,7 +1281,7 @@
       var load = state.xtreamItems[kindKey] ? Promise.resolve(state.xtreamItems[kindKey])
         : (kindKey === 'direct' && !catId) ? ensureAllDirectItems()
         : ensureXtreamItems(kindKey, catId);
-      container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Chargement…'));
+      afficherSquelettes(container, state.shown[kindKey] > 12 ? 12 : 8);
       load.then(function (items) {
         state.xtreamItems[kindKey] = items;
         var q = search.value.trim().toLowerCase();
@@ -1321,7 +1410,7 @@
     var pl = state.playlist;
     var container = $id('listeRadio'), moreBtn = $id('plusRadio'), search = $id('rechRadio');
     if (!pl) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Réglages.')); moreBtn.style.display = 'none'; return; }
-    container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Chargement…'));
+    afficherSquelettes(container, 6);
     moreBtn.style.display = 'none';
     var q = search.value.trim().toLowerCase();
 
@@ -1359,6 +1448,35 @@
   onSearchInput('rechDirect', function () { state.shown.direct = PAGE_SIZE; renderKind('direct'); });
   onSearchInput('rechFilms', function () { state.shown.films = PAGE_SIZE; renderKind('films'); });
   onSearchInput('rechSeries', function () { state.shown.series = PAGE_SIZE; renderKind('series'); });
+  // Arriver en bas d'une grille charge la suite tout seul, comme le Guide le
+  // fait déjà : le bouton « Charger plus » est sous la liste, donc sous la
+  // barre d'onglets fixe, et devoir le viser pour chaque page de soixante
+  // cartes casse le parcours — à la télécommande comme au doigt. Le bouton
+  // reste en place, il sert de repli et de repère.
+  function autoCharger(boutonId) {
+    var btn = $id(boutonId);
+    if (!btn || !window.IntersectionObserver) return;
+    var enCours = false;
+    // Placée AVANT la rangée du bouton, pas dedans : dans un conteneur flex,
+    // un élément vide n'a aucune surface et ne croise donc jamais la vue.
+    var rangee = btn.parentNode;
+    var sentinelle = el('div', 'auto-sentinelle');
+    rangee.parentNode.insertBefore(sentinelle, rangee);
+    new IntersectionObserver(function (entries) {
+      if (!entries[0].isIntersecting || enCours) return;
+      if (btn.style.display === 'none') return;   // plus rien à charger
+      // Vue Bouquets : le même bouton sert à révéler les bouquets étrangers,
+      // volontairement masqués au départ. Les faire apparaître d'eux-mêmes en
+      // arrivant en bas viderait ce filtre de son sens.
+      if (boutonId === 'plusDirect' && state.directView === 'bouquets') return;
+      enCours = true;
+      btn.click();
+      // Le rendu qui suit peut être asynchrone (requête Xtream) : on rouvre
+      // la porte un peu après, sinon un seul passage enchaînerait dix pages.
+      setTimeout(function () { enCours = false; }, 600);
+    }, { rootMargin: '300px' }).observe(sentinelle);
+  }
+
   $id('plusDirect').addEventListener('click', function () {
     if (state.directView === 'bouquets') state.bouquetsAllCountries = true;
     else state.shown.direct += PAGE_SIZE;
@@ -1443,10 +1561,15 @@
       out.appendChild(el('div', 'hint', 'Recherche impossible : ' + err.message));
     });
   }
-  $id('rechUniverselle').addEventListener('input', function () {
-    clearTimeout(universalSearchTimer);
-    universalSearchTimer = setTimeout(renderUniversalSearch, 250);
-  });
+  (function () {
+    var input = $id('rechUniverselle');
+    var croix = ajouterBoutonEffacer(input, renderUniversalSearch);
+    input.addEventListener('input', function () {
+      if (croix) croix.classList.toggle('on', !!input.value);
+      clearTimeout(universalSearchTimer);
+      universalSearchTimer = setTimeout(renderUniversalSearch, 250);
+    });
+  })();
 
   // ---------- Guide TV (agenda heure par heure) ----------
   // Toutes les chaînes « en direct » de la playlist active, indépendamment
@@ -2058,6 +2181,23 @@
   }
 
   // ---------- accueil ----------
+  // Accueil : jusqu'ici un sélecteur de playlist, trois boutons qui doublaient
+  // la barre d'onglets, et un simple compteur de favoris même pas cliquable —
+  // donc un écran par lequel on ne faisait que passer. Il montre maintenant ce
+  // qu'on vient y chercher : ce qu'on a commencé, ce qu'on a mis de côté, et
+  // ce qui passe en ce moment. Aucune donnée nouvelle n'est téléchargée pour
+  // ça : reprise de lecture, favoris et EPG sont déjà là.
+  function sectionAccueil(container, titre, actionLabel, onAction) {
+    var tete = el('div', 'accueil-tete');
+    tete.appendChild(el('div', 'cat-title', titre));
+    if (actionLabel) {
+      var a = el('button', 'lien-action', actionLabel);
+      a.addEventListener('click', onAction);
+      tete.appendChild(a);
+    }
+    container.appendChild(tete);
+  }
+
   function renderAccueil() {
     var container = $id('accueil');
     container.innerHTML = '';
@@ -2072,9 +2212,11 @@
       container.appendChild(c);
       return;
     }
-    var card1 = el('div', 'card');
-    card1.appendChild(el('h2', null, 'Playlist active'));
+
+    // Playlist active : un sélecteur seulement s'il y a un choix à faire.
     if (playlists.length > 1) {
+      var card1 = el('div', 'card');
+      card1.appendChild(el('h2', null, 'Playlist active'));
       var sel = document.createElement('select');
       sel.className = 'wide';
       playlists.forEach(function (p) {
@@ -2085,31 +2227,115 @@
       });
       sel.addEventListener('change', function () { setActivePlaylist(sel.value); renderAccueil(); });
       card1.appendChild(sel);
-    } else {
-      card1.appendChild(el('p', 'hint', state.playlist ? state.playlist.nom : ''));
+      container.appendChild(card1);
     }
-    container.appendChild(card1);
 
-    var card2 = el('div', 'card');
-    card2.appendChild(el('h2', null, 'Accès rapide'));
-    var row = el('div', 'projets-home');
-    [['direct', '📺', 'En direct'], ['films', '🎬', 'Films'], ['series', '🎞️', 'Séries']].forEach(function (t) {
-      var b = el('button', 'projet-home');
-      b.appendChild(el('span', 'ph-ico', t[1]));
-      var txt = el('span', 'ph-txt'); txt.appendChild(el('span', 'ph-nom', t[2]));
-      b.appendChild(txt);
-      b.appendChild(el('span', 'ph-fleche', '›'));
-      b.addEventListener('click', function () { goTab(t[0]); });
-      row.appendChild(b);
+    // ---- Reprendre : films et épisodes laissés en cours de route. La
+    // position était déjà mémorisée (Store.setProgress depuis le lecteur),
+    // mais elle ne se voyait que sous forme de barre sur une vignette, à
+    // condition de retrouver le film soi-même dans le catalogue.
+    var enCours = Store.getEnCours(12);
+    if (enCours.length) {
+      sectionAccueil(container, '▶️ Reprendre');
+      var grilleReprise = el('div', 'rangee-h');
+      enCours.forEach(function (e) {
+        grilleReprise.appendChild(carteReprise(e));
+      });
+      container.appendChild(grilleReprise);
+    }
+
+    // ---- Favoris : de vraies cartes, ouvrables d'un geste.
+    var favs = Store.getFavoris().filter(function (f) { return !isHiddenChannel(f.name); });
+    sectionAccueil(container, '⭐ Favoris', favs.length > 8 ? 'Tout voir ›' : null, function () { goTab('maliste'); });
+    if (!favs.length) {
+      container.appendChild(el('div', 'hint', 'Aucun favori — touche ☆ sur une carte, ou appui long à la télécommande.'));
+    } else {
+      var grilleFav = el('div', 'rangee-h');
+      favs.slice(0, 8).forEach(function (f) {
+        var isFilm = f.kind === 'films' || f.kind === 'vod';
+        grilleFav.appendChild(card(f, isFilm ? { onOpen: openFilm } : {}));
+      });
+      container.appendChild(grilleFav);
+    }
+
+    // ---- En ce moment : l'émission en cours sur les chaînes favorites.
+    // N'apparaît que si le guide est chargé ET qu'il a quelque chose à dire.
+    if (state.epgMap) {
+      var chainesFav = favs.filter(function (f) { return f.kind === 'direct' || f.kind === 'live'; });
+      var maintenant = [];
+      chainesFav.forEach(function (f) {
+        if (maintenant.length >= 6) return;
+        var info = Epg.nowNext(state.epgMap, f.epgKey || null, f.name);
+        if (info && info.now) maintenant.push({ fav: f, prog: info.now });
+      });
+      if (maintenant.length) {
+        sectionAccueil(container, '🔴 En ce moment', 'Guide ›', function () { goTab('guide'); });
+        var listeNow = el('div', 'now-liste');
+        maintenant.forEach(function (m) {
+          listeNow.appendChild(ligneMaintenant(m.fav, m.prog));
+        });
+        container.appendChild(listeNow);
+      }
+    }
+  }
+
+  // Carte « Reprendre » : vignette sobre (le catalogue n'est pas rechargé pour
+  // retrouver l'affiche), titre mémorisé au moment de la lecture, et le temps
+  // qu'il reste — l'information qu'on cherche vraiment avant de reprendre.
+  function carteReprise(e) {
+    var restant = Math.max(0, Math.round((e.duration - e.position) / 60));
+    var ratio = Math.min(1, Math.max(0, e.position / e.duration));
+    var c = el('div', 'carte carte-reprise');
+    var thumb = el('div', 'carte-thumb vide');
+    thumb.textContent = '▶️';
+    var bar = el('div', 'carte-progress');
+    var fill = el('div', 'carte-progress-fill');
+    fill.style.width = Math.round(ratio * 100) + '%';
+    bar.appendChild(fill);
+    thumb.appendChild(bar);
+    c.appendChild(thumb);
+    var corps = el('div', 'carte-corps');
+    corps.appendChild(el('div', 'carte-nom', e.title || 'Reprise'));
+    corps.appendChild(el('div', 'carte-groupe', restant + ' min restantes'));
+    c.appendChild(corps);
+    c.addEventListener('click', function () { Player.open(e.url, e.title || '', { live: false }); });
+    // Oublier une reprise qui ne sert plus, sans devoir finir le film.
+    setLongPress(c, function () {
+      askConfirm('Retirer « ' + (e.title || 'cette lecture') + ' » de la reprise ?').then(function (ok) {
+        if (!ok) return;
+        Store.clearProgress(e.url);
+        renderAccueil();
+      });
     });
-    card2.appendChild(row);
-    container.appendChild(card2);
+    return makeFocusable(c);
+  }
 
-    var favCount = Store.getFavoris().length;
-    var card3 = el('div', 'card');
-    card3.appendChild(el('h2', null, 'Favoris'));
-    card3.appendChild(el('p', 'hint', favCount ? favCount + ' chaîne(s)/film(s) en favoris.' : 'Aucun favori pour le moment.'));
-    container.appendChild(card3);
+  function ligneMaintenant(fav, prog) {
+    var ligne = el('div', 'now-ligne');
+    if (fav.logo) {
+      var img = document.createElement('img');
+      img.loading = 'lazy'; img.src = fav.logo; img.alt = '';
+      img.onerror = function () { img.remove(); };
+      ligne.appendChild(img);
+    }
+    var txt = el('div', 'now-txt');
+    txt.appendChild(el('div', 'now-chaine', fav.name));
+    txt.appendChild(el('div', 'now-prog', prog.titre));
+    ligne.appendChild(txt);
+    // Reste de l'émission, en barre : dit d'un coup d'oeil s'il est encore
+    // temps de s'y mettre.
+    if (prog.start != null && prog.stop != null && prog.stop > prog.start) {
+      var avance = (Date.now() - prog.start) / (prog.stop - prog.start);
+      var b = el('div', 'now-bar');
+      var f = el('div', 'now-bar-fill');
+      f.style.width = Math.round(Math.min(1, Math.max(0, avance)) * 100) + '%';
+      b.appendChild(f);
+      txt.appendChild(b);
+    }
+    ligne.addEventListener('click', function () {
+      Player.open(fav.url, fav.name, { live: true, epgKey: fav.epgKey, logo: fav.logo });
+    });
+    return makeFocusable(ligne);
   }
 
   // ---------- playlists : liste + formulaire ----------
@@ -2392,9 +2618,30 @@
     return 0;
   }
 
+  // ---------- Affichage TV (grands caractères) ----------
+  // Une interface pensée pour un téléphone tenu à 30 cm devient illisible sur
+  // une télé regardée à trois mètres. Réglage manuel et non détection
+  // automatique : rien ne permet d'identifier de façon fiable un téléviseur
+  // depuis la WebView (l'agent utilisateur d'un boîtier Android TV est celui
+  // d'un téléphone). Voir body.tv dans styles.css.
+  function setupModeTv() {
+    var box = $id('optModeTv');
+    if (!box) return;
+    function appliquer(actif) { document.body.classList.toggle('tv', !!actif); }
+    box.checked = Store.getModeTv();
+    appliquer(box.checked);
+    box.addEventListener('change', function () {
+      Store.setModeTv(box.checked);
+      appliquer(box.checked);
+      toast(box.checked ? '📺 Affichage TV activé' : 'Affichage TV désactivé');
+    });
+  }
+
   function init() {
     startSplash();
     setupCheckUpdate();
+    setupModeTv();
+    ['plusDirect', 'plusFilms', 'plusSeries', 'plusRadio'].forEach(autoCharger);
     if (window.HaSync) HaSync.start();
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');
     $id('verText').textContent = 'v' + (window.APP_VERSION || '');
