@@ -13,6 +13,21 @@
     return attrs;
   }
 
+  // La virgule qui sépare les attributs du titre est la première trouvée
+  // HORS guillemets : un attribut comme tvg-name="Nom, Suite" peut lui-même
+  // contenir une virgule (constaté en usage réel : "Kaamelott : Deuxième
+  // Volet, partie 1"), donc line.indexOf(',') seul coupait en plein milieu
+  // de tvg-name et affichait le reste des attributs comme titre.
+  function titleAfterComma(line) {
+    var inQuotes = false;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line.charAt(i);
+      if (ch === '"') inQuotes = !inQuotes;
+      else if (ch === ',' && !inQuotes) return line.slice(i + 1).trim();
+    }
+    return '';
+  }
+
   // Détecte "Nom S01E02", "Nom 1x02", "Nom - Saison 1 Episode 2".
   var RE_SERIES = /^(.*?)[\s._-]+s(?:eason)?\s*(\d{1,2})\s*[ex.]?\s*(?:e(?:pisode)?)?\s*(\d{1,3})\b/i;
   var RE_SERIES_ALT = /^(.*?)[\s._-]+(\d{1,2})x(\d{1,3})\b/i;
@@ -63,7 +78,7 @@
       if (!line) continue;
       if (line.indexOf('#EXTINF') === 0) {
         var attrs = parseAttrs(line);
-        var afterComma = line.slice(line.indexOf(',') + 1).trim();
+        var afterComma = titleAfterComma(line);
         pending = {
           tvgId: attrs['tvg-id'] || '',
           tvgLogo: attrs['tvg-logo'] || '',
