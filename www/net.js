@@ -88,9 +88,14 @@
   // statut HTTP. Une tentative de repli en http:// suffit à débloquer ces
   // cas ; limité aux erreurs qui ressemblent explicitement à un échec
   // TLS/SSL pour ne pas masquer une vraie panne réseau derrière un second
-  // essai inutile.
+  // essai inutile. "handshake" est inclus séparément de "tls"/"ssl" : sur
+  // Android, ce même scénario (poignée de main TLS tentée contre un
+  // serveur qui ne parle pas TLS) remonte parfois un message du genre
+  // "Handshake failed" (SSLHandshakeException) qui ne contient ni "tls" ni
+  // "ssl" en tant que mot isolé — constaté en usage réel, la playlist
+  // restait bloquée alors que ce repli aurait dû s'appliquer.
   function isTlsFailure(err) {
-    return /\btls\b|\bssl\b/i.test(String((err && err.message) || err || ''));
+    return /\btls\b|\bssl\b|\bhandshake\b/i.test(String((err && err.message) || err || ''));
   }
 
   function withHttpsDowngrade(url, attempt) {
