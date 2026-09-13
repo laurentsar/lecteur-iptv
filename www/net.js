@@ -25,15 +25,24 @@
   // silencieux. Au-delà de ce délai, on abandonne et on remonte une erreur
   // exploitable plutôt que de rester bloqué pour toujours.
   var REQUEST_TIMEOUT_MS = 20000;
+  // Le même délai ne peut pas servir aux deux usages : 20 s conviennent à une
+  // réponse d'API ou à une playlist (quelques centaines de kilooctets), mais
+  // pas au guide TV, dont le XMLTV pèse couramment des dizaines de mégaoctets
+  // — sur un boîtier TV en Wi-Fi moyen, un téléchargement qui progresse
+  // normalement était tué en plein milieu et remonté comme « le serveur ne
+  // répond pas ». Ni CapacitorHttp ni fetch() sur le chemin natif ne donnent
+  // d'événement de progression exploitable ici : on ne peut pas compter les
+  // octets, seulement laisser une marge honnête au transfert.
+  var BYTES_TIMEOUT_MS = 120000;
 
-  function withTimeout(promise) {
+  function withTimeout(promise, delai) {
     return new Promise(function (resolve, reject) {
       var settled = false;
       var timer = setTimeout(function () {
         if (settled) return;
         settled = true;
         reject(new Error('le serveur ne répond pas (délai dépassé)'));
-      }, REQUEST_TIMEOUT_MS);
+      }, delai || REQUEST_TIMEOUT_MS);
       promise.then(function (v) {
         if (settled) return;
         settled = true;
@@ -149,19 +158,19 @@
           var bytes = new Uint8Array(bin.length);
           for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
           return bytes.buffer;
-        })),
+        }), BYTES_TIMEOUT_MS),
         function () {
           return withTimeout(fetch(url).then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.arrayBuffer();
-          }));
+          }), BYTES_TIMEOUT_MS);
         }
       );
     }
     return withTimeout(fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.arrayBuffer();
-    }));
+    }), BYTES_TIMEOUT_MS);
   }
 
   function fetchJson(url) {

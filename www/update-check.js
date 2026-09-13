@@ -19,6 +19,12 @@
   var KEY_POLL = 'updPoll:' + REPO;
   var KEY_DISMISS = 'updDismiss:' + REPO;
 
+  // Exposé pour une vérification déclenchée à la main depuis l'app (bouton
+  // « Vérifier maintenant » des réglages) : la temporisation de 6 h ci-dessous
+  // fait sinon sortir ce script sans rien définir, et la bannière ne pourrait
+  // pas être affichée à la demande. Déclaré AVANT ce retour anticipé.
+  window.showUpdateBanner = showBanner;
+
   function ls(get, k, v) {
     try { return get ? localStorage.getItem(k) : localStorage.setItem(k, v); }
     catch (e) { return null; }

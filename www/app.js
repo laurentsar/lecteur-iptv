@@ -474,7 +474,11 @@
     // sur une télé ou un boîtier, téléchargement et analyse demandent bien
     // plus que les quelques secondes d'une requête ordinaire — 15 s
     // déclenchaient un faux « délai dépassé » alors que le guide arrivait.
-    var EPG_TIMEOUT_MS = 90000;
+    // Doit rester PLUS LONG que le délai de la couche réseau pour le binaire
+    // (BYTES_TIMEOUT_MS dans net.js) : sinon c'est toujours ce filet-ci qui
+    // se déclenche, et son message générique masque celui, plus précis, de
+    // la requête elle-même.
+    var EPG_TIMEOUT_MS = 150000;
     var timedOut = false;
     var timeoutId = setTimeout(function () {
       timedOut = true;
@@ -483,7 +487,18 @@
       state.epgError = 'Chargement du guide TV impossible : le serveur ne répond pas (délai dépassé).';
       if (isTabActive('guide')) renderGuide(false);
     }, EPG_TIMEOUT_MS);
-    Epg.fetchXmltv(url).then(function (map) {
+    // Guide déjà analysé et encore frais : on repart de la copie locale
+    // (IndexedDB) plutôt que de retélécharger et réanalyser des dizaines de
+    // mégaoctets de XMLTV à chaque lancement — voir Store.epgGet/epgSet. Ça
+    // rend aussi le Guide consultable quand la source EPG est momentanément
+    // injoignable.
+    Store.epgGet(url).then(function (cached) {
+      if (cached) return cached;
+      return Epg.fetchXmltv(url).then(function (map) {
+        Store.epgSet(url, map);   // écriture en tâche de fond, échec sans conséquence
+        return map;
+      });
+    }).then(function (map) {
       if (timedOut) return; // réponse arrivée après coup — l'échec par délai a déjà été traité
       clearTimeout(timeoutId);
       state.epgMap = map; state.epgLoading = false; state.epgFailedUrl = null;
@@ -579,19 +594,58 @@
   }
 
   // ---------- rendu générique d'une grille ----------
+  // Anti-rebond des champs de recherche : chaque frappe relançait un rendu
+  // complet (filtrage du pool entier, puis reconstruction de la grille), et
+  // ces rendus se cumulaient au rythme des frappes — très sensible au clavier
+  // virtuel d'une télé, où chaque lettre se saisit à la télécommande. On
+  // attend une courte pause de saisie, et on ne fait rien du tout si le texte
+  // n'a pas changé (répétition de touche, touches de navigation).
+  var SEARCH_DEBOUNCE_MS = 220;
+  function onSearchInput(inputId, fn) {
+    var input = $id(inputId);
+    if (!input) return;
+    var timer = null;
+    var dernier = input.value;
+    input.addEventListener('input', function () {
+      if (input.value === dernier) return;
+      dernier = input.value;
+      clearTimeout(timer);
+      timer = setTimeout(fn, SEARCH_DEBOUNCE_MS);
+    });
+  }
+
   function matchesSearch(item, q) {
     if (!q) return true;
     return (item.name || '').toLowerCase().indexOf(q) !== -1;
   }
 
+  // Les catégories ne bougent pas d'un rendu à l'autre (seule la sélection
+  // change), alors que renderKind() est rappelé à chaque frappe de recherche :
+  // on reconstruit les puces seulement quand la LISTE change vraiment, sinon
+  // on se contente de déplacer la surbrillance.
+  function signatureCats(cats, kindKey) {
+    return kindKey + '|' + (cats || []).map(function (c) { return c.id; }).join('~');
+  }
+
   function renderChips(container, cats, kindKey, onPick) {
+    var sig = signatureCats(cats, kindKey);
+    var actif = state.activeCategory[kindKey] || '';
+    if (container.dataset.catsSig === sig) {
+      Array.prototype.forEach.call(container.children, function (b) {
+        b.classList.toggle('active', (b.dataset.catId || '') === actif);
+      });
+      return;
+    }
     container.innerHTML = '';
+    container.dataset.catsSig = sig;
     if (!cats || !cats.length) return;
-    var all = el('button', 'chip' + (state.activeCategory[kindKey] === '' ? ' active' : ''), 'Toutes');
+    var all = el('button', 'chip' + (actif === '' ? ' active' : ''), 'Toutes');
+    all.dataset.catId = '';
     all.addEventListener('click', function () { onPick(''); });
     container.appendChild(all);
     cats.forEach(function (c) {
-      var b = el('button', 'chip' + (state.activeCategory[kindKey] === c.id ? ' active' : ''), c.label || c.id);
+      var b = el('button', 'chip' + (actif === c.id ? ' active' : ''), c.label || c.id);
+      b.dataset.catId = c.id;
       b.addEventListener('click', function () { onPick(c.id); });
       container.appendChild(b);
     });
@@ -603,15 +657,21 @@
   // #chipsDirect dans index.html, un <select> plutôt qu'un <div class="chips">).
   function renderCategorySelect(select, cats, kindKey, onPick) {
     select.style.display = '';
-    select.innerHTML = '';
-    var optAll = document.createElement('option');
-    optAll.value = ''; optAll.textContent = 'Tous les bouquets';
-    select.appendChild(optAll);
-    (cats || []).forEach(function (c) {
-      var o = document.createElement('option');
-      o.value = c.id; o.textContent = c.label || c.id;
-      select.appendChild(o);
-    });
+    var sig = signatureCats(cats, kindKey);
+    // Mêmes catégories : une playlist en compte parfois plusieurs centaines,
+    // inutile de recréer toutes les <option> à chaque frappe de recherche.
+    if (select.dataset.catsSig !== sig) {
+      select.innerHTML = '';
+      select.dataset.catsSig = sig;
+      var optAll = document.createElement('option');
+      optAll.value = ''; optAll.textContent = 'Tous les bouquets';
+      select.appendChild(optAll);
+      (cats || []).forEach(function (c) {
+        var o = document.createElement('option');
+        o.value = c.id; o.textContent = c.label || c.id;
+        select.appendChild(o);
+      });
+    }
     select.value = state.activeCategory[kindKey] || '';
     select.onchange = function () { onPick(select.value); };
   }
@@ -930,7 +990,14 @@
     var body = el('div', 'carte-corps');
     body.appendChild(el('div', 'carte-nom', item.name));
     if (item.group) body.appendChild(el('div', 'carte-groupe', item.group));
-    if (opts.epgBadge) body.appendChild(opts.epgBadge);
+    // Badge « émission en cours » : calculé ICI, donc uniquement pour les
+    // cartes réellement construites. Il l'était auparavant pour la liste
+    // filtrée ENTIÈRE (jusqu'à plusieurs milliers de chaînes) avant d'en
+    // afficher soixante, et refait à chaque frappe dans la recherche.
+    if (opts.epgBadge) {
+      var badge = opts.epgBadge(item);
+      if (badge) body.appendChild(badge);
+    }
     card.appendChild(body);
 
     if (item.url) {
@@ -1003,18 +1070,54 @@
     return el('div', 'carte-section', clean || name);
   }
 
+  // Signature d'une liste : sert à reconnaître, d'un rendu à l'autre, qu'on
+  // affiche bien la MÊME liste (les objets, eux, sont recréés à chaque fois
+  // par renderKind — comparer les références ne dirait rien). Longueur plus
+  // trois clés échantillonnées : assez pour distinguer deux filtres
+  // différents, et de coût constant même sur un bouquet de 10 000 chaînes.
+  function signatureListe(items) {
+    function cle(i) { var it = items[i]; return it ? (it.key || it.name || '') : ''; }
+    return items.length + '·' + cle(0) + '·' + cle(items.length >> 1) + '·' + cle(items.length - 1);
+  }
+
   function renderList(container, moreBtn, items, shownKey, opts) {
     var shown = state.shown[shownKey];
     if (shownKey === 'direct') setZapList(items);
-    container.innerHTML = '';
     if (!items.length) {
+      container.innerHTML = '';
+      container._listeSig = null;
       container.appendChild(el('div', 'hint', 'Aucun résultat.'));
       moreBtn.style.display = 'none';
       return;
     }
-    items.slice(0, shown).forEach(function (item) {
-      container.appendChild(item.url && looksLikeSeparator(item.name) ? sectionTitle(item.name) : card(item, opts));
+
+    // « Charger plus » ne reconstruisait pas que les nouvelles cartes : il
+    // vidait la grille et refabriquait aussi les 60, 120, 180... déjà
+    // affichées — images re-décodées, et focus de la télécommande renvoyé en
+    // haut de page à chaque fois. Quand c'est la même liste et qu'on ne fait
+    // que l'allonger, on n'ajoute donc que la tranche manquante.
+    var sig = signatureListe(items);
+    var deja = (container._listeSig === sig && container._nbCartes < shown) ? container._nbCartes : 0;
+    // Le conteneur a pu être vidé entre-temps par l'appelant (message
+    // « Chargement… » pendant une requête Xtream, par exemple) : la
+    // signature seule ne suffit pas, on vérifie que les cartes sont
+    // réellement encore là avant de se contenter d'ajouter la suite.
+    if (deja && container.children.length < deja) deja = 0;
+    if (deja) {
+      // Les cartes verrouillées (code PIN) sont ajoutées APRÈS les cartes par
+      // l'appelant : on les retire d'abord, il les remettra.
+      while (container.children.length > deja) container.removeChild(container.lastChild);
+    } else {
+      container.innerHTML = '';
+    }
+
+    var frag = document.createDocumentFragment();
+    items.slice(deja, shown).forEach(function (item) {
+      frag.appendChild(item.url && looksLikeSeparator(item.name) ? sectionTitle(item.name) : card(item, opts));
     });
+    container.appendChild(frag);
+    container._listeSig = sig;
+    container._nbCartes = Math.min(shown, items.length);
     moreBtn.style.display = items.length > shown ? '' : 'none';
   }
 
@@ -1032,7 +1135,13 @@
       kickEpg();
     }
 
-    if (!pl) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.')); moreBtn.style.display = 'none'; chips.innerHTML = ''; return; }
+    if (!pl) {
+      container.innerHTML = ''; container._listeSig = null;
+      container.appendChild(el('div', 'hint', 'Choisis ou ajoute une playlist dans l’onglet Playlists.'));
+      moreBtn.style.display = 'none';
+      chips.innerHTML = ''; chips.dataset.catsSig = '';
+      return;
+    }
 
     if (kindKey === 'direct' && state.directView === 'bouquets') { renderBouquets(); return; }
 
@@ -1058,20 +1167,14 @@
         } else {
           var items = pool.filter(function (it) { return (!cat || it.groupTitle === cat) && matchesSearch(it, q) && !isHiddenChannel(it.name); })
             .map(function (it) {
-              var withKey = Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle, logo: it.tvgLogo, chno: it.tvgChno || '' });
-              withKey._badge = epgBadge(withKey);
-              return withKey;
+              return Object.assign({}, it, { epgKey: it.tvgId || null, group: it.groupTitle, logo: it.tvgLogo, chno: it.tvgChno || '' });
             });
           var itemsLock = filterAdultLocked(items);
           items = itemsLock.visible;
           if (kindKey === 'direct' || kindKey === 'films') items = groupChannels(items);
-          renderList(container, moreBtn, items, kindKey, { onOpen: kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null });
-          // (le badge EPG est déjà calculé par item ; on l'injecte après coup —
-          // avant d'ajouter les cartes verrouillées, pour garder l'alignement
-          // d'index entre `items` et les enfants du conteneur)
-          Array.prototype.forEach.call(container.children, function (node, i) {
-            var corps = items[i] && items[i]._badge && node.querySelector('.carte-corps');
-            if (corps) corps.appendChild(items[i]._badge);
+          renderList(container, moreBtn, items, kindKey, {
+            onOpen: kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null,
+            epgBadge: epgBadge
           });
           appendLockedCards(container, itemsLock.locked, function () { renderKind(kindKey); });
         }
@@ -1094,19 +1197,14 @@
         state.xtreamItems[kindKey] = items;
         var q = search.value.trim().toLowerCase();
         var filtered = items.filter(function (it) { return matchesSearch(it, q) && !isHiddenChannel(it.name); });
-        if (kindKey === 'direct') {
-          filtered = excludeRadio(filtered).map(function (it) { var c = Object.assign({}, it); c._badge = epgBadge(c); return c; });
-        }
+        if (kindKey === 'direct') filtered = excludeRadio(filtered);
         var xtreamLock = filterAdultLocked(filtered);
         filtered = xtreamLock.visible;
         if (kindKey === 'direct' || kindKey === 'films') filtered = groupChannels(filtered);
-        renderList(container, moreBtn, filtered, kindKey, { onOpen: kindKey === 'series' ? openSerieXtream : kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null });
-        if (kindKey === 'direct') {
-          Array.prototype.forEach.call(container.children, function (node, i) {
-            var corps = filtered[i] && filtered[i]._badge && node.querySelector('.carte-corps');
-            if (corps) corps.appendChild(filtered[i]._badge);
-          });
-        }
+        renderList(container, moreBtn, filtered, kindKey, {
+          onOpen: kindKey === 'series' ? openSerieXtream : kindKey === 'films' ? openFilm : kindKey === 'direct' ? openChannelVersions : null,
+          epgBadge: kindKey === 'direct' ? epgBadge : null
+        });
         appendLockedCards(container, xtreamLock.locked, function () { renderKind(kindKey); });
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
     }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); moreBtn.style.display = 'none'; });
@@ -1138,6 +1236,7 @@
       if (fr.length) { hiddenOthers = filtered.length - fr.length; filtered = fr; }
     }
     container.innerHTML = '';
+    container._listeSig = null;   // vue Bouquets : la grille de renderList n'est plus en place
     if (!filtered.length) { container.appendChild(el('div', 'hint', 'Aucun résultat.')); moreBtn.style.display = 'none'; return; }
     filtered.forEach(function (g) {
       var item = { key: 'bouquet:' + g.id, kind: 'bouquet', name: g.label, logo: g.logo, icon: iconForBouquet(g.label),
@@ -1249,7 +1348,7 @@
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Connexion au serveur impossible : ' + err.message)); });
     }
   }
-  $id('rechRadio').addEventListener('input', function () { state.shown.radio = PAGE_SIZE; renderRadio(); });
+  onSearchInput('rechRadio', function () { state.shown.radio = PAGE_SIZE; renderRadio(); });
   $id('plusRadio').addEventListener('click', function () { state.shown.radio += PAGE_SIZE; renderRadio(); });
 
   function uniqueSorted(arr) {
@@ -1257,9 +1356,9 @@
     return Object.keys(set).sort(function (a, b) { return a.localeCompare(b); });
   }
 
-  $id('rechDirect').addEventListener('input', function () { state.shown.direct = PAGE_SIZE; renderKind('direct'); });
-  $id('rechFilms').addEventListener('input', function () { state.shown.films = PAGE_SIZE; renderKind('films'); });
-  $id('rechSeries').addEventListener('input', function () { state.shown.series = PAGE_SIZE; renderKind('series'); });
+  onSearchInput('rechDirect', function () { state.shown.direct = PAGE_SIZE; renderKind('direct'); });
+  onSearchInput('rechFilms', function () { state.shown.films = PAGE_SIZE; renderKind('films'); });
+  onSearchInput('rechSeries', function () { state.shown.series = PAGE_SIZE; renderKind('series'); });
   $id('plusDirect').addEventListener('click', function () {
     if (state.directView === 'bouquets') state.bouquetsAllCountries = true;
     else state.shown.direct += PAGE_SIZE;
@@ -1472,15 +1571,23 @@
       var focusAvant = document.activeElement && document.activeElement.dataset
         ? document.activeElement.dataset.guideRow : null;
       var list = all.filter(function (it) { return matchesSearch(it, q); });
+      // Programmes d'une chaîne : jusqu'à trois parcours de la liste entière
+      // par rendu du Guide (filtre « chaînes guidées », comptage du
+      // diagnostic, puis une fois par ligne affichée). Mémorisé le temps de
+      // ce rendu — l'EPG, lui, ne change pas en cours de route.
+      var progsMemo = {};
+      function progsDe(it) {
+        var k = (it.epgKey || '') + '\n' + (it.name || '');
+        if (!(k in progsMemo)) progsMemo[k] = Epg.progsFor(state.epgMap, it.epgKey, it.name) || [];
+        return progsMemo[k];
+      }
       // Un bouquet IPTV compte des milliers de chaînes dont la source EPG
       // n'en guide qu'une partie : sans ce filtre, le Guide s'ouvre sur des
       // pages entières de « Pas de programme disponible » (les bouquets
       // Disney+/événements en tête de playlist, sans tvg-id).
       var totalAvant = list.length, guidees = null;
       if (state.epgMap && Store.getGuideAvecProgramme()) {
-        guidees = list.filter(function (it) {
-          return (Epg.progsFor(state.epgMap, it.epgKey, it.name) || []).length > 0;
-        });
+        guidees = list.filter(function (it) { return progsDe(it).length > 0; });
         // Aucune chaîne guidée : on remontre tout plutôt qu'un écran vide,
         // le message d'explication est affiché juste en dessous.
         if (guidees.length) list = guidees;
@@ -1506,7 +1613,7 @@
         // source EPG) — sans ce chiffre, indiscernable d'un guide qui n'a
         // simplement pas encore chargé.
         var matched = guidees ? guidees.length
-          : list.filter(function (it) { return (Epg.progsFor(state.epgMap, it.epgKey, it.name) || []).length > 0; }).length;
+          : list.filter(function (it) { return progsDe(it).length > 0; }).length;
         if (matched === 0 && list.length > 0) {
           hintEl.appendChild(el('div', 'hint',
             'ℹ️ Guide chargé (' + state.epgDebug.channelCount + ' chaîne(s) dans le flux EPG) mais aucun programme ne correspond à tes ' +
@@ -1550,7 +1657,7 @@
           img.onerror = function () { img.remove(); };
           chan.appendChild(img);
         }
-        var progs = Epg.progsFor(state.epgMap, item.epgKey, item.name) || [];
+        var progs = progsDe(item);
 
         var texte = el('div', 'guide-chan-txt');
         texte.appendChild(el('span', null, item.name));
@@ -1629,7 +1736,7 @@
     });
   }
 
-  $id('rechGuide').addEventListener('input', function () { state.shown.guide = GUIDE_PAGE; renderGuide(false); });
+  onSearchInput('rechGuide', function () { state.shown.guide = GUIDE_PAGE; renderGuide(false); });
   // Numéro de la ligne à rejoindre après le prochain rendu (première chaîne
   // ajoutée par « Charger plus »).
   var guideFocusRow = null;
@@ -2230,11 +2337,67 @@
     });
   }
 
+  // ---------- Vérification manuelle des mises à jour ----------
+  // La vérification automatique (www/update-check.js) est volontairement
+  // limitée à une requête toutes les 6 h — l'API GitHub n'autorise que 60
+  // appels par heure sans authentification. Ce bouton court-circuite cette
+  // temporisation quand on VEUT savoir tout de suite, et rend visible le cas
+  // « déjà à jour », que la bannière ne dit jamais puisqu'elle ne s'affiche
+  // pas. L'installation elle-même reste celle de la bannière (bouton
+  // « ⬇ Installer », via le plugin natif — voir www/apk-update.js).
+  function setupCheckUpdate() {
+    var btn = $id('btnCheckUpdate');
+    var statut = $id('updateStatus');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var repo = window.UPDATE_REPO, courante = window.APP_VERSION;
+      if (!repo || !courante) return;
+      btn.disabled = true;
+      var libelle = btn.textContent;
+      btn.textContent = '⏳ Vérification…';
+      statut.textContent = '';
+      // Cache-buster : sans lui, un service worker ou un cache HTTP peut
+      // resservir la réponse de la vérification précédente.
+      Net.fetchJson('https://api.github.com/repos/' + repo + '/releases/latest?_=' + Date.now())
+        .then(function (rel) {
+          var tag = String((rel && rel.tag_name) || '').replace(/^v/, '');
+          if (!tag) throw new Error('réponse inattendue');
+          if (compareVersions(tag, courante) <= 0) {
+            statut.textContent = '✅ Déjà à jour (v' + courante + ').';
+            return;
+          }
+          var apk = (rel.assets || []).filter(function (a) { return /\.apk$/i.test(a.name || ''); })[0];
+          statut.textContent = '🆕 Version v' + tag + ' disponible.';
+          // Une version précédemment ignorée doit réapparaître : c'est
+          // justement l'utilisateur qui redemande.
+          try { localStorage.removeItem('updDismiss:' + repo); } catch (e) {}
+          if (window.showUpdateBanner) window.showUpdateBanner(tag, apk ? apk.browser_download_url : rel.html_url);
+          else statut.textContent += ' Relance l’app pour l’installer.';
+        })
+        .catch(function (err) {
+          statut.textContent = '⚠️ Vérification impossible : ' + (err && err.message ? err.message : 'réseau');
+        })
+        .then(function () { btn.disabled = false; btn.textContent = libelle; });
+    });
+  }
+
+  // "2.14" vs "2.9" : comparaison champ par champ, pas alphabétique.
+  function compareVersions(a, b) {
+    var xa = String(a).replace(/^v/, '').split('.');
+    var xb = String(b).replace(/^v/, '').split('.');
+    for (var i = 0; i < Math.max(xa.length, xb.length); i++) {
+      var d = (parseInt(xa[i], 10) || 0) - (parseInt(xb[i], 10) || 0);
+      if (d) return d;
+    }
+    return 0;
+  }
+
   function init() {
     startSplash();
+    setupCheckUpdate();
     if (window.HaSync) HaSync.start();
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');
-    $id('verText').textContent = window.APP_VERSION || '';
+    $id('verText').textContent = 'v' + (window.APP_VERSION || '');
     pruneHiddenFavoris();
     setupLecteurNatif();
     setupGuideFiltre();

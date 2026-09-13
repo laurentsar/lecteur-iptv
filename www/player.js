@@ -35,6 +35,37 @@
 
   var hls = null;
   var mpegtsPlayer = null;
+
+  // ---------- Moteurs de lecture web, chargés à la demande ----------
+  // hls.js et mpegts.js pèsent 835 Ko à eux deux. Déclarés en <script> dans
+  // index.html, ils étaient téléchargés, analysés et exécutés à CHAQUE
+  // lancement — y compris dans l'APK, où le lecteur natif (Media3) est le
+  // réglage par défaut et ne s'en sert jamais une seule fois. Sur un boîtier
+  // TV, c'est autant de retard avant le premier affichage. Ils ne font donc
+  // plus partie du squelette de la page : on les charge au premier flux qui
+  // en a besoin, et — quand le lecteur web est bien celui qui servira — on
+  // prend les devants pendant les temps morts qui suivent le démarrage.
+  // (www/vr.html, page séparée, garde ses propres <script> : elle n'est
+  // ouverte que sur demande explicite, dans le casque.)
+  var vendorPromises = {};
+  var webEnginesReady = false;
+  function loadScript(src) {
+    if (vendorPromises[src]) return vendorPromises[src];
+    vendorPromises[src] = new Promise(function (resolve) {
+      var sc = document.createElement('script');
+      sc.src = src;
+      // Un échec ne bloque pas : la suite de startPlayback retombe alors sur
+      // la lecture native du <video> (HLS natif Safari, mp4/mkv directs).
+      sc.onload = function () { resolve(true); };
+      sc.onerror = function () { resolve(false); };
+      document.head.appendChild(sc);
+    });
+    return vendorPromises[src];
+  }
+  function ensureWebEngines() {
+    return Promise.all([loadScript('vendor/hls.min.js'), loadScript('vendor/mpegts.min.js')])
+      .then(function () { webEnginesReady = true; });
+  }
   var currentEngine = '';
   var currentUrl = '', currentTitle = '';
   var currentVersions = null; // [{name,url,...}] quand la chaîne regroupe plusieurs sources — voir opts.versions dans open()
@@ -1475,6 +1506,15 @@
       return;
     }
 
+    // Le lecteur web est bien celui qui va servir : ses moteurs doivent être
+    // là avant de choisir lequel employer. Point d'entrée unique, avant
+    // d'armer le délai de chargement pour ne pas compter ce temps-ci.
+    if (!webEnginesReady) {
+      setStatus('Préparation du lecteur…');
+      ensureWebEngines().then(function () { startPlayback(url, title); });
+      return;
+    }
+
     armLoadTimeout();
     destroyPlayers();
     tracksBtn.style.display = 'none';
@@ -1597,6 +1637,18 @@
   }
 
   setupChromecast();
+
+  // Préchargement discret des moteurs web, une fois l'interface affichée et
+  // pendant que l'utilisateur choisit sa chaîne : la première lecture n'a
+  // alors rien à attendre. Sauté quand le lecteur natif est celui qui jouera
+  // (réglage par défaut de l'APK), pour ne pas charger 835 Ko qui ne
+  // serviront pas.
+  function precharger() {
+    if (nativePlayerPlugin() && (!global.Store || Store.getLecteurNatif())) return;
+    ensureWebEngines();
+  }
+  if (global.requestIdleCallback) global.requestIdleCallback(precharger, { timeout: 8000 });
+  else setTimeout(precharger, 3000);
 
   global.Player = { open: open, close: close, isOpen: isOpen, closeTopOverlay: closeTopOverlay };
 })(window);

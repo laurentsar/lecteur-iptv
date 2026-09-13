@@ -261,7 +261,8 @@
       <details class="saison">
         <summary class="saison-titre">📡 TV Android &amp; casque VR (Quest 3)</summary>
         <div class="accordion-body">
-          <p class="hint"><strong>TV Android / boîtiers IPTV</strong> : l'app s'installe et se lance normalement (pas d'écran tactile requis), et tous les éléments cliquables (cartes, grille du Guide) sont navigables à la télécommande — Entrée/OK activent l'élément sélectionné, avec un contour visible. Pas de lanceur Leanback dédié à grosses tuiles. <strong>Meta Quest 3</strong> : fonctionne déjà tel quel en side-load, exécuté par Horizon OS dans un panneau 2D flottant, sans adaptation nécessaire.</p>
+          <p class="hint"><strong>TV Android / boîtiers IPTV</strong> : l'app s'installe et se lance normalement (pas d'écran tactile requis), et tous les éléments cliquables (cartes, grille du Guide) sont navigables à la télécommande — Entrée/OK activent l'élément sélectionné, avec un contour visible. Pas de lanceur Leanback dédié à grosses tuiles.</p>
+          <p class="hint"><strong>Meta Quest 3</strong> : deux usages, à ne pas confondre. L'<strong>APK</strong> side-loadée fonctionne telle quelle, exécutée par Horizon OS dans un panneau 2D flottant, sans adaptation. Le <strong>mode cinéma VR</strong>, lui, demande d'ouvrir la <strong>version web (PWA)</strong> dans le navigateur du casque : un bouton 🥽 apparaît alors dans le lecteur et projette la chaîne sur un grand écran incurvé (rayon 6 m, 16/9) dans une salle sombre, avec les chaînes du bouquet pointables à la manette sur la gauche. Ce bouton est volontairement absent de l'APK : la WebView d'Android n'expose pas WebXR, l'API qui rend la VR possible — seul un vrai navigateur le fait.</p>
         </div>
       </details>
 
@@ -337,8 +338,16 @@
         <p class="hint">Tes playlists, identifiants et favoris restent uniquement sur cet appareil (stockage local). Rien n'est envoyé ailleurs qu'au serveur IPTV que tu as toi-même renseigné.</p>
       </div>
       <div class="card">
+        <h2>🔄 Mise à jour</h2>
+        <p class="hint">Version installée : <strong id="verText"></strong>. L'app vérifie d'elle-même les nouvelles versions (au plus une fois toutes les 6 h) et propose de les installer. Ce bouton force la vérification tout de suite.</p>
+        <div class="row" style="margin-top:8px">
+          <button id="btnCheckUpdate" class="ghost" style="flex:0 0 auto">Vérifier maintenant</button>
+        </div>
+        <p class="hint" id="updateStatus"></p>
+      </div>
+      <div class="card">
         <h2>À propos</h2>
-        <p class="hint">Lecteur IPTV — version <span id="verText"></span>. Lecture HLS assurée par <a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a> (licence Apache-2.0).</p>
+        <p class="hint">Lecteur IPTV — lecture HLS assurée par <a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a> (licence Apache-2.0).</p>
       </div>
     </section>
   </main>
@@ -437,11 +446,13 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.13';
+    window.APP_VERSION = '2.14';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
   </script>
-  <script src="vendor/hls.min.js"></script>
-  <script src="vendor/mpegts.min.js"></script>
+  <!-- hls.js et mpegts.js (835 Ko à eux deux) ne sont volontairement PAS
+       chargés ici : player.js les demande au premier flux qui en a besoin, et
+       les précharge en tâche de fond quand c'est le lecteur web qui servira.
+       Ils restent dans le cache hors-ligne du service worker (sw.js). -->
   <script src="net.js"></script>
   <script src="hls-native-loader.js"></script>
   <script>window.BACKUP_APP = 'lecteur-iptv';
@@ -460,6 +471,7 @@
   <script src="recorder.js"></script>
   <script src="app.js"></script>
   <script>AutoBackup.mount(document.getElementById('backup-panel'));</script>
+  <script src="apk-update.js"></script>
   <script src="update-check.js"></script>
 </body>
 </html>

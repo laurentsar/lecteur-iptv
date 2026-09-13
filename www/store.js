@@ -18,11 +18,32 @@
     try {
       var brut = JSON.stringify(value);
       localStorage.setItem(key, brut);
+      memo[key] = value;
+      if (key === K_FAVORIS) favKeysMemo = null;
       miroirEcrire(key, brut);
       return true;
     }
     catch (e) { return false; }
   }
+
+  // ---------- Mémo des lectures très répétées ----------
+  // isFavori() est appelé une fois PAR CARTE d'une grille, et getProgress()
+  // une fois par carte de film : sans mémo, afficher un écran de 60 cartes
+  // déclenchait une centaine de localStorage.getItem + JSON.parse de listes
+  // entières (jusqu'à 300 entrées pour la reprise de lecture) — refaits
+  // intégralement à chaque frappe dans un champ de recherche.
+  // Le mémo n'est correct que parce que TOUTE écriture de ces clés passe par
+  // lsSet() (qui le remet à jour) ou par hydrate() (qui le vide) : rien
+  // d'autre n'écrit dans localStorage sur ces clés-là. Les valeurs mémorisées
+  // sont en lecture seule : les fonctions qui modifient une liste repartent
+  // d'une relecture fraîche (getFavoris/getPlaylists) puis appellent lsSet.
+  var memo = {};
+  var favKeysMemo = null;
+  function memoGet(key, fallback) {
+    if (!(key in memo)) memo[key] = lsGet(key, fallback);
+    return memo[key];
+  }
+  function memoVider() { memo = {}; favKeysMemo = null; }
 
   var K_PLAYLISTS = 'iptv:playlists';
   var K_ACTIVE = 'iptv:active';
@@ -90,6 +111,7 @@
         return 1;
       }, function () { return 0; });
     })).then(function (n) {
+      memoVider();   // hydrate() écrit localStorage sans passer par lsSet()
       return n.reduce(function (a, b) { return a + b; }, 0);
     });
   }
@@ -179,7 +201,13 @@
   // Remplace toute la liste d'un coup — utilisé par la synchronisation Home
   // Assistant (hasync.js), qui fusionne local et distant avant d'écrire.
   function setFavoris(list) { lsSet(K_FAVORIS, list || []); }
-  function isFavori(key) { return getFavoris().some(function (f) { return f.key === key; }); }
+  function isFavori(key) {
+    if (!favKeysMemo) {
+      favKeysMemo = {};
+      getFavoris().forEach(function (f) { if (f && f.key) favKeysMemo[f.key] = true; });
+    }
+    return !!favKeysMemo[key];
+  }
   function toggleFavori(item) {
     var list = getFavoris();
     var i = list.findIndex(function (f) { return f.key === item.key; });
@@ -193,7 +221,7 @@
   // pour ne pas laisser grossir indéfiniment le localStorage.
   var K_PROGRESS = 'iptv:progress';
   var PROGRESS_MAX = 300;
-  function getProgressMap() { return lsGet(K_PROGRESS, {}); }
+  function getProgressMap() { return memoGet(K_PROGRESS, {}); }
   function getProgress(url) { return getProgressMap()[url] || null; }
   function setProgress(url, data) {
     var map = getProgressMap();
@@ -256,8 +284,32 @@
     }).catch(function () { return false; });
   }
 
+  // ---------- Cache du guide TV (EPG) ----------
+  // Un XMLTV de panel IPTV pèse couramment plusieurs dizaines de mégaoctets :
+  // le retélécharger ET le réanalyser à chaque lancement coûte, sur un boîtier
+  // TV, de longues secondes pendant lesquelles le Guide reste vide. La carte
+  // déjà analysée est donc conservée dans IndexedDB (structure de données
+  // simple, clonable telle quelle) et rechargée au démarrage suivant tant
+  // qu'elle n'a pas dépassé EPG_TTL_MS — ce qui rend aussi le Guide
+  // consultable hors ligne, ou quand la source EPG est momentanément morte.
+  // La clé inclut l'URL : changer de playlist (donc de source) invalide.
+  var EPG_TTL_MS = 6 * 3600 * 1000;
+  function epgGet(url) {
+    if (!url) return Promise.resolve(null);
+    return idbGet('epg:' + url).then(function (rec) {
+      if (!rec || !rec.map || !rec.at) return null;
+      if (Date.now() - rec.at > EPG_TTL_MS) return null;
+      return rec.map;
+    });
+  }
+  function epgSet(url, map) {
+    if (!url || !map) return Promise.resolve(false);
+    return idbSet('epg:' + url, { at: Date.now(), map: map });
+  }
+
   global.Store = {
     uid: uid, hydrate: hydrate,
+    epgGet: epgGet, epgSet: epgSet,
     getPlaylists: getPlaylists, addPlaylist: addPlaylist,
     updatePlaylist: updatePlaylist, removePlaylist: removePlaylist,
     getActivePlaylistId: getActivePlaylistId, setActivePlaylistId: setActivePlaylistId,
