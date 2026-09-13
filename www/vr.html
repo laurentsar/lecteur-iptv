@@ -233,37 +233,224 @@
       lire(liste[index].url, liste[index].name);
     }
 
-    // --- panneau des chaînes (12 lignes autour de la chaîne en cours) ---
-    var PAGE = 12;
+    // ---------- Menus 3D ----------
+    // Sans eux, le casque ne connaissait que la liste de chaînes transmise à
+    // l'ouverture : pour changer de bouquet ou lancer un film, il fallait
+    // retirer le casque, revenir à l'application, choisir, puis y revenir.
+    //
+    // Les données ne sont PAS recopiées ici. La page demande à l'application,
+    // qui l'a ouverte et tourne dans la même origine (window.opener), une PAGE
+    // d'entrées à la fois — une douzaine de lignes, celles qui sont à l'écran.
+    // Un bouquet IPTV compte couramment des milliers de chaînes et un
+    // catalogue de films des dizaines de milliers : tout charger dans la
+    // mémoire d'un casque autonome serait le meilleur moyen de le faire ramer,
+    // voire de faire fermer l'onglet par le système.
+    //
+    // Si l'application n'est plus joignable (onglet fermé, ouverture directe
+    // de cette page), les menus disparaissent et la liste de zapping
+    // transmise au lancement reste utilisable : rien ne se bloque.
+    var PAGE = 10;
+    var appli = null;
+    try {
+      if (window.opener && window.opener.AppZap && window.opener.AppZap.vrIndex) appli = window.opener.AppZap;
+    } catch (e) { appli = null; }   // origine différente : inaccessible
+
+    var TYPES = [
+      { id: 'direct', libelle: 'Chaines' },
+      { id: 'films', libelle: 'Films' },
+      { id: 'favoris', libelle: 'Favoris' }
+    ];
+    var vue = { type: 'liste', bouquet: null, bouquetNom: '', page: 0, total: 0, entrees: [], index: [] };
+
+    function ligneFond(largeur, couleur, opacite, onClic) {
+      var fond = document.createElement('a-plane');
+      fond.setAttribute('width', largeur);
+      fond.setAttribute('height', 0.36);
+      fond.setAttribute('color', couleur);
+      fond.setAttribute('opacity', opacite);
+      if (onClic) {
+        fond.setAttribute('class', 'clic');
+        fond.addEventListener('click', onClic);
+      }
+      return fond;
+    }
+
+    function ligneTexte(valeur, couleur, x, largeurTexte) {
+      var t = document.createElement('a-text');
+      t.setAttribute('value', valeur);
+      t.setAttribute('align', 'left');
+      t.setAttribute('width', largeurTexte || 6);
+      t.setAttribute('color', couleur);
+      t.setAttribute('position', (x == null ? -1.7 : x) + ' 0 0.01');
+      return t;
+    }
+
+    function ajouterLigne(parent, y, libelle, couleurFond, couleurTexte, onClic, largeur) {
+      var e = document.createElement('a-entity');
+      e.setAttribute('position', '0 ' + y + ' 0');
+      e.appendChild(ligneFond(largeur || 3.6, couleurFond, onClic ? 0.9 : 0.6, onClic));
+      e.appendChild(ligneTexte(libelle, couleurTexte, -(largeur || 3.6) / 2 + 0.1));
+      parent.appendChild(e);
+      return e;
+    }
+
+    function ongletsVr(panneau) {
+      if (!appli) return;
+      var y = 2.86;
+      TYPES.forEach(function (t, i) {
+        var actif = (vue.type === 'bouquets' || vue.type === 'entrees') && vue.kind === t.id
+          || (vue.type === 'favoris' && t.id === 'favoris');
+        var e = document.createElement('a-entity');
+        e.setAttribute('position', (-1.2 + i * 1.2) + ' ' + y + ' 0');
+        e.appendChild(ligneFond(1.1, actif ? '#3fc7c7' : '#16273a', 0.92, function () {
+          if (t.id === 'favoris') ouvrirFavoris(); else ouvrirBouquets(t.id);
+        }));
+        var txt = ligneTexte(t.libelle, actif ? '#06181c' : '#e7eef7', -0.45, 4.5);
+        e.appendChild(txt);
+        panneau.appendChild(e);
+      });
+    }
+
+    function ouvrirBouquets(kind) {
+      if (!appli) return;
+      vue = { type: 'bouquets', kind: kind, bouquet: null, bouquetNom: '', page: 0, total: 0, entrees: [], index: [] };
+      majPanneau();
+      appli.vrIndex(kind).then(function (cats) {
+        vue.index = cats || [];
+        vue.total = vue.index.length;
+        majPanneau();
+      }).catch(function () { vue.index = []; majPanneau(); });
+    }
+
+    function ouvrirBouquet(kind, cat) {
+      vue = { type: 'entrees', kind: kind, bouquet: cat.id, bouquetNom: cat.label, page: 0, total: 0, entrees: [], index: vue.index };
+      chargerPage();
+    }
+
+    function ouvrirFavoris() {
+      if (!appli) return;
+      vue = { type: 'favoris', kind: 'favoris', bouquet: null, bouquetNom: 'Favoris', page: 0, total: 0, entrees: [], index: [] };
+      majPanneau();
+      Promise.resolve(appli.vrFavoris()).then(function (f) {
+        vue.entrees = f || [];
+        vue.total = vue.entrees.length;
+        majPanneau();
+      }).catch(function () { majPanneau(); });
+    }
+
+    function chargerPage() {
+      if (!appli || vue.type !== 'entrees') { majPanneau(); return; }
+      majPanneau();   // affiche « Chargement… » pendant la requête
+      appli.vrPage(vue.kind, vue.bouquet, vue.page * PAGE, PAGE).then(function (r) {
+        vue.entrees = (r && r.items) || [];
+        vue.total = (r && r.total) || 0;
+        majPanneau();
+      }).catch(function () { vue.entrees = []; majPanneau(); });
+    }
+
+    function tournerPage(delta) {
+      var pages = Math.max(1, Math.ceil(vue.total / PAGE));
+      var p = Math.min(pages - 1, Math.max(0, vue.page + delta));
+      if (p === vue.page) return;
+      vue.page = p;
+      if (vue.type === 'entrees') chargerPage(); else majPanneau();
+    }
+
     function majPanneau() {
       var panneau = document.getElementById('panneau');
       panneau.innerHTML = '';
-      if (!liste.length) return;
-      var depart = Math.max(0, Math.min(liste.length - PAGE, (index === -1 ? 0 : index) - Math.floor(PAGE / 2)));
-      liste.slice(depart, depart + PAGE).forEach(function (c, i) {
-        var reel = depart + i;
-        var ligne = document.createElement('a-entity');
-        ligne.setAttribute('position', '0 ' + (2.4 - i * 0.42) + ' 0');
+      ongletsVr(panneau);
 
-        var fond = document.createElement('a-plane');
-        fond.setAttribute('width', 3.6);
-        fond.setAttribute('height', 0.36);
-        fond.setAttribute('color', reel === index ? '#3fc7c7' : '#16273a');
-        fond.setAttribute('opacity', reel === index ? 0.95 : 0.8);
-        fond.setAttribute('class', 'clic');
-        fond.addEventListener('click', function () { index = reel; lire(c.url, c.name); });
-        ligne.appendChild(fond);
+      // Titre + retour
+      var titre = vue.type === 'liste' ? 'Chaines en cours'
+        : vue.type === 'bouquets' ? 'Bouquets'
+        : vue.type === 'favoris' ? 'Favoris'
+        : vue.bouquetNom || 'Bouquet';
+      var yTitre = 2.44;
+      if (vue.type === 'entrees') {
+        ajouterLigne(panneau, yTitre, '< ' + titre, '#0e2436', '#3fc7c7', function () {
+          ouvrirBouquets(vue.kind);
+        });
+      } else {
+        ajouterLigne(panneau, yTitre, titre, '#0e2436', '#92a5ba', null);
+      }
 
-        var txt = document.createElement('a-text');
-        txt.setAttribute('value', (c.chno ? c.chno + '  ' : '') + (c.name || ''));
-        txt.setAttribute('align', 'left');
-        txt.setAttribute('width', 6);
-        txt.setAttribute('color', reel === index ? '#06181c' : '#e7eef7');
-        txt.setAttribute('position', '-1.7 0 0.01');
-        ligne.appendChild(txt);
+      var y0 = 1.98;
+      var lignes = [];
+      if (vue.type === 'liste') {
+        // Comportement d'origine : les chaînes transmises au lancement,
+        // centrées sur celle qu'on regarde.
+        if (!liste.length) { pagination(panneau, 0); return; }
+        var depart = Math.max(0, Math.min(liste.length - PAGE, (index === -1 ? 0 : index) - Math.floor(PAGE / 2)));
+        liste.slice(depart, depart + PAGE).forEach(function (c, i) {
+          var reel = depart + i;
+          lignes.push({
+            libelle: (c.chno ? c.chno + '  ' : '') + (c.name || ''),
+            actif: reel === index,
+            action: function () { index = reel; lire(c.url, c.name); }
+          });
+        });
+      } else if (vue.type === 'bouquets') {
+        var debut = vue.page * PAGE;
+        vue.total = vue.index.length;
+        vue.index.slice(debut, debut + PAGE).forEach(function (cat) {
+          lignes.push({
+            libelle: cat.label + (cat.count != null ? '  (' + cat.count + ')' : ''),
+            actif: false,
+            action: function () { ouvrirBouquet(vue.kind, cat); }
+          });
+        });
+        if (!vue.index.length) lignes.push({ libelle: 'Chargement…', actif: false, action: null });
+      } else {
+        var debutE = vue.type === 'favoris' ? vue.page * PAGE : 0;
+        var tranche = vue.type === 'favoris' ? vue.entrees.slice(debutE, debutE + PAGE) : vue.entrees;
+        tranche.forEach(function (c) {
+          lignes.push({
+            libelle: (c.chno ? c.chno + '  ' : '') + (c.name || ''),
+            actif: c.url === url,
+            action: function () {
+              // Sortir du mode « liste transmise » : on zappe désormais dans
+              // ce que l'utilisateur a choisi ici.
+              liste = vue.type === 'favoris' ? vue.entrees : vue.entrees;
+              index = liste.indexOf(c);
+              lire(c.url, c.name);
+            }
+          });
+        });
+        if (!tranche.length) lignes.push({ libelle: 'Chargement…', actif: false, action: null });
+      }
 
-        panneau.appendChild(ligne);
+      lignes.forEach(function (l, i) {
+        ajouterLigne(panneau, y0 - i * 0.42,
+          l.libelle,
+          l.actif ? '#3fc7c7' : '#16273a',
+          l.actif ? '#06181c' : '#e7eef7',
+          l.action);
       });
+
+      pagination(panneau, lignes.length);
+    }
+
+    function pagination(panneau, nbLignes) {
+      var pages = vue.type === 'liste' ? 1 : Math.max(1, Math.ceil(vue.total / PAGE));
+      if (pages <= 1) return;
+      var y = 1.98 - PAGE * 0.42 - 0.1;
+      var prec = document.createElement('a-entity');
+      prec.setAttribute('position', '-1.2 ' + y + ' 0');
+      prec.appendChild(ligneFond(1.0, '#16273a', 0.9, function () { tournerPage(-1); }));
+      prec.appendChild(ligneTexte('< Prec', '#e7eef7', -0.4, 4.5));
+      panneau.appendChild(prec);
+
+      var etat = document.createElement('a-entity');
+      etat.setAttribute('position', '0 ' + y + ' 0');
+      etat.appendChild(ligneTexte((vue.page + 1) + ' / ' + pages, '#92a5ba', -0.3, 4.5));
+      panneau.appendChild(etat);
+
+      var suiv = document.createElement('a-entity');
+      suiv.setAttribute('position', '1.2 ' + y + ' 0');
+      suiv.appendChild(ligneFond(1.0, '#16273a', 0.9, function () { tournerPage(1); }));
+      suiv.appendChild(ligneTexte('Suiv >', '#e7eef7', -0.4, 4.5));
+      panneau.appendChild(suiv);
     }
 
     // --- commandes sous l'écran ---

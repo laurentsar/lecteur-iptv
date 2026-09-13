@@ -267,6 +267,37 @@ function verifie(nom, cond, detail) {
     await attendre(60);
   }
 
+  console.log('\n— API des menus VR : pagination et plafond mémoire —');
+  {
+    // La page VR tourne dans une autre fenêtre et appelle ces fonctions par
+    // window.opener. L'enjeu n'est pas l'affichage — invérifiable sans casque —
+    // mais le CONTRAT : ne jamais lui livrer plus que ce qu'elle affiche.
+    const idx = await w.AppZap.vrIndex('direct');
+    verifie('index des bouquets renvoyé', Array.isArray(idx) && idx.length === 7, 'n=' + (idx && idx.length));
+    verifie('chaque bouquet porte un libellé et un compte',
+            idx.every(c => c.label && typeof c.count === 'number'), JSON.stringify(idx[0]));
+    verifie('l\'index ne contient AUCUNE chaîne',
+            idx.every(c => !c.chaines && !c.items), JSON.stringify(idx[0]));
+
+    const p1 = await w.AppZap.vrPage('direct', idx[0].id, 0, 10);
+    verifie('une page rend au plus ce qui est demandé', p1.items.length <= 10, 'n=' + p1.items.length);
+    verifie('le total du bouquet est annoncé', p1.total === idx[0].count, p1.total + ' vs ' + idx[0].count);
+    verifie('les entrées portent le strict nécessaire',
+            p1.items.every(e => e.url && e.name && !('group' in e)), JSON.stringify(p1.items[0]));
+
+    // Le plafond doit tenir même si l'appelant demande la lune : c'est ce qui
+    // empêche un catalogue entier de traverser vers le casque.
+    const enorme = await w.AppZap.vrPage('direct', idx[0].id, 0, 99999);
+    verifie('demande démesurée plafonnée', enorme.items.length <= 40, 'n=' + enorme.items.length);
+
+    const p2 = await w.AppZap.vrPage('direct', idx[0].id, 10, 10);
+    verifie('la page suivante décale bien',
+            p2.items.length === 0 || p2.items[0].url !== p1.items[0].url);
+
+    const fav = w.AppZap.vrFavoris();
+    verifie('favoris exposés sous forme de tableau', Array.isArray(fav));
+  }
+
   console.log('\n— Erreurs JS survenues pendant le test —');
   verifie('aucune erreur', erreurs.length === 0, erreurs.join(' | '));
 
