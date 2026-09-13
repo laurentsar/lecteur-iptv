@@ -80,7 +80,31 @@
     });
   }
 
+  // Certains fournisseurs IPTV distribuent des URLs en https:// dont le
+  // serveur ne parle en réalité que du HTTP en clair sur ce port (panel mal
+  // configuré, ou URL copiée depuis un autre service) — constaté en usage
+  // réel : "Impossible de charger la playlist : Unable to parse TLS packet
+  // header", une erreur de handshake TLS bas niveau plutôt qu'un simple
+  // statut HTTP. Une tentative de repli en http:// suffit à débloquer ces
+  // cas ; limité aux erreurs qui ressemblent explicitement à un échec
+  // TLS/SSL pour ne pas masquer une vraie panne réseau derrière un second
+  // essai inutile.
+  function isTlsFailure(err) {
+    return /\btls\b|\bssl\b/i.test(String((err && err.message) || err || ''));
+  }
+
+  function withHttpsDowngrade(url, attempt) {
+    return attempt(url).catch(function (err) {
+      if (!/^https:\/\//i.test(url) || !isTlsFailure(err)) throw err;
+      return attempt(url.replace(/^https:\/\//i, 'http://'));
+    });
+  }
+
   function fetchText(url) {
+    return withHttpsDowngrade(url, fetchTextAttempt);
+  }
+
+  function fetchTextAttempt(url) {
     var http = nativeHttp();
     if (http) {
       return withNativeFallback(
@@ -107,6 +131,10 @@
   // base64 à travers le pont JS (pas d'ArrayBuffer direct possible),
   // décodé ici avec atob().
   function fetchBytes(url) {
+    return withHttpsDowngrade(url, fetchBytesAttempt);
+  }
+
+  function fetchBytesAttempt(url) {
     var http = nativeHttp();
     if (http) {
       return withNativeFallback(
@@ -132,6 +160,10 @@
   }
 
   function fetchJson(url) {
+    return withHttpsDowngrade(url, fetchJsonAttempt);
+  }
+
+  function fetchJsonAttempt(url) {
     var http = nativeHttp();
     if (http) {
       return withNativeFallback(
