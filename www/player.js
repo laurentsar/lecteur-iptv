@@ -42,11 +42,12 @@
   var currentIsLive = false; // PiP proposé uniquement pour le direct
   var currentIsRadio = false; // lecture en fond sonore natif quand l'appli passe en arrière-plan, voir setupRadioBackground()
   var currentLogo = '';
+  var currentEpgKey = ''; // retenu pour pouvoir rappeler le bandeau d'infos (playerInfo) à tout moment, pas seulement au zapping
   var triedNativeFallback = false, triedM3u8Fallback = false, triedAudioFallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
-  var remoteBtn, remotePanel, castTvBtn, vrBtn;
+  var remoteBtn, remotePanel, castTvBtn, vrBtn, infoBtn;
   var fullscreenBtn, homeBtn;
-  var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg;
+  var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg, zapBannerBar, zapBannerBarFill, zapBannerDesc;
   var progBar;
   var progBarTimer = null;
   var zapBannerTimer = null;
@@ -111,6 +112,7 @@
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
       '  <button id="playerCastTv" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📺</button>' +
       '  <button id="playerVr" class="player-cast" aria-label="Cinéma VR" style="display:none">🥽</button>' +
+      '  <button id="playerInfo" class="player-cast" aria-label="Programme en cours" style="display:none">ℹ️</button>' +
       '  <button id="playerRemote" class="player-cast" aria-label="Télécommande" style="display:none">🕹️</button>' +
       '  <button id="playerPip" class="player-cast" aria-label="Picture-in-Picture" style="display:none">⧉</button>' +
       '  <button id="playerRecord" class="player-cast" aria-label="Enregistrer" style="display:none">⏺</button>' +
@@ -138,6 +140,8 @@
       '  <div class="zap-banner-txt">' +
       '    <div id="zapBannerName" class="zap-banner-name"></div>' +
       '    <div id="zapBannerProg" class="zap-banner-prog"></div>' +
+      '    <div id="zapBannerBar" class="zap-banner-bar" style="display:none"><div id="zapBannerBarFill" class="zap-banner-bar-fill"></div></div>' +
+      '    <div id="zapBannerDesc" class="zap-banner-desc"></div>' +
       '  </div>' +
       '</div>' +
       '<div id="remotePanel" class="remote-panel" style="display:none">' +
@@ -175,9 +179,14 @@
     zapBannerLogo = overlay.querySelector('#zapBannerLogo');
     zapBannerName = overlay.querySelector('#zapBannerName');
     zapBannerProg = overlay.querySelector('#zapBannerProg');
+    zapBannerBar = overlay.querySelector('#zapBannerBar');
+    zapBannerBarFill = overlay.querySelector('#zapBannerBarFill');
+    zapBannerDesc = overlay.querySelector('#zapBannerDesc');
+    infoBtn = overlay.querySelector('#playerInfo');
     progBar = overlay.querySelector('#playerProgBar');
     homeBtn = overlay.querySelector('#playerHome');
     closeBtn.addEventListener('click', close);
+    infoBtn.addEventListener('click', function () { showZapBanner(originalTitle, currentEpgKey, currentLogo); });
     homeBtn.addEventListener('click', function () {
       close();
       if (global.AppNav) global.AppNav.goHome();
@@ -512,6 +521,12 @@
     if (!currentIsLive) closeRemote();
   }
 
+  // Rappelle le bandeau nom + programme en cours (voir showZapBanner) sans
+  // avoir à changer de chaîne pour le revoir une fois qu'il s'est effacé.
+  function updateInfoVisibility() {
+    infoBtn.style.display = (currentIsLive && !isCasting()) ? '' : 'none';
+  }
+
   function closeRemote() { remotePanel.style.display = 'none'; }
 
   function remoteList(container, items, emptyMsg) {
@@ -680,6 +695,21 @@
     // Seulement l'émission en cours : la suivante est affichée dans le Guide
     // (ligne « Ensuite »), elle n'a pas sa place dans un bandeau fugace.
     zapBannerProg.textContent = info && info.now ? '▶ ' + info.now.titre : '';
+    // Barre de progression + résumé, comme l'écran de zapping d'un
+    // décodeur TV classique : proportion écoulée de l'émission en cours
+    // (start/stop en ms, voir epg.js), calculée à chaque affichage plutôt
+    // que mise à jour en continu — le bandeau est fugace (quelques
+    // secondes), inutile de l'animer.
+    var prog = info && info.now;
+    if (prog && prog.start != null && prog.stop != null && prog.stop > prog.start) {
+      var ratio = (Date.now() - prog.start) / (prog.stop - prog.start);
+      zapBannerBarFill.style.width = Math.max(0, Math.min(1, ratio)) * 100 + '%';
+      zapBannerBar.style.display = '';
+    } else {
+      zapBannerBar.style.display = 'none';
+    }
+    zapBannerDesc.textContent = (prog && prog.desc) || '';
+    zapBannerDesc.style.display = (prog && prog.desc) ? '' : 'none';
     if (logo) {
       zapBannerLogo.src = logo;
       zapBannerLogo.style.display = '';
@@ -688,7 +718,9 @@
       zapBannerLogo.style.display = 'none';
     }
     zapBanner.classList.add('show');
-    zapBannerTimer = setTimeout(function () { zapBanner.classList.remove('show'); }, 3000);
+    // Un résumé à lire mérite plus que le bref affichage habituel du zapping.
+    var duree = (prog && prog.desc) ? 7000 : 3000;
+    zapBannerTimer = setTimeout(function () { zapBanner.classList.remove('show'); }, duree);
   }
 
   // Bandeau en bas de l'écran, contrairement au bandeau de zapping
@@ -1031,6 +1063,7 @@
           if (pipBtn) updatePipVisibility();
           if (recordBtn) updateRecordVisibility();
           if (remoteBtn) updateRemoteVisibility();
+          if (infoBtn) updateInfoVisibility();
         }
       );
     };
@@ -1511,6 +1544,7 @@
     currentIsLive = !!(opts && opts.live);
     currentIsRadio = !!(opts && opts.radio);
     currentLogo = (opts && opts.logo) || '';
+    currentEpgKey = (opts && opts.epgKey) || '';
     currentVersions = (opts && opts.versions) || null;
     triedNativeFallback = false;
     triedM3u8Fallback = false;
@@ -1522,6 +1556,7 @@
     updatePipVisibility();
     updateRecordVisibility();
     updateRemoteVisibility();
+    updateInfoVisibility();
     startPlayback(url, title);
     syncRecordButtonState();
     updateTracksVisibility();
