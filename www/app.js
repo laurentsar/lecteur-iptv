@@ -2114,6 +2114,43 @@
     } else finish();
   });
 
+  // ---------- Import de configuration par intent externe (ADB TV Pilot) ----------
+  // Ajoute un compte Xtream ou une playlist M3U sans passer par le clavier
+  // tactile (pénible à la télécommande sur TV/boîtier) : un outil externe
+  // lance "adb shell am start -a android.intent.action.VIEW -d
+  // 'lecteuriptv://config?type=xtream&server=...&user=...&pass=...'" (voir
+  // ci/patch_config_intent.py pour l'intent-filter), reçu ici via le plugin
+  // Capacitor App. Rien ne transite par le réseau, l'intent est local.
+  if (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.Plugins && Capacitor.Plugins.App) {
+    Capacitor.Plugins.App.addListener('appUrlOpen', function (data) {
+      try {
+        var url = new URL(data.url);
+        if (url.protocol !== 'lecteuriptv:') return;
+        var p = url.searchParams;
+        var type = p.get('type');
+        var draft;
+        if (type === 'xtream') {
+          var serveur = (p.get('server') || '').trim();
+          var user = (p.get('user') || '').trim();
+          var pass = (p.get('pass') || '').trim();
+          if (!serveur || !user || !pass) { toast('Configuration reçue incomplète (Xtream).'); return; }
+          draft = { nom: p.get('name') || 'Compte Xtream', type: 'xtream', serveur: serveur, utilisateur: user, motDePasse: pass };
+        } else if (type === 'm3u') {
+          var m3uUrl = (p.get('url') || '').trim();
+          if (!m3uUrl) { toast('Configuration reçue incomplète (M3U).'); return; }
+          draft = { nom: p.get('name') || 'Playlist M3U', type: 'm3u', m3uUrl: m3uUrl, epgUrl: p.get('epg') || null };
+        } else {
+          return;
+        }
+        var saved = Store.addPlaylist(draft);
+        setActivePlaylist(saved.id);
+        renderPlaylists();
+        toast('Configuration reçue : « ' + saved.nom + ' » ajoutée');
+        goTab('accueil');
+      } catch (e) { console.error('appUrlOpen config', e); }
+    });
+  }
+
   // ---------- réglage TMDB (fiches films) ----------
   $id('tmdbKeyInput').value = Store.getTmdbKey() || '';
   $id('btnSaveTmdb').addEventListener('click', function () {
