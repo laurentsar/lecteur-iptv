@@ -35,9 +35,29 @@
   }
   function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
-  function cfg() { return lsGet(CFG_KEY, { url: '', token: '', on: false }); }
+  function cfg() { return lsGet(CFG_KEY, { url: '', token: '', on: false, proxyOn: false }); }
   function setCfg(c) { lsSet(CFG_KEY, c); }
   function actif() { var c = cfg(); return !!(c.on && c.url && c.token); }
+
+  // ---------- relais vidéo (contourne le blocage https→http, voir net.js) ----------
+  // Réutilise l'URL et le jeton déjà saisis ci-dessus pour la synchro des
+  // favoris — même instance HA, pas de configuration séparée à ressaisir.
+  // Activation indépendante (proxyOn) : utile même sans synchroniser les
+  // favoris, ou inversement.
+  function proxyActif() { var c = cfg(); return !!(c.proxyOn && c.url && c.token); }
+
+  // URL du relais pour une requête donnée, ou null si le relais n'est pas
+  // activé/configuré — voir homeassistant/iptv_proxy/__init__.py. Le jeton
+  // voyage en paramètre d'URL (pas seulement en en-tête Authorization) :
+  // un <video src="..."> ne peut poser aucun en-tête personnalisé, c'est
+  // justement le cas qui a motivé ce relais (PWA sur Safari/iPhone).
+  function proxyUrl(urlCible) {
+    if (!proxyActif()) return null;
+    var c = cfg();
+    var base = String(c.url || '').replace(/\/+$/, '');
+    return base + '/api/iptv_proxy?url=' + encodeURIComponent(urlCible) +
+      '&token=' + encodeURIComponent(c.token);
+  }
 
   function nativeHttp() {
     var cap = global.Capacitor;
@@ -189,6 +209,17 @@
       '<button id="haSyncNow" class="ghost">Synchroniser maintenant</button>';
     el.appendChild(ligne);
 
+    // Relais vidéo : contourne le blocage du navigateur quand la PWA
+    // (https://) essaie de joindre un serveur IPTV en http:// (message
+    // « le navigateur bloque l'accès... », voir net.js) — nécessite le
+    // composant personnalisé homeassistant/iptv_proxy installé côté HA.
+    var ligneProxy = document.createElement('div');
+    ligneProxy.className = 'row';
+    ligneProxy.innerHTML =
+      '<label class="hint"><input type="checkbox" id="haProxyOn" /> ' +
+      'Utiliser comme relais vidéo (contourne le blocage https→http de la PWA)</label>';
+    el.appendChild(ligneProxy);
+
     var statut = document.createElement('p');
     statut.className = 'hint';
     statut.id = 'haSyncStatut';
@@ -197,12 +228,14 @@
     document.getElementById('haSyncUrl').value = c.url || '';
     document.getElementById('haSyncToken').value = c.token || '';
     document.getElementById('haSyncOn').checked = !!c.on;
+    document.getElementById('haProxyOn').checked = !!c.proxyOn;
 
     function enregistrer() {
       setCfg({
         url: document.getElementById('haSyncUrl').value.trim(),
         token: document.getElementById('haSyncToken').value.trim(),
-        on: document.getElementById('haSyncOn').checked
+        on: document.getElementById('haSyncOn').checked,
+        proxyOn: document.getElementById('haProxyOn').checked
       });
       majStatut();
     }
@@ -210,6 +243,7 @@
       document.getElementById(id).addEventListener('change', enregistrer);
     });
     document.getElementById('haSyncOn').addEventListener('change', function () { enregistrer(); sync(); });
+    document.getElementById('haProxyOn').addEventListener('change', enregistrer);
     document.getElementById('haSyncNow').addEventListener('click', function () { enregistrer(); sync(); });
     majStatut();
   }
@@ -221,5 +255,5 @@
     document.addEventListener('visibilitychange', function () { if (!document.hidden) sync(true); });
   }
 
-  global.HaSync = { mount: mount, sync: sync, start: start, actif: actif };
+  global.HaSync = { mount: mount, sync: sync, start: start, actif: actif, proxyActif: proxyActif, proxyUrl: proxyUrl };
 })(window);

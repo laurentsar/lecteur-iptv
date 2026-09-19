@@ -1,0 +1,11 @@
+{
+  "domain": "iptv_proxy",
+  "name": "Lecteur IPTV — Relais proxy",
+  "version": "1.0.0",
+  "documentation": "https://github.com/laurentsar/lecteur-iptv",
+  "issue_tracker": "https://github.com/laurentsar/lecteur-iptv/issues",
+  "requirements": [],
+  "codeowners": [],
+  "iot_class": "cloud_polling",
+  "config_flow": false
+}

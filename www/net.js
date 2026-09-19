@@ -134,7 +134,16 @@
   // repli) : rejette tout de suite plutôt que de laisser fetch() échouer
   // avec un message générique.
   function browserFetch(url, transform, timeout) {
-    if (isMixedContentBlocked(url)) return Promise.reject(mixedContentError());
+    if (isMixedContentBlocked(url)) {
+      // Relais Home Assistant configuré (voir hasync.js et
+      // homeassistant/iptv_proxy) : la requête passe par lui, en https://,
+      // au lieu d'échouer directement — sinon, message d'erreur clair
+      // plutôt qu'un fetch() voué à l'échec.
+      var relais = (global.HaSync && global.HaSync.proxyActif && global.HaSync.proxyActif())
+        ? global.HaSync.proxyUrl(url) : null;
+      if (relais) return withTimeout(fetch(relais).then(transform), timeout);
+      return Promise.reject(mixedContentError());
+    }
     return withTimeout(fetch(url).then(transform), timeout);
   }
 
@@ -230,5 +239,9 @@
     });
   }
 
-  global.Net = { fetchText: fetchText, fetchJson: fetchJson, fetchBytes: fetchBytes, isNative: function () { return !!nativeHttp(); } };
+  global.Net = {
+    fetchText: fetchText, fetchJson: fetchJson, fetchBytes: fetchBytes,
+    isNative: function () { return !!nativeHttp(); },
+    isMixedContentBlocked: isMixedContentBlocked
+  };
 })(window);

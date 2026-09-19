@@ -174,6 +174,7 @@
       <div class="card">
         <h2>Favoris synchronisés (Home Assistant)</h2>
         <p class="hint">Les favoris sont partagés entre le téléphone et les télés via l'entité <code>sensor.lecteur_iptv_favoris</code> de Home Assistant. Fusion dans les deux sens : un ajout ou une suppression faite sur un appareil se retrouve sur les autres. Le jeton se crée dans HA : profil → Jetons d'accès longue durée.</p>
+        <p class="hint">La même URL/jeton peuvent aussi servir de <strong>relais vidéo</strong> sur la PWA : un serveur IPTV en <code>http://</code> (la plupart) est bloqué par le navigateur depuis une page en <code>https://</code> — Home Assistant, joignable en <code>https://</code> via Nabu Casa, relaie alors la requête à ta place. Installation du composant nécessaire : voir <code>homeassistant/README.md</code> dans le dépôt.</p>
         <div id="haSyncPanel"></div>
       </div>
       <div class="cat-title">🖥️ Affichage</div>
@@ -472,7 +473,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.24';
+    window.APP_VERSION = '2.25';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans

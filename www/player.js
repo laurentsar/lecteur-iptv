@@ -1648,10 +1648,27 @@
     return true;
   }
 
+  // URL réellement demandée au moteur de lecture (hls.js/<video>/mpegts.js) :
+  // identique à `url` sauf si le navigateur bloquerait autrement l'accès
+  // (PWA en https:// vers un flux en http://, voir Net.isMixedContentBlocked
+  // dans net.js) ET qu'un relais Home Assistant est configuré (hasync.js) —
+  // dans ce cas, on lui fait traverser le relais. `url`/`currentUrl` restent
+  // volontairement inchangés : la détection de type (isM3u8, isDirectFile)
+  // se fait sur l'extension de l'URL réelle, pas sur celle, opaque, du
+  // relais (.../api/iptv_proxy?url=...), et l'enregistrement/la reprise de
+  // lecture doivent garder l'URL d'origine pour matcher la playlist.
+  function urlAvecRelaisSiNecessaire(url) {
+    if (!(global.Net && global.Net.isMixedContentBlocked && global.Net.isMixedContentBlocked(url))) return url;
+    var relais = (global.HaSync && global.HaSync.proxyActif && global.HaSync.proxyActif())
+      ? global.HaSync.proxyUrl(url) : null;
+    return relais || url;
+  }
+
   function startPlayback(url, title) {
     currentUrl = url;
     currentTitle = title || '';
     titleEl.textContent = currentTitle;
+    var urlFlux = urlAvecRelaisSiNecessaire(url);
 
     if (isCasting()) { castCurrentMedia(); return; }
 
@@ -1718,7 +1735,7 @@
       if (global.Hls.Events.AUDIO_TRACK_SWITCHED) {
         hls.on(global.Hls.Events.AUDIO_TRACK_SWITCHED, checkHlsAudioCodec);
       }
-      hls.loadSource(url);
+      hls.loadSource(urlFlux);
       hls.attachMedia(video);
       video.play().catch(function () {});
     } else if (isM3u8(url) && video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -1726,12 +1743,12 @@
       // et ça permet à AirPlay de fonctionner directement sur ce <video>.
       currentEngine = 'HLS natif (Safari)';
       setStatus('Connexion au flux (HLS)…');
-      video.src = url;
+      video.src = urlFlux;
       video.play().catch(function () {});
     } else if (!isDirectFile(url) && !isM3u8(url) && global.mpegts && global.mpegts.isSupported()) {
       currentEngine = 'mpeg-ts';
       setStatus('Connexion au flux (mpeg-ts)…');
-      mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: url }, MPEGTS_LOW_BANDWIDTH_CONFIG);
+      mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: urlFlux }, MPEGTS_LOW_BANDWIDTH_CONFIG);
       mpegtsPlayer.on(global.mpegts.Events.ERROR, function () {
         var cause = 'Flux mpeg-ts interrompu';
         // mpegts.js n'a pas de reprise intégrée : on rejoue le flux depuis le
@@ -1754,7 +1771,7 @@
     } else {
       currentEngine = !isDirectFile(url) && global.mpegts && !global.mpegts.isSupported() ? 'direct — mpeg-ts non supporté par cet appareil' : 'direct';
       setStatus('Connexion au flux (' + currentEngine + ')…');
-      video.src = url;
+      video.src = urlFlux;
       video.play().catch(function () {});
     }
   }
