@@ -36,7 +36,13 @@ jobs:
     # contents: read »), car le jeton par défaut du dépôt est en lecture seule.
     permissions:
       contents: write
-    uses: laurentsar/app-kit/.github/workflows/build-apk.yml@v1
+    # Épinglé au commit précis plutôt qu'à un tag : le correctif du SDK
+    # Android (paquet 'tools' disparu, voir app-kit) est poussé sur main
+    # mais le tag v2 n'a pas pu être créé depuis cette session (403 GitHub,
+    # vraisemblablement une règle de protection des tags) — à remplacer par
+    # @v2 une fois ce tag créé (README d'app-kit : v1 reste immuable, tout
+    # changement de comportement se publie en v2).
+    uses: laurentsar/app-kit/.github/workflows/build-apk.yml@57a5df8c62ecbd78c1ae89849c4398c0b7a2b408
     with:
       apk_name: lecteur-iptv
       release_name: Lecteur IPTV
