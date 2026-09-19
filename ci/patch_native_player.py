@@ -377,6 +377,10 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private int reconnectAttempts = 0;
     private boolean userPaused = false;
+    // Mise en pause par onStop() (voir plus bas), à distinguer de userPaused
+    // (pause volontaire) : seule celle-ci doit reprendre automatiquement au
+    // retour dans l'appli.
+    private boolean pausedByBackground = false;
     // Une chaîne qui n'a JAMAIS donné d'image depuis qu'on l'a ouverte est
     // probablement morte (entrée de playlist périmée, séparateur décoratif) :
     // insister douze fois ferait patienter pour rien. Une chaîne qui jouait et
@@ -1563,6 +1567,38 @@ public class NativePlayerActivity extends AppCompatActivity {
                 .create();
         trackDialog(dialog);
         dialog.show();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Le bouton Accueil (ou tout passage en arrière-plan) ne détruit pas
+        // l'activité — seul onStop() est appelé, pas onDestroy() — donc sans
+        // ceci le son continuait à jouer indéfiniment en arrière-plan pour
+        // tout contenu qui ne bascule pas en PiP (VOD, ou direct sur un
+        // appareil sans PiP disponible ; le direct AVEC PiP, lui, doit
+        // continuer à jouer, visiblement, dans la mini-fenêtre — voir
+        // onUserLeaveHint/isInPip).
+        if (isInPip()) {
+            return;
+        }
+        Player p = playerView == null ? null : playerView.getPlayer();
+        if (p != null && p == localPlayer && p.getPlayWhenReady() && !userPaused) {
+            p.setPlayWhenReady(false);
+            pausedByBackground = true;
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (pausedByBackground) {
+            pausedByBackground = false;
+            Player p = playerView == null ? null : playerView.getPlayer();
+            if (p != null) {
+                p.setPlayWhenReady(true);
+            }
+        }
     }
 
     @Override
