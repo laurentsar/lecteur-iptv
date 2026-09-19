@@ -71,6 +71,28 @@ main { padding: 12px 12px calc(70px + env(safe-area-inset-bottom)); max-width: 9
 .panel.active { display: block; animation: fade .18s ease; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
 
+/* ---------- grands écrans (tablette, PWA de bureau) ---------- */
+@media (min-width: 1100px) {
+  main { max-width: 1200px; }
+}
+
+/* ---------- téléphone en paysage (hauteur réduite) ---------- */
+/* L'en-tête et la barre d'onglets, dimensionnés pour le portrait, prennent
+   une part disproportionnée d'une hauteur de paysage déjà courte (souvent
+   ~380-420px sur un téléphone) : réduits ici, avec la marge basse de <main>
+   ajustée en conséquence pour ne rien faire passer sous la barre. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .app-header { padding: calc(5px + env(safe-area-inset-top)) 14px 5px; }
+  .brand-logo { width: 28px; height: 28px; }
+  .app-header h1 { font-size: 14px; }
+  .app-header .sub { font-size: 11px; }
+  .tabs { padding: 3px 4px calc(3px + env(safe-area-inset-bottom)); }
+  .tab { padding: 3px 2px; gap: 1px; }
+  .tab-ic { font-size: 16px; }
+  .tab-lb { font-size: 9px; }
+  main { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+}
+
 .card {
   background: var(--card); border: 1px solid var(--line);
   border-radius: 14px; padding: 14px; margin-bottom: 12px;
@@ -154,6 +176,14 @@ button.ghost { background: var(--card2); color: var(--text); }
 .grid-cartes.bouquets .carte-corps { padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; }
 .grid-cartes.bouquets .carte-nom { font-size: 15.5px; -webkit-line-clamp: 1; }
 .grid-cartes.bouquets .carte-groupe { font-size: 12px; margin-top: 3px; }
+/* Sur tablette/grand écran, une ligne Liste/Bouquets étirée sur toute la
+   largeur laisse beaucoup de vide à droite de la vignette — plusieurs
+   colonnes tiennent mieux la place. */
+@media (min-width: 720px) {
+  .grid-cartes.liste, .grid-cartes.bouquets {
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  }
+}
 .carte {
   position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   overflow: hidden; cursor: pointer; display: flex; flex-direction: column;

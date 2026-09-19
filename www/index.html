@@ -168,19 +168,19 @@
       <div class="cat-title">🔄 Synchronisation</div>
       <div class="card">
         <h2>Sauvegarde automatique (Home Assistant)</h2>
-        <p class="hint">Playlists, favoris, clé TMDB et réglages sont copiés en continu vers l'entité <code>sensor.lecteur_iptv_sauvegarde</code> de Home Assistant, et restaurés en un clic après une réinstallation ou une perte de données. Refuse d'écraser une sauvegarde pleine par une sauvegarde vide, et garde la précédente en secours.</p>
+        <p class="hint">Playlists, favoris et réglages sont copiés en continu vers Home Assistant, et restaurés en un clic après une réinstallation.</p>
         <div id="backup-panel"></div>
       </div>
       <div class="card">
         <h2>Favoris synchronisés (Home Assistant)</h2>
-        <p class="hint">Les favoris sont partagés entre le téléphone et les télés via l'entité <code>sensor.lecteur_iptv_favoris</code> de Home Assistant. Fusion dans les deux sens : un ajout ou une suppression faite sur un appareil se retrouve sur les autres. Le jeton se crée dans HA : profil → Jetons d'accès longue durée.</p>
-        <p class="hint">La même URL/jeton peuvent aussi servir de <strong>relais vidéo</strong> sur la PWA : un serveur IPTV en <code>http://</code> (la plupart) est bloqué par le navigateur depuis une page en <code>https://</code> — Home Assistant, joignable en <code>https://</code> via Nabu Casa, relaie alors la requête à ta place. Installation du composant nécessaire : voir <code>homeassistant/README.md</code> dans le dépôt.</p>
+        <p class="hint">Les favoris sont partagés entre tous tes appareils via Home Assistant. Le jeton se crée dans HA : profil → Jetons d'accès longue durée.</p>
+        <p class="hint">Même URL/jeton : coche « relais vidéo » ci-dessous pour contourner le blocage http:// de la PWA via Home Assistant (Nabu Casa). Installation : <code>homeassistant/README.md</code>.</p>
         <div id="haSyncPanel"></div>
       </div>
       <div class="cat-title">🖥️ Affichage</div>
       <div class="card">
         <h2>Affichage TV</h2>
-        <p class="hint">Agrandit les noms de chaînes, les libellés d'onglets et les cibles du curseur pour une lecture à plusieurs mètres, sur un téléviseur ou un boîtier. Sans effet sur la mise en page ni sur le lecteur vidéo. À activer soi-même : rien ne permet de reconnaître un téléviseur de façon fiable depuis l'app (un boîtier Android TV se présente comme un téléphone).</p>
+        <p class="hint">Agrandit les textes et cibles du curseur pour une lecture à plusieurs mètres (télé, boîtier). À activer soi-même : l'app ne peut pas détecter un téléviseur de façon fiable.</p>
         <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optModeTv" /> Grands caractères (mode TV)</label>
       </div>
 
@@ -254,42 +254,42 @@
       <div class="card warn">
         <h2>⚠️ Ce que cette app fait — et ne fait pas</h2>
         <p>C'est un <strong>lecteur</strong> : il affiche et joue les flux d'une playlist M3U ou d'un compte Xtream Codes que <em>toi</em> tu fournis. L'app ne fournit, ne vend ni n'héberge aucune chaîne, film ou série.</p>
-        <p class="hint">Limites connues : les films/séries dont le fichier utilise un codec que le navigateur ne décode pas (HEVC, audio AC3/E-AC3/DTS/TrueHD, courants sur des rips IPTV) peuvent échouer dans le lecteur web — sur l'<strong>APK Android</strong>, l'app retente alors automatiquement avec le lecteur vidéo natif de l'appareil (Media3 ExoPlayer, hors WebView), qui embarque en plus un décodeur audio FFmpeg pour l'AC3/E-AC3/DTS/TrueHD ; sur la <strong>PWA</strong>, il n'y a pas de repli natif possible. Les flux <code>.ts</code> bruts (mpeg-ts en direct) sont lus via une librairie de démuxage dédiée (mpegts.js). L'EPG XMLTV compressé (<code>.gz</code>) n'est pas décompressé. Sur l'APK Android, le chargement des playlists, de l'API Xtream et des flux HLS (manifeste + segments) passe par le réseau natif pour éviter les blocages CORS des serveurs IPTV ; sur la PWA, un serveur qui bloque les requêtes navigateur (CORS) peut empêcher la playlist ou la vidéo de se charger. Les flux mpeg-ts bruts (en continu, non découpés en segments) et l'EPG restent soumis au CORS du serveur dans les deux cas. Certaines playlists utilisent une entrée factice comme séparateur visuel de catégorie (ex. <code>||--- FR ---||</code>) : l'app la détecte et l'affiche comme un titre de section, pas comme une chaîne cliquable. Si un flux ne démarre ni n'échoue en 20 secondes (chaîne hors service), un message s'affiche au lieu de rester bloqué.</p>
+        <p class="hint">Limites connues : un codec vidéo/audio rare (HEVC, AC3/DTS…) peut échouer dans le lecteur web — l'<strong>APK Android</strong> retente alors automatiquement avec le lecteur vidéo natif de l'appareil ; la <strong>PWA</strong> n'a pas ce repli. Sur la PWA, un serveur qui bloque les requêtes navigateur (CORS ou http:// non sécurisé) peut empêcher une playlist ou une vidéo de charger.</p>
       </div>
 
       <details class="saison">
         <summary class="saison-titre">🗂️ Bouquets &amp; 🗓️ Guide TV</summary>
         <div class="accordion-body">
-          <p class="hint">Dans <strong>En direct</strong>, la vue <strong>Liste</strong> affiche une chaîne par ligne (logo à gauche, nom et programme en cours à droite) ; la vue <strong>Bouquets</strong> affiche une grosse tuile par catégorie (avec une icône selon son thème et le nombre de chaînes), toucher un bouquet filtre dessus. Un menu déroulant permet aussi de choisir un bouquet directement en vue Liste. L'onglet <strong>Guide</strong> affiche un agenda heure par heure de toutes les chaînes en direct (une ligne par chaîne, défilement horizontal dans le temps, ligne rouge = maintenant, navigation jour précédent/suivant). Nécessite un EPG XMLTV (playlist M3U avec url-tvg, ou export xmltv.php automatique pour les comptes Xtream Codes) — sans EPG disponible, les chaînes s'affichent sans programme.</p>
+          <p class="hint"><strong>Liste</strong> : une chaîne par ligne. <strong>Bouquets</strong> : une tuile par catégorie. <strong>Guide</strong> : programme heure par heure de chaque chaîne (ligne rouge = maintenant) — nécessite un EPG XMLTV fourni par ta playlist ou ton compte Xtream, sinon les chaînes s'affichent sans programme.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">📺 Diffusion vers une TV</summary>
         <div class="accordion-body">
-          <p class="hint">Le bouton dans le lecteur envoie le flux en cours sur une TV : <strong>Chromecast</strong> (Android, APK et navigateur Chrome) ou <strong>AirPlay</strong> (iPhone/Mac, Safari). Aucun compte requis. Sur iPhone, comme l'app n'existe pas en version installable, c'est le lecteur web (Safari) qui sert de lecteur.</p>
+          <p class="hint">Le bouton dans le lecteur envoie le flux sur une TV : <strong>Chromecast</strong> (Android) ou <strong>AirPlay</strong> (iPhone/Mac). Aucun compte requis.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">📡 TV Android &amp; casque VR (Quest 3)</summary>
         <div class="accordion-body">
-          <p class="hint"><strong>TV Android / boîtiers IPTV</strong> : l'app s'installe et se lance normalement (pas d'écran tactile requis), et tous les éléments cliquables (cartes, grille du Guide) sont navigables à la télécommande — Entrée/OK activent l'élément sélectionné, avec un contour visible. Pas de lanceur Leanback dédié à grosses tuiles.</p>
-          <p class="hint"><strong>Meta Quest 3</strong> : deux usages, à ne pas confondre. L'<strong>APK</strong> side-loadée fonctionne telle quelle, exécutée par Horizon OS dans un panneau 2D flottant, sans adaptation. Le <strong>mode cinéma VR</strong>, lui, demande d'ouvrir la <strong>version web (PWA)</strong> dans le navigateur du casque : un bouton 🥽 apparaît alors dans le lecteur et projette la chaîne sur un grand écran incurvé (rayon 6 m, 16/9) dans une salle sombre, avec les chaînes du bouquet pointables à la manette sur la gauche. Des <strong>menus en 3D</strong> y donnent accès à toute l'application sans retirer le casque : chaînes, films, séries (avec leurs épisodes), radios et favoris, par bouquets et avec pagination. Les données restent dans l'application, qui n'envoie au casque que la page affichée (une dizaine de lignes) : un catalogue IPTV entier saturerait sa mémoire. Dans le même esprit, les moteurs vidéo (816 Ko) ne sont plus chargés d'office mais seulement quand le format du flux l'exige, et la liste de zapping transmise à l'ouverture est réduite à une fenêtre autour de la chaîne en cours au lieu du bouquet entier. Les <strong>chaînes 3D</strong> (côte-à-côte ou haut-bas) y sont vues en vrai relief : le format est reconnu au nom de la chaîne et corrigeable d'un bouton sous l'écran. C'est le seul endroit où le relief fonctionne — il demande deux images distinctes, donc deux yeux séparés, ce qu'aucun téléviseur du salon ne fait ici. Depuis l'<strong>APK</strong>, ce même bouton 🥽 sert de <strong>passerelle</strong> : il ouvre cette page dans le navigateur du casque, chaîne en cours déjà chargée, plutôt que de tenter un relief que la WebView d'Android ne sait pas produire (elle n'expose pas WebXR). Il n'apparaît que sur un appareil pourvu d'un navigateur — jamais sur une télé qui n'en a pas.</p>
+          <p class="hint"><strong>TV Android / boîtiers IPTV</strong> : l'app se navigue entièrement à la télécommande (Entrée/OK active l'élément sélectionné, contour visible).</p>
+          <p class="hint"><strong>Meta Quest 3</strong> : l'APK fonctionne telle quelle, dans un panneau 2D flottant. Pour un vrai <strong>cinéma VR</strong> (grand écran incurvé, menus 3D, chaînes en relief), ouvre la <strong>version web (PWA)</strong> dans le navigateur du casque — un bouton 🥽 apparaît alors dans le lecteur ; depuis l'APK, ce même bouton ouvre directement cette page dans le casque.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">🚗 Navigateur Tesla &amp; export de config</summary>
         <div class="accordion-body">
-          <p class="hint">La version web (PWA) fonctionne dans le navigateur embarqué d'une Tesla (interface tactile, aucune dépendance à la souris) — utilisable à l'arrêt, le navigateur étant désactivé pendant la conduite (restriction Tesla, pas de l'app). Pour éviter de retaper un compte Xtream au clavier tactile : <strong>Réglages → 💾 Sauvegarde &amp; export</strong> génère un code chiffré (phrase secrète obligatoire, PIN jamais inclus) à importer sur l'autre appareil par copier-coller, par lien direct (<code>#import=…</code>), ou via un lien court hébergé sur GitHub Pages (<code>?sync=…</code>, à demander à Claude) — pratique sur un écran sans clavier physique.</p>
+          <p class="hint">La PWA fonctionne dans le navigateur embarqué d'une Tesla (à l'arrêt uniquement). Pour éviter de retaper un compte au clavier tactile : <strong>Réglages → 💾 Sauvegarde &amp; export</strong> génère un code à importer sur l'autre appareil.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">🔒 Code PIN (bouquet adulte)</summary>
         <div class="accordion-body">
-          <p class="hint">Protège par code les catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ » (détection automatique sur le nom de la catégorie, pas de liste de contenus). Facultatif : tant qu'aucun code n'est défini, rien n'est masqué. Le code reste uniquement sur cet appareil.</p>
+          <p class="hint">Protège par code les catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ ». Facultatif : tant qu'aucun code n'est défini, rien n'est masqué.</p>
           <div class="row" style="margin-top:8px">
             <input type="password" inputmode="numeric" autocomplete="off" id="pinSettingInput" placeholder="Nouveau code PIN (4 chiffres ou plus)" style="flex:1 1 220px" />
             <button id="btnSavePin" class="ghost" style="flex:0 0 auto">Enregistrer</button>
@@ -301,56 +301,56 @@
       <details class="saison">
         <summary class="saison-titre">📼 Enregistrement (DVR)</summary>
         <div class="accordion-body">
-          <p class="hint"><strong>APK Android uniquement</strong> — enregistre un flux vers un fichier local via un service en arrière-plan, y compris appli fermée (notification permanente pendant l'enregistrement, obligatoire côté Android). Bouton ⏺ dans le lecteur d'une chaîne (immédiat, arrêt manuel ou après 4h) ou sur une émission à venir dans le <strong>Guide</strong> (programmé, démarre même appli fermée, réarmé après un redémarrage du téléphone). Consultation dans <strong>Ma liste</strong>. Un seul enregistrement à la fois. Limite assumée : certains téléphones (gestion de batterie agressive de certains constructeurs) peuvent arrêter le service sauf exception manuelle dans les réglages batterie — aucune app ne peut le garantir à 100 % sur Android.</p>
+          <p class="hint"><strong>APK Android uniquement</strong> — bouton ⏺ dans le lecteur (immédiat) ou sur une émission du <strong>Guide</strong> (programmé), continue même appli fermée. Consultation dans <strong>Ma liste</strong>. Un seul enregistrement à la fois.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">⧉ Picture-in-Picture</summary>
         <div class="accordion-body">
-          <p class="hint">Pour le <strong>direct</strong> uniquement, un bouton ⧉ réduit la chaîne en mini-fenêtre pour continuer à regarder en utilisant le reste de l'app ou une autre appli. Sur l'APK Android, si le lecteur natif de secours est utilisé (codec non décodable par le navigateur), appuyer sur le bouton Accueil réduit aussi automatiquement en PiP.</p>
+          <p class="hint">Pour le <strong>direct</strong> uniquement, un bouton ⧉ réduit la chaîne en mini-fenêtre pour continuer à naviguer ailleurs.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">🌐 Langue et sous-titres</summary>
         <div class="accordion-body">
-          <p class="hint">Quand un flux propose plusieurs pistes audio ou des sous-titres, un bouton 🌐 dans le lecteur permet de les choisir. Sur le web (PWA et APK), ça marche pour les flux <strong>HLS</strong> qui déclarent des pistes alternatives dans leur manifeste — pas pour le mpeg-ts brut ni la lecture directe (mp4/mkv). Sur l'APK, le lecteur natif de secours (ExoPlayer) le permet pour n'importe quel format, y compris mp4/mkv multi-pistes.</p>
+          <p class="hint">Quand un flux propose plusieurs pistes audio ou des sous-titres, un bouton 🌐 dans le lecteur permet de les choisir.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">🧊 Immersion 3D</summary>
         <div class="accordion-body">
-          <p class="hint">Troisième vue de l'onglet <strong>En direct</strong>, à côté de Bouquets et Liste : un carrousel en perspective qui montre une chaîne à la fois, en grand, avec son émission en cours — pensé pour une télé regardée de loin et une télécommande. Se parcourt aux flèches ◀ ▶ (ou ⏮ ⏭ de 10 en 10), au balayage du doigt, à la molette ; OK lance la chaîne centrée, et toucher une chaîne de côté s'y déplace. Elle respecte le bouquet choisi et la recherche en cours, et n'a pas de « Charger plus » : tout le bouquet est parcourable d'un bout à l'autre, seules quelques chaînes autour de la position existent réellement à l'écran.</p>
+          <p class="hint">Troisième vue de <strong>En direct</strong> : un carrousel qui montre une chaîne à la fois, en grand, avec son émission en cours — pensé pour une télé regardée de loin et une télécommande. Flèches ◀ ▶ pour naviguer, OK pour lancer.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">🔁 Coupures et reconnexion</summary>
         <div class="accordion-body">
-          <p class="hint">Un flux IPTV en direct s'interrompt régulièrement — micro-coupure du fournisseur, réseau saturé, segment manquant. La lecture se relance désormais <strong>toute seule</strong> au lieu de rester figée : une première tentative après 1,5 s, puis un délai qui double à chaque échec d'affilée (plafonné à 15 s) pour ne pas marteler un serveur en panne, et remis à zéro dès que l'image revient. Un blocage silencieux — le lecteur attend des données sans jamais signaler d'erreur, ce qu'on prend pour une pause — est traité de la même façon au bout de 12 s. Une pause que <em>tu</em> demandes n'est jamais relancée dans ton dos. Après une douzaine d'échecs consécutifs, l'app ne s'arrête pas pour autant : si la chaîne existe sous <strong>plusieurs sources</strong> (les entrées en double d'une playlist, regroupées sous une même carte), elle bascule sur la suivante — toujours de qualité <strong>inférieure ou égale</strong>, jamais supérieure : insister en 4K sur une ligne qui ne suit pas n'aurait aucun sens. Une source déjà tombée n'est pas reproposée. Ce n'est qu'une fois toutes les sources épuisées que l'app renonce et te le dit clairement : les reprises automatiques ne masquent jamais une vraie panne. Une chaîne qui n'a jamais donné d'image, elle, abandonne après deux essais — c'est en général une entrée de playlist périmée.</p>
+          <p class="hint">Une coupure (micro-coupure fournisseur, réseau saturé) relance désormais la lecture <strong>toute seule</strong>, sans intervention. Si la chaîne existe sous plusieurs sources, l'app bascule automatiquement sur une autre (jamais de qualité supérieure) avant d'abandonner et de te prévenir clairement.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">📶 Débit faible &amp; doublons</summary>
         <div class="accordion-body">
-          <p class="hint">Les réglages de lecture (HLS, mpeg-ts, lecteur natif de secours) priorisent la stabilité plutôt que la qualité maximale : démarrage sur la qualité la plus basse puis remontée prudente, mémoire tampon étendue pour absorber les ralentissements sans décrocher. Dans <strong>En direct</strong> et <strong>Films</strong>, les entrées listées plusieurs fois sous des noms voisins (sources ou qualités différentes) sont regroupées sous une seule carte ; toucher une carte à plusieurs sources (ou le bouton Regarder d'une fiche film) ouvre un sélecteur pour basculer manuellement vers une version plus légère si besoin.</p>
+          <p class="hint">La lecture priorise la stabilité à la qualité maximale sur une connexion faible. Les chaînes/films en double dans la playlist sont regroupés sous une seule carte ; la toucher ouvre un sélecteur pour changer de source manuellement.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">🎬 Fiches films</summary>
         <div class="accordion-body">
-          <p class="hint">Toucher un film ouvre sa fiche (affiche, âge, note, durée, genre, descriptif) avant de lancer la lecture. Ces informations viennent du catalogue du fournisseur (comptes Xtream Codes uniquement, via <code>get_vod_info</code>) — leur disponibilité, et en particulier l'âge, dépend de ce que le fournisseur a renseigné. Une playlist M3U n'affiche que l'affiche, le titre et la catégorie, faute de ces métadonnées dans le format. Ce qui manque peut être complété via TMDB, ci-dessous.</p>
+          <p class="hint">Toucher un film ouvre sa fiche (affiche, âge, note, durée, genre, descriptif) avant de lancer la lecture — ces informations viennent du catalogue de ton fournisseur (comptes Xtream uniquement ; une playlist M3U n'affiche que l'affiche et le titre). Ce qui manque peut être complété via TMDB, ci-dessous.</p>
         </div>
       </details>
 
       <details class="saison">
         <summary class="saison-titre">🖼️ Enrichissement TMDB (facultatif)</summary>
         <div class="accordion-body">
-          <p class="hint">Si un film n'a pas d'affiche, de descriptif ou d'âge (playlists M3U, ou catalogue Xtream peu renseigné), l'app peut compléter sa fiche en interrogeant <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> à partir du titre — seulement pour ce qui manque, jamais pour remplacer les infos déjà fournies par ton fournisseur. Facultatif : laisse le champ vide pour désactiver. <strong>Contrairement au reste de l'app, activer ceci envoie le titre du film recherché à TMDB</strong> (un tiers), rien d'autre.</p>
+          <p class="hint">Complète les fiches films incomplètes en interrogeant <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> à partir du titre. Facultatif : laisse le champ vide pour désactiver. <strong>Envoie le titre du film à TMDB</strong> (un tiers), rien d'autre.</p>
           <div class="row" style="margin-top:8px">
             <input type="text" id="tmdbKeyInput" placeholder="Clé API TMDB (v3, facultative)" style="flex:1 1 220px" autocomplete="off" />
             <button id="btnSaveTmdb" class="ghost" style="flex:0 0 auto">Enregistrer</button>
@@ -473,7 +473,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.25';
+    window.APP_VERSION = '2.26';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
