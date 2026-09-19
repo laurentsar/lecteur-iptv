@@ -176,14 +176,6 @@ button.ghost { background: var(--card2); color: var(--text); }
 .grid-cartes.bouquets .carte-corps { padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; }
 .grid-cartes.bouquets .carte-nom { font-size: 15.5px; -webkit-line-clamp: 1; }
 .grid-cartes.bouquets .carte-groupe { font-size: 12px; margin-top: 3px; }
-/* Sur tablette/grand écran, une ligne Liste/Bouquets étirée sur toute la
-   largeur laisse beaucoup de vide à droite de la vignette — plusieurs
-   colonnes tiennent mieux la place. */
-@media (min-width: 720px) {
-  .grid-cartes.liste, .grid-cartes.bouquets {
-    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  }
-}
 .carte {
   position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   overflow: hidden; cursor: pointer; display: flex; flex-direction: column;
