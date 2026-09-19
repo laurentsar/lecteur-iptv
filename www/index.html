@@ -197,7 +197,7 @@
         <div id="playlists"></div>
       </div>
       <div class="card">
-        <h2>Ajouter une playlist</h2>
+        <h2 id="formPlaylistTitre">Ajouter une playlist</h2>
         <div class="grid2">
           <label>Nom
             <input type="text" id="pl_nom" placeholder="Mon fournisseur IPTV" />
@@ -237,6 +237,7 @@
         <div class="row" style="margin-top:12px">
           <button id="btnTester" class="ghost">🔌 Tester la connexion</button>
           <button id="btnAjouterPlaylist" class="primary">➕ Ajouter</button>
+          <button id="btnAnnulerEdition" class="ghost" style="display:none">✖️ Annuler</button>
         </div>
         <div id="testResult" class="hint"></div>
       </div>
@@ -394,7 +395,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.28';
+    window.APP_VERSION = '2.29';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans

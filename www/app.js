@@ -2731,6 +2731,12 @@
   }
 
   // ---------- playlists : liste + formulaire ----------
+  // id de la playlist en cours de modification (null = formulaire en mode
+  // « ajout ») : le même formulaire sert aux deux, seul le bouton principal
+  // change de libellé et d'action (Store.updatePlaylist au lieu
+  // d'addPlaylist).
+  var editingPlaylistId = null;
+
   function renderPlaylists() {
     var container = $id('playlists');
     var playlists = Store.getPlaylists();
@@ -2754,11 +2760,16 @@
         refresh.addEventListener('click', function () { refreshActivePlaylist(); });
         row.appendChild(refresh);
       }
+      var edit = el('button', null, '✏️');
+      edit.title = 'Modifier';
+      edit.addEventListener('click', function () { startEditPlaylist(p); });
+      row.appendChild(edit);
       var del = el('button', null, '🗑️');
       del.title = 'Supprimer';
       del.addEventListener('click', function () {
         askConfirm('Supprimer la playlist « ' + p.nom + ' » ?').then(function (ok) {
           if (!ok) return;
+          if (editingPlaylistId === p.id) stopEditPlaylist();
           Store.removePlaylist(p.id);
           if (Store.getActivePlaylistId()) setActivePlaylist(Store.getActivePlaylistId()); else { state.playlist = null; updateHeader(); }
           renderPlaylists();
@@ -2768,6 +2779,51 @@
       container.appendChild(row);
     });
   }
+
+  // Pré-remplit le formulaire « Ajouter une playlist » avec les valeurs
+  // existantes et bascule son bouton principal en mode modification —
+  // évite d'avoir à supprimer puis recréer une playlist pour juste changer
+  // un identifiant ou une URL.
+  function startEditPlaylist(p) {
+    editingPlaylistId = p.id;
+    $id('pl_nom').value = p.nom || '';
+    $id('pl_type').value = p.type;
+    $id('pl_type').dispatchEvent(new Event('change'));
+    if (p.type === 'xtream') {
+      $id('pl_serveur').value = p.serveur || '';
+      $id('pl_user').value = p.utilisateur || '';
+      $id('pl_pass').value = p.motDePasse || '';
+    } else {
+      $id('pl_m3uUrl').value = p.m3uUrl || '';
+      $id('pl_epgUrl').value = p.epgUrl || '';
+    }
+    $id('pl_m3uFile').value = '';
+    $id('testResult').textContent = p.m3uUpload
+      ? 'Fichier déjà importé conservé — laisse ce champ vide, ou importe un nouveau fichier pour le remplacer.'
+      : '';
+    $id('formPlaylistTitre').textContent = 'Modifier la playlist';
+    $id('btnAjouterPlaylist').textContent = '💾 Enregistrer les modifications';
+    $id('btnAnnulerEdition').style.display = '';
+    goTab('reglages');
+    $id('pl_nom').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function stopEditPlaylist() {
+    editingPlaylistId = null;
+    $id('formPlaylistTitre').textContent = 'Ajouter une playlist';
+    $id('btnAjouterPlaylist').textContent = '➕ Ajouter';
+    $id('btnAnnulerEdition').style.display = 'none';
+  }
+
+  function reinitialiserFormulairePlaylist() {
+    $id('pl_nom').value = ''; $id('pl_serveur').value = ''; $id('pl_user').value = ''; $id('pl_pass').value = '';
+    $id('pl_m3uUrl').value = ''; $id('pl_m3uFile').value = ''; $id('pl_epgUrl').value = ''; $id('testResult').textContent = '';
+  }
+
+  $id('btnAnnulerEdition').addEventListener('click', function () {
+    reinitialiserFormulairePlaylist();
+    stopEditPlaylist();
+  });
 
   $id('pl_type').addEventListener('change', function () {
     var isM3u = $id('pl_type').value === 'm3u';
@@ -2788,8 +2844,17 @@
     var url = $id('pl_m3uUrl').value.trim();
     var file = $id('pl_m3uFile').files[0];
     var epgUrl = $id('pl_epgUrl').value.trim() || null;
-    if (!url && !file) return { error: 'Indique une URL de playlist ou importe un fichier.' };
-    return { draft: { nom: nom, type: 'm3u', m3uUrl: url || null, epgUrl: epgUrl, _file: file } };
+    // En modification d'une playlist déjà importée par fichier, laisser le
+    // champ URL et le champ fichier vides doit conserver le fichier
+    // existant (Store.rawGet n'est pas touché) plutôt qu'exiger de le
+    // réimporter juste pour changer le nom ou l'URL EPG.
+    var existante = editingPlaylistId && Store.getPlaylists().find(function (p) { return p.id === editingPlaylistId; });
+    var conserveFichier = !url && !file && existante && existante.type === 'm3u' && existante.m3uUpload;
+    if (!url && !file && !conserveFichier) return { error: 'Indique une URL de playlist ou importe un fichier.' };
+    var draft = { nom: nom, type: 'm3u', epgUrl: epgUrl, _file: file };
+    if (conserveFichier) { draft.m3uUrl = null; draft.m3uUpload = true; }
+    else { draft.m3uUrl = url || null; draft.m3uUpload = false; }
+    return { draft: draft };
   }
 
   $id('btnTester').addEventListener('click', function () {
@@ -2808,6 +2873,8 @@
         var parsed = M3U.parse(text);
         out.textContent = '✅ Fichier lu — ' + parsed.items.length + ' entrée(s) trouvée(s).';
       }).catch(function (err) { out.textContent = '❌ Fichier illisible : ' + err.message; });
+    } else if (res.draft.m3uUpload) {
+      out.textContent = 'ℹ️ Fichier déjà importé conservé — rien à tester sans un nouveau fichier.';
     } else {
       Net.fetchText(res.draft.m3uUrl)
         .then(function (text) { var parsed = M3U.parse(text); out.textContent = '✅ Playlist lue — ' + parsed.items.length + ' entrée(s) trouvée(s).'; })
@@ -2820,13 +2887,23 @@
     if (res.error) { toast(res.error); return; }
     var draft = res.draft;
     var file = draft._file; delete draft._file;
-    var saved = Store.addPlaylist(draft);
+    var idEnEdition = editingPlaylistId;
+    var saved = idEnEdition ? Store.updatePlaylist(idEnEdition, draft) : Store.addPlaylist(draft);
     var finish = function () {
-      $id('pl_nom').value = ''; $id('pl_serveur').value = ''; $id('pl_user').value = ''; $id('pl_pass').value = '';
-      $id('pl_m3uUrl').value = ''; $id('pl_m3uFile').value = ''; $id('pl_epgUrl').value = ''; $id('testResult').textContent = '';
-      setActivePlaylist(saved.id);
+      reinitialiserFormulairePlaylist();
+      stopEditPlaylist();
+      if (idEnEdition) {
+        // Le serveur/l'URL a pu changer : invalider le cache M3U (idb) pour
+        // forcer un rechargement depuis la nouvelle source au prochain
+        // affichage, et resynchroniser l'état en mémoire si c'est la
+        // playlist actuellement active.
+        if (saved.type === 'm3u') Store.cacheSet(saved.id, null);
+        if (state.playlist && state.playlist.id === saved.id) setActivePlaylist(saved.id);
+      } else {
+        setActivePlaylist(saved.id);
+      }
       renderPlaylists();
-      toast('Playlist « ' + saved.nom + ' » ajoutée');
+      toast('Playlist « ' + saved.nom + ' » ' + (idEnEdition ? 'modifiée' : 'ajoutée'));
       goTab('accueil');
     };
     if (file) {
