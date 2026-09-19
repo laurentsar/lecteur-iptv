@@ -1161,15 +1161,16 @@
     return order.map(function (fam) {
       var versions = byKey[fam];
       var logo = versions.map(function (v) { return v.logo; }).filter(Boolean)[0] || null;
-      // La source jouée par défaut reste celle que la playlist annonce en
-      // premier — le fournisseur y met en général la plus fiable, et la
-      // changer sans raison serait une régression silencieuse. En revanche la
-      // LISTE est triée par qualité décroissante : c'est ce qui permet aux
-      // lecteurs, quand une source se coupe sans arrêt, de basculer sur la
-      // suivante en sachant qu'elle est de qualité inférieure ou égale (voir
-      // source-quality.js).
-      var principal = versions[0];
-      return Object.assign({}, principal, { logo: logo, versions: SourceQuality.ordonner(versions) });
+      // La source jouée par défaut est la mieux notée par SourceQuality
+      // (4K > FHD > HD > SD, devinée au nom) — la meilleure image dès le
+      // premier lancement, pas seulement en cas de repli. Si elle se coupe
+      // sans arrêt, les lecteurs basculent automatiquement sur la suivante
+      // dans cette même liste triée, donc de qualité inférieure ou égale,
+      // sans jamais remonter (voir source-quality.js) : la fiabilité reste
+      // couverte par ce mécanisme de repli, pas par le choix initial.
+      var ordonnees = SourceQuality.ordonner(versions);
+      var principal = ordonnees[0];
+      return Object.assign({}, principal, { logo: logo, versions: ordonnees });
     });
   }
 

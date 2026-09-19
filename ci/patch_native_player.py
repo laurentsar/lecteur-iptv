@@ -725,12 +725,16 @@ public class NativePlayerActivity extends AppCompatActivity {
         playerView = findViewById(R.id.playerView);
         applyTvOverscanSafeMargin();
 
-        // PREFER : utilise l'extension FFmpeg (native/decoder-ffmpeg) pour
-        // l'audio AC3/E-AC3/DTS/TrueHD quand le décodeur de l'appareil ne
-        // sait pas le faire ; sans effet sur les formats qu'elle ne couvre
-        // pas (elle ne déclare le support que pour ces codecs précis).
+        // ON (pas PREFER) : priorité au décodeur de la plateforme pour
+        // l'audio AC3/E-AC3/DTS/TrueHD. Sur un boîtier/TV relié en HDMI
+        // ARC/eARC à un ampli ou une barre de son compatible, la plateforme
+        // relaie le flux original en passthrough (bitstream) au lieu de le
+        // décoder — la meilleure qualité possible, sans repasser par une
+        // conversion côté appli. L'extension FFmpeg (native/decoder-ffmpeg)
+        // ne prend le relais qu'en dernier recours, sur les appareils qui ne
+        // savent faire ni décoder ni passthrough ces formats nativement.
         DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(this)
-                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER);
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
 
         // Tampon plus généreux qu'en réglages par défaut : priorité à la
         // stabilité sur un débit faible/instable plutôt qu'au démarrage
