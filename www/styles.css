@@ -496,6 +496,14 @@ body.tv .version-item, body.tv .episode-row { font-size: 16px; padding: 14px; }
 .player-close { background: rgba(255,255,255,.12); border: none; color: #fff; font-size: 18px; border-radius: 8px; padding: 6px 11px; cursor: pointer; flex: none; }
 #playerVideo { flex: 1; width: 100%; background: #000; }
 
+/* ---------- émulateur (Mega Drive/NES) : même langage visuel que le lecteur vidéo ---------- */
+.emu-overlay { position: fixed; inset: 0; background: #000; z-index: 999; display: flex; flex-direction: column; }
+.emu-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: rgba(10,16,24,.85); flex: none;
+}
+.emu-frame { flex: 1; width: 100%; border: 0; background: #000; }
+
 /* ---------- bandeau permanent du programme en cours (bas d'écran) ---------- */
 .prog-bar {
   color: #fff; font-size: 12.5px; text-align: center; padding: 6px 12px;

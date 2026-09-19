@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Émulateur</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #game { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+<script>
+  // Page hébergée dans une iframe dédiée (voir app.js/lancerJeu) : reçoit la
+  // ROM du parent via postMessage (ArrayBuffer transférable, pas de copie),
+  // et lance EmulatorJS (moteur libre, chargé depuis son CDN officiel —
+  // jamais embarqué dans l'appli, ni les cœurs ni une quelconque ROM).
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'lancer-jeu' || e.source !== window.parent) return;
+    window.EJS_player = '#game';
+    window.EJS_core = e.data.core;
+    window.EJS_gameName = e.data.nom || 'Jeu';
+    window.EJS_gameUrl = e.data.rom;
+    window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+    window.EJS_startOnLoaded = true;
+    window.EJS_backgroundColor = '#000';
+    var s = document.createElement('script');
+    s.src = window.EJS_pathtodata + 'loader.js';
+    document.body.appendChild(s);
+  });
+</script>
+</body>
+</html>

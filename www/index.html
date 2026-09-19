@@ -57,6 +57,7 @@
     <button class="tab" data-tab="films"><span class="tab-ic">🎬</span><span class="tab-lb">Films</span></button>
     <button class="tab" data-tab="series"><span class="tab-ic">🎞️</span><span class="tab-lb">Séries</span></button>
     <button class="tab" data-tab="radio"><span class="tab-ic">📻</span><span class="tab-lb">Radio</span></button>
+    <button class="tab" data-tab="jeux"><span class="tab-ic">🎮</span><span class="tab-lb">Jeux</span></button>
     <button class="tab" data-tab="maliste"><span class="tab-ic">⭐</span><span class="tab-lb">Ma liste</span></button>
     <button class="tab" data-tab="reglages"><span class="tab-ic">⚙️</span><span class="tab-lb">Réglages</span></button>
   </nav>
@@ -139,6 +140,30 @@
       </div>
       <div id="listeRadio" class="grid-cartes liste"></div>
       <div class="row"><button id="plusRadio" class="ghost" style="display:none">Charger plus</button></div>
+    </section>
+
+    <!-- ================= JEUX (émulateur Mega Drive / NES) ================= -->
+    <section class="panel" id="tab-jeux">
+      <div class="cat-title">🎮 Jeux</div>
+      <div class="card">
+        <h2>Émulateur de jeux</h2>
+        <p class="hint">Joue à tes propres jeux Mega Drive/Genesis et NES à partir d'un fichier ROM que tu importes toi-même (cartouches que tu possèdes) — l'appli n'en fournit ni n'en télécharge aucun. Le moteur d'émulation (<a href="https://emulatorjs.org" target="_blank" rel="noopener">EmulatorJS</a>, libre) se charge depuis internet au premier lancement.</p>
+        <div class="grid2">
+          <label>Console
+            <select id="jeu_systeme">
+              <option value="megadrive">Mega Drive / Genesis</option>
+              <option value="nes">NES</option>
+            </select>
+          </label>
+          <label>Fichier ROM
+            <input type="file" id="jeu_rom" accept=".md,.gen,.smd,.bin,.zip" />
+          </label>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="btnJouer" class="primary">▶️ Jouer</button>
+        </div>
+        <div id="jeuResult" class="hint"></div>
+      </div>
     </section>
 
     <!-- ================= MA LISTE (favoris + enregistrements) ================= -->
@@ -394,8 +419,19 @@
     </div>
   </div>
 
+  <!-- Émulateur (Mega Drive/NES) : iframe dédiée — isole le moteur EmulatorJS
+       (WASM + audio) du reste de l'appli, et la refermer suffit à tout
+       arrêter proprement (remplacée par about:blank). -->
+  <div id="emuOverlay" class="emu-overlay" style="display:none">
+    <div class="emu-top">
+      <div class="player-title" id="emuTitre">Jeu</div>
+      <button id="btnFermerJeu" class="player-close" aria-label="Fermer">✕</button>
+    </div>
+    <iframe id="emuFrame" class="emu-frame" title="Émulateur"></iframe>
+  </div>
+
   <script>
-    window.APP_VERSION = '2.29';
+    window.APP_VERSION = '2.30';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
