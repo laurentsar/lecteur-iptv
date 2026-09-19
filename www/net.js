@@ -107,6 +107,37 @@
     return /\btls\b|\bssl\b|\bhandshake\b/i.test(String((err && err.message) || err || ''));
   }
 
+  // Page servie en https:// (PWA GitHub Pages) qui tente de joindre un
+  // serveur IPTV en http:// (le cas quasi général — la plupart des panels
+  // Xtream/M3U n'ont pas de certificat) : tous les navigateurs bloquent ce
+  // "contenu mixte" avant même d'émettre la requête, aucune en-tête
+  // serveur ni code JS ne peut lever cette restriction — contrairement au
+  // CORS (qui dépend du serveur), c'est une politique fixe du navigateur.
+  // Sans ce contrôle, l'échec remonte comme "Load failed" (Safari) ou
+  // "Failed to fetch" (Chrome), indiscernable d'une vraie panne réseau —
+  // constaté en usage réel sur iPhone. On le détecte ici pour donner tout
+  // de suite un message exploitable, plutôt que de tenter un fetch() voué
+  // à l'échec.
+  function isMixedContentBlocked(url) {
+    return !!(global.location && global.location.protocol === 'https:' && /^http:\/\//i.test(url));
+  }
+
+  function mixedContentError() {
+    return new Error('le navigateur bloque l’accès à un serveur en http:// (non sécurisé) depuis ' +
+      'cette page en https:// — restriction de sécurité systématique, sans contournement possible ' +
+      'ici. Utilise l’APK Android (pas soumise à cette limite), ou une adresse de serveur en ' +
+      'https:// si ton fournisseur IPTV en propose une.');
+  }
+
+  // Factorise le contrôle de contenu mixte ci-dessus sur les 6 points
+  // d'appel à fetch() du fichier (texte/octets/JSON × natif absent ou en
+  // repli) : rejette tout de suite plutôt que de laisser fetch() échouer
+  // avec un message générique.
+  function browserFetch(url, transform, timeout) {
+    if (isMixedContentBlocked(url)) return Promise.reject(mixedContentError());
+    return withTimeout(fetch(url).then(transform), timeout);
+  }
+
   function withHttpsDowngrade(url, attempt) {
     return attempt(url).catch(function (err) {
       if (!/^https:\/\//i.test(url) || !isTlsFailure(err)) throw err;
@@ -127,17 +158,17 @@
           return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
         })),
         function () {
-          return withTimeout(fetch(url).then(function (r) {
+          return browserFetch(url, function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.text();
-          }));
+          });
         }
       );
     }
-    return withTimeout(fetch(url).then(function (r) {
+    return browserFetch(url, function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
-    }));
+    });
   }
 
   // Octets bruts (pour l'EPG XMLTV, potentiellement gzip — voir epg.js) :
@@ -160,17 +191,17 @@
           return bytes.buffer;
         }), BYTES_TIMEOUT_MS),
         function () {
-          return withTimeout(fetch(url).then(function (r) {
+          return browserFetch(url, function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.arrayBuffer();
-          }), BYTES_TIMEOUT_MS);
+          }, BYTES_TIMEOUT_MS);
         }
       );
     }
-    return withTimeout(fetch(url).then(function (r) {
+    return browserFetch(url, function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.arrayBuffer();
-    }), BYTES_TIMEOUT_MS);
+    }, BYTES_TIMEOUT_MS);
   }
 
   function fetchJson(url) {
@@ -186,17 +217,17 @@
           return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
         })),
         function () {
-          return withTimeout(fetch(url).then(function (r) {
+          return browserFetch(url, function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
-          }));
+          });
         }
       );
     }
-    return withTimeout(fetch(url).then(function (r) {
+    return browserFetch(url, function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
-    }));
+    });
   }
 
   global.Net = { fetchText: fetchText, fetchJson: fetchJson, fetchBytes: fetchBytes, isNative: function () { return !!nativeHttp(); } };
