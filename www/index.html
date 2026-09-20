@@ -195,144 +195,168 @@
 
     <!-- ================= RÉGLAGES (playlists + infos) ================= -->
     <section class="panel" id="tab-reglages">
-      <div class="cat-title">🔄 Synchronisation</div>
-      <div class="card">
-        <h2>Sauvegarde automatique (Home Assistant)</h2>
-        <p class="hint">Playlists, favoris et réglages sont copiés en continu vers Home Assistant, et restaurés en un clic après une réinstallation.</p>
-        <div id="backup-panel"></div>
-      </div>
-      <div class="card">
-        <h2>Favoris synchronisés (Home Assistant)</h2>
-        <p class="hint">Les favoris sont partagés entre tous tes appareils via Home Assistant. Le jeton se crée dans HA : profil → Jetons d'accès longue durée.</p>
-        <p class="hint">Même URL/jeton : coche « relais vidéo » ci-dessous pour contourner le blocage http:// de la PWA via Home Assistant (Nabu Casa). Installation : <code>homeassistant/README.md</code>.</p>
-        <div id="haSyncPanel"></div>
-      </div>
-      <div class="cat-title">🖥️ Affichage</div>
-      <div class="card">
-        <h2>Affichage TV</h2>
-        <p class="hint">Agrandit les textes et cibles du curseur pour une lecture à plusieurs mètres (télé, boîtier). À activer soi-même : l'app ne peut pas détecter un téléviseur de façon fiable.</p>
-        <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optModeTv" /> Grands caractères (mode TV)</label>
-      </div>
-      <div class="card">
-        <h2>Filtre lumière bleue</h2>
-        <p class="hint">L'appli est déjà entièrement en thème sombre (pas de mode clair à désactiver) — ce filtre va plus loin en teintant l'écran d'ambre pour réduire la lumière bleue en soirée, plus reposant pour les yeux.</p>
-        <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optFiltreNuit" /> 🌙 Activer le filtre</label>
-      </div>
-
-      <div class="cat-title" id="cat-lecture" style="display:none">▶️ Lecture</div>
-      <div class="card" id="card-lecture" style="display:none">
-        <h2>Lecteur vidéo natif</h2>
-        <p class="hint">Lecture hors WebView (Media3/ExoPlayer) : décode l'HEVC et l'audio AC3/E-AC3/DTS que le navigateur refuse, et tient mieux la charge sur une télé ou un boîtier. Décoche pour revenir au lecteur web — il reste utilisé automatiquement si le lecteur natif échoue.</p>
-        <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optLecteurNatif" checked /> Lire avec le lecteur natif</label>
-      </div>
-
-      <div class="cat-title">🗂️ Playlists</div>
-      <div class="card">
-        <h2>Mes playlists</h2>
-        <div id="playlists"></div>
-      </div>
-      <div class="card">
-        <h2 id="formPlaylistTitre">Ajouter une playlist</h2>
-        <div class="grid2">
-          <label>Nom
-            <input type="text" id="pl_nom" placeholder="Mon fournisseur IPTV" />
-          </label>
-          <label>Type de source
-            <select id="pl_type">
-              <option value="xtream">Xtream Codes (serveur + identifiants)</option>
-              <option value="m3u">Playlist M3U / M3U8</option>
-            </select>
-          </label>
-        </div>
-
-        <div id="formXtream" class="grid2" style="margin-top:10px">
-          <label>Serveur (URL)
-            <input type="text" id="pl_serveur" placeholder="http://serveur.exemple.com:8080" />
-          </label>
-          <label>Utilisateur
-            <input type="text" id="pl_user" autocomplete="off" />
-          </label>
-          <label>Mot de passe
-            <input type="text" id="pl_pass" autocomplete="off" />
-          </label>
-        </div>
-
-        <div id="formM3u" class="grid2" style="margin-top:10px; display:none">
-          <label>URL de la playlist
-            <input type="text" id="pl_m3uUrl" placeholder="https://…/playlist.m3u8" />
-          </label>
-          <label>Ou importer un fichier
-            <input type="file" id="pl_m3uFile" accept=".m3u,.m3u8,.txt" />
-          </label>
-          <label>URL EPG (XMLTV, optionnel)
-            <input type="text" id="pl_epgUrl" placeholder="https://…/epg.xml" />
-          </label>
-        </div>
-
-        <div class="row" style="margin-top:12px">
-          <button id="btnTester" class="ghost">🔌 Tester la connexion</button>
-          <button id="btnAjouterPlaylist" class="primary">➕ Ajouter</button>
-          <button id="btnAnnulerEdition" class="ghost" style="display:none">✖️ Annuler</button>
-        </div>
-        <div id="testResult" class="hint"></div>
-      </div>
-
-      <div class="card">
-        <h2>💾 Sauvegarde &amp; export (Tesla, autre appareil…)</h2>
-        <p class="hint">Exporte ta configuration (playlists, favoris) sous forme d'un code chiffré, à transférer facilement vers un autre appareil — par exemple le navigateur d'une Tesla, où retaper un compte Xtream au clavier tactile est pénible.</p>
-        <div class="row" style="margin-top:8px">
-          <button id="btnExportConfig" class="ghost">📤 Exporter</button>
-          <button id="btnImportConfig" class="ghost">📥 Importer</button>
-        </div>
-      </div>
-
-      <div class="cat-title" style="margin-top:22px">ℹ️ Infos</div>
-      <div class="card warn">
-        <h2>⚠️ Ce que cette app fait — et ne fait pas</h2>
-        <p>C'est un <strong>lecteur</strong> : il affiche et joue les flux d'une playlist M3U ou d'un compte Xtream Codes que <em>toi</em> tu fournis. L'app ne fournit, ne vend ni n'héberge aucune chaîne, film ou série.</p>
-      </div>
-
+      <!-- Chaque catégorie repliée par défaut (<details>, comme les saisons de
+           séries) : la liste complète des réglages tenait sur plusieurs écrans
+           d'un coup, illisible d'un coup d'œil. -->
       <details class="saison">
-        <summary class="saison-titre">🔒 Code PIN (bouquet adulte)</summary>
+        <summary class="saison-titre">🔄 Synchronisation</summary>
         <div class="accordion-body">
-          <p class="hint">Protège par code les catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ ». Facultatif : tant qu'aucun code n'est défini, rien n'est masqué.</p>
-          <div class="row" style="margin-top:8px">
-            <input type="password" inputmode="numeric" autocomplete="off" id="pinSettingInput" placeholder="Nouveau code PIN (4 chiffres ou plus)" style="flex:1 1 220px" />
-            <button id="btnSavePin" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+          <div class="card">
+            <h2>Sauvegarde automatique (Home Assistant)</h2>
+            <p class="hint">Playlists, favoris et réglages sont copiés en continu vers Home Assistant, et restaurés en un clic après une réinstallation.</p>
+            <div id="backup-panel"></div>
           </div>
-          <p class="hint" id="pinSettingStatus"></p>
+          <div class="card">
+            <h2>Favoris synchronisés (Home Assistant)</h2>
+            <p class="hint">Les favoris sont partagés entre tous tes appareils via Home Assistant. Le jeton se crée dans HA : profil → Jetons d'accès longue durée.</p>
+            <p class="hint">Même URL/jeton : coche « relais vidéo » ci-dessous pour contourner le blocage http:// de la PWA via Home Assistant (Nabu Casa). Installation : <code>homeassistant/README.md</code>.</p>
+            <div id="haSyncPanel"></div>
+          </div>
         </div>
       </details>
 
       <details class="saison">
-        <summary class="saison-titre">🖼️ Enrichissement TMDB (facultatif)</summary>
+        <summary class="saison-titre">🖥️ Affichage</summary>
         <div class="accordion-body">
-          <p class="hint">Complète les fiches films incomplètes en interrogeant <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> à partir du titre. Facultatif : laisse le champ vide pour désactiver. <strong>Envoie le titre du film à TMDB</strong> (un tiers), rien d'autre.</p>
-          <div class="row" style="margin-top:8px">
-            <input type="text" id="tmdbKeyInput" placeholder="Clé API TMDB (v3, facultative)" style="flex:1 1 220px" autocomplete="off" />
-            <button id="btnSaveTmdb" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+          <div class="card">
+            <h2>Affichage TV</h2>
+            <p class="hint">Agrandit les textes et cibles du curseur pour une lecture à plusieurs mètres (télé, boîtier). À activer soi-même : l'app ne peut pas détecter un téléviseur de façon fiable.</p>
+            <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optModeTv" /> Grands caractères (mode TV)</label>
           </div>
-          <p class="hint"><a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Obtenir une clé API TMDB gratuite</a></p>
-          <p class="hint" id="tmdbStatus"></p>
+          <div class="card">
+            <h2>Filtre lumière bleue</h2>
+            <p class="hint">L'appli est déjà entièrement en thème sombre (pas de mode clair à désactiver) — ce filtre va plus loin en teintant l'écran d'ambre pour réduire la lumière bleue en soirée, plus reposant pour les yeux.</p>
+            <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optFiltreNuit" /> 🌙 Activer le filtre</label>
+          </div>
         </div>
       </details>
 
-      <div class="card">
-        <h2>Confidentialité</h2>
-        <p class="hint">Tes playlists, identifiants et favoris restent uniquement sur cet appareil (stockage local). Rien n'est envoyé ailleurs qu'au serveur IPTV que tu as toi-même renseigné.</p>
-      </div>
-      <div class="card">
-        <h2>🔄 Mise à jour</h2>
-        <p class="hint">Version installée : <strong id="verText"></strong>. L'app vérifie d'elle-même les nouvelles versions (au plus une fois toutes les 6 h) et propose de les installer. Ce bouton force la vérification tout de suite.</p>
-        <div class="row" style="margin-top:8px">
-          <button id="btnCheckUpdate" class="ghost" style="flex:0 0 auto">Vérifier maintenant</button>
+      <details class="saison" id="cat-lecture" style="display:none">
+        <summary class="saison-titre">▶️ Lecture</summary>
+        <div class="accordion-body">
+          <div class="card" id="card-lecture" style="display:none">
+            <h2>Lecteur vidéo natif</h2>
+            <p class="hint">Lecture hors WebView (Media3/ExoPlayer) : décode l'HEVC et l'audio AC3/E-AC3/DTS que le navigateur refuse, et tient mieux la charge sur une télé ou un boîtier. Décoche pour revenir au lecteur web — il reste utilisé automatiquement si le lecteur natif échoue.</p>
+            <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optLecteurNatif" checked /> Lire avec le lecteur natif</label>
+          </div>
         </div>
-        <p class="hint" id="updateStatus"></p>
-      </div>
-      <div class="card">
-        <h2>À propos</h2>
-        <p class="hint">Lecteur IPTV — lecture HLS assurée par <a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a> (licence Apache-2.0).</p>
-      </div>
+      </details>
+
+      <details class="saison">
+        <summary class="saison-titre">🗂️ Playlists</summary>
+        <div class="accordion-body">
+          <div class="card">
+            <h2>Mes playlists</h2>
+            <div id="playlists"></div>
+          </div>
+          <div class="card">
+            <h2 id="formPlaylistTitre">Ajouter une playlist</h2>
+            <div class="grid2">
+              <label>Nom
+                <input type="text" id="pl_nom" placeholder="Mon fournisseur IPTV" />
+              </label>
+              <label>Type de source
+                <select id="pl_type">
+                  <option value="xtream">Xtream Codes (serveur + identifiants)</option>
+                  <option value="m3u">Playlist M3U / M3U8</option>
+                </select>
+              </label>
+            </div>
+
+            <div id="formXtream" class="grid2" style="margin-top:10px">
+              <label>Serveur (URL)
+                <input type="text" id="pl_serveur" placeholder="http://serveur.exemple.com:8080" />
+              </label>
+              <label>Utilisateur
+                <input type="text" id="pl_user" autocomplete="off" />
+              </label>
+              <label>Mot de passe
+                <input type="text" id="pl_pass" autocomplete="off" />
+              </label>
+            </div>
+
+            <div id="formM3u" class="grid2" style="margin-top:10px; display:none">
+              <label>URL de la playlist
+                <input type="text" id="pl_m3uUrl" placeholder="https://…/playlist.m3u8" />
+              </label>
+              <label>Ou importer un fichier
+                <input type="file" id="pl_m3uFile" accept=".m3u,.m3u8,.txt" />
+              </label>
+              <label>URL EPG (XMLTV, optionnel)
+                <input type="text" id="pl_epgUrl" placeholder="https://…/epg.xml" />
+              </label>
+            </div>
+
+            <div class="row" style="margin-top:12px">
+              <button id="btnTester" class="ghost">🔌 Tester la connexion</button>
+              <button id="btnAjouterPlaylist" class="primary">➕ Ajouter</button>
+              <button id="btnAnnulerEdition" class="ghost" style="display:none">✖️ Annuler</button>
+            </div>
+            <div id="testResult" class="hint"></div>
+          </div>
+
+          <div class="card">
+            <h2>💾 Sauvegarde &amp; export (Tesla, autre appareil…)</h2>
+            <p class="hint">Exporte ta configuration (playlists, favoris) sous forme d'un code chiffré, à transférer facilement vers un autre appareil — par exemple le navigateur d'une Tesla, où retaper un compte Xtream au clavier tactile est pénible.</p>
+            <div class="row" style="margin-top:8px">
+              <button id="btnExportConfig" class="ghost">📤 Exporter</button>
+              <button id="btnImportConfig" class="ghost">📥 Importer</button>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="saison" style="margin-top:22px">
+        <summary class="saison-titre">ℹ️ Infos</summary>
+        <div class="accordion-body">
+          <div class="card warn">
+            <h2>⚠️ Ce que cette app fait — et ne fait pas</h2>
+            <p>C'est un <strong>lecteur</strong> : il affiche et joue les flux d'une playlist M3U ou d'un compte Xtream Codes que <em>toi</em> tu fournis. L'app ne fournit, ne vend ni n'héberge aucune chaîne, film ou série.</p>
+          </div>
+
+          <details class="saison">
+            <summary class="saison-titre">🔒 Code PIN (bouquet adulte)</summary>
+            <div class="accordion-body">
+              <p class="hint">Protège par code les catégories dont le nom contient « adulte », « adult », « xxx » ou « 18+ ». Facultatif : tant qu'aucun code n'est défini, rien n'est masqué.</p>
+              <div class="row" style="margin-top:8px">
+                <input type="password" inputmode="numeric" autocomplete="off" id="pinSettingInput" placeholder="Nouveau code PIN (4 chiffres ou plus)" style="flex:1 1 220px" />
+                <button id="btnSavePin" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+              </div>
+              <p class="hint" id="pinSettingStatus"></p>
+            </div>
+          </details>
+
+          <details class="saison">
+            <summary class="saison-titre">🖼️ Enrichissement TMDB (facultatif)</summary>
+            <div class="accordion-body">
+              <p class="hint">Complète les fiches films incomplètes en interrogeant <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> à partir du titre. Facultatif : laisse le champ vide pour désactiver. <strong>Envoie le titre du film à TMDB</strong> (un tiers), rien d'autre.</p>
+              <div class="row" style="margin-top:8px">
+                <input type="text" id="tmdbKeyInput" placeholder="Clé API TMDB (v3, facultative)" style="flex:1 1 220px" autocomplete="off" />
+                <button id="btnSaveTmdb" class="ghost" style="flex:0 0 auto">Enregistrer</button>
+              </div>
+              <p class="hint"><a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Obtenir une clé API TMDB gratuite</a></p>
+              <p class="hint" id="tmdbStatus"></p>
+            </div>
+          </details>
+
+          <div class="card">
+            <h2>Confidentialité</h2>
+            <p class="hint">Tes playlists, identifiants et favoris restent uniquement sur cet appareil (stockage local). Rien n'est envoyé ailleurs qu'au serveur IPTV que tu as toi-même renseigné.</p>
+          </div>
+          <div class="card">
+            <h2>🔄 Mise à jour</h2>
+            <p class="hint">Version installée : <strong id="verText"></strong>. L'app vérifie d'elle-même les nouvelles versions à chaque démarrage et les installe directement (APK) ou propose le téléchargement (PWA). Ce bouton force la vérification tout de suite.</p>
+            <div class="row" style="margin-top:8px">
+              <button id="btnCheckUpdate" class="ghost" style="flex:0 0 auto">Vérifier maintenant</button>
+            </div>
+            <p class="hint" id="updateStatus"></p>
+          </div>
+          <div class="card">
+            <h2>À propos</h2>
+            <p class="hint">Lecteur IPTV — lecture HLS assurée par <a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a> (licence Apache-2.0).</p>
+          </div>
+        </div>
+      </details>
     </section>
   </main>
 
@@ -441,7 +465,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.45';
+    window.APP_VERSION = '2.46';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
