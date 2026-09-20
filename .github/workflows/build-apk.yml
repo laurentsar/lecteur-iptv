@@ -59,6 +59,7 @@ jobs:
         ci/patch_keep_awake.py
         ci/patch_updater.py
         ci/patch_tv_keys.py
+        ci/patch_tv_focus.py
         ci/patch_abi.py
         ci/set_version.py
         ci/set_icons.py

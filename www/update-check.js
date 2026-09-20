@@ -78,7 +78,12 @@
       'color:#06210f;text-decoration:none;border:0;font-weight:700;font-size:14px;' +
       'padding:8px 14px;border-radius:10px;cursor:pointer}' +
       '#update-banner button.ub-x{flex:none;background:transparent;border:0;color:#9ca3af;' +
-      'font-size:18px;line-height:1;cursor:pointer;padding:4px}';
+      'font-size:18px;line-height:1;cursor:pointer;padding:4px}' +
+      // Visible au focus D-pad (télécommande TV) : sans ça, une fois la
+      // navigation clavier/D-pad activée côté natif (voir ci/patch_tv_focus.py),
+      // le bouton pouvait recevoir le focus sans que ce soit perceptible à
+      // l'écran, sur un téléviseur regardé à distance.
+      '#update-banner .ub-act:focus,#update-banner .ub-x:focus{outline:3px solid #fff;outline-offset:2px}';
     document.head.appendChild(css);
 
     var b = document.createElement('div');
