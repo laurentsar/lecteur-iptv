@@ -1228,6 +1228,64 @@
     return swapExtToM3u8(url);
   }
 
+  function castNotify(msg) {
+    setStatus(msg);
+    if (global.AppToast) global.AppToast(msg);
+  }
+
+  function castMediaInfo(url, title, mime) {
+    var mediaInfo = new chrome.cast.media.MediaInfo(url, mime || castMimeType(url));
+    mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
+    mediaInfo.metadata.title = title || '';
+    return mediaInfo;
+  }
+
+  // Un flux live IPTV est presque toujours du MPEG-TS brut, que le Default
+  // Media Receiver ne sait pas lire : castUrl() tente d'abord la variante
+  // HLS du même flux (swapExtToM3u8), mais rien ne garantit que le
+  // fournisseur la sert réellement à cette adresse — beaucoup ne le font
+  // pas. Si ce premier essai échoue, deux cas :
+  //  - loadMedia() est directement rejetée (adresse injoignable...) ;
+  //  - PIRE, et bien plus trompeur : loadMedia() se résout AVEC SUCCÈS (la
+  //    commande de chargement a été acceptée), mais la TV échoue ensuite à
+  //    décoder ce qu'elle reçoit une fois vraiment branchée dessus — sans
+  //    ce suivi, l'appli affichait « ▶ Diffusion » alors que l'écran de la
+  //    TV restait désespérément vide, exactement le symptôme signalé.
+  // Dans les deux cas, un second essai repart sur l'URL BRUTE d'origine, en
+  // MPEG-TS explicite (video/mp2t) : certains récepteurs/téléviseurs la
+  // décodent malgré tout, alors qu'aucun des deux n'était garanti d'avance.
+  function castLoad(session, url, title, mime, repli) {
+    var deviceName = session.getCastDevice() ? session.getCastDevice().friendlyName : 'la TV';
+    var request = new chrome.cast.media.LoadRequest(castMediaInfo(url, title, mime));
+    castNotify((repli ? 'Nouvel essai (flux brut) sur ' : 'Connexion à ') + deviceName + '…');
+
+    function echec(msg) {
+      if (!repli && url !== currentUrl) {
+        castLoad(session, currentUrl, title, 'video/mp2t', true);
+      } else {
+        castNotify('Diffusion impossible : ' + msg);
+      }
+    }
+
+    session.loadMedia(request).then(
+      function () {
+        castNotify('▶ Diffusion sur ' + deviceName);
+        var media = session.getMediaSession();
+        if (!media) return;
+        var suivi = function (isAlive) {
+          if (!isAlive) return;
+          if (media.playerState === chrome.cast.media.PlayerState.IDLE &&
+              media.idleReason === chrome.cast.media.IdleReason.ERROR) {
+            media.removeUpdateListener(suivi);
+            echec('la TV a refusé le flux (format non pris en charge par le récepteur Cast).');
+          }
+        };
+        media.addUpdateListener(suivi);
+      },
+      function (err) { echec(err && err.description ? err.description : String(err)); }
+    );
+  }
+
   function castCurrentMedia() {
     var session = cast.framework.CastContext.getInstance().getCurrentSession();
     if (!session) return;
@@ -1250,16 +1308,7 @@
     clearLoadTimeout();
     destroyPlayers();
     video.pause();
-    var urlCast = castUrl(currentUrl);
-    var mediaInfo = new chrome.cast.media.MediaInfo(urlCast, castMimeType(urlCast));
-    mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
-    mediaInfo.metadata.title = currentTitle || '';
-    var request = new chrome.cast.media.LoadRequest(mediaInfo);
-    setStatus('Connexion à ' + (session.getCastDevice() ? session.getCastDevice().friendlyName : 'la TV') + '…');
-    session.loadMedia(request).then(
-      function () { setStatus('▶ Diffusion sur ' + (session.getCastDevice() ? session.getCastDevice().friendlyName : 'la TV')); },
-      function (err) { setStatus('Diffusion impossible : ' + (err && err.description ? err.description : err)); }
-    );
+    castLoad(session, castUrl(currentUrl), currentTitle, null, false);
   }
 
   function setStatus(msg) { if (statusEl) statusEl.textContent = msg || ''; }
