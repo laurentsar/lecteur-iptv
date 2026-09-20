@@ -1378,8 +1378,12 @@
   // Les flux "live" IPTV qui ne sont pas du HLS sont presque toujours du
   // mpeg-ts brut, avec ou sans extension .ts explicite dans l'URL (beaucoup
   // de panels Xtream Codes n'en mettent pas). On ne traite comme "fichier
-  // direct" (mp4/mkv...) que les extensions de VOD reconnues.
-  function isDirectFile(url) { return /\.(mp4|mkv|webm|mov|m4v|avi)(\?|#|$)/i.test(url); }
+  // direct" (mp4/mkv...) que les extensions de VOD reconnues — plus les
+  // extensions audio brutes des radios icecast/shoutcast (mp3, aac...) :
+  // ce ne sont pas des conteneurs mpeg-ts/FLV, mpegts.js échoue donc à les
+  // démultiplexer et boucle en reconnexion sans fin (ex. FIP en .mp3) alors
+  // que le <video> les décode nativement sans le moindre besoin de démux.
+  function isDirectFile(url) { return /\.(mp4|mkv|webm|mov|m4v|avi|mp3|aac|m4a|ogg|oga|opus|wav|flac)(\?|#|$)/i.test(url); }
 
   // Remplace (ou ajoute) l'extension de l'URL par .m3u8, en préservant une
   // éventuelle query string / ancre.
