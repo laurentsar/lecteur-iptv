@@ -79,6 +79,7 @@
   var remoteBtn, remotePanel, castTvBtn, vrBtn, infoBtn;
   var fullscreenBtn, homeBtn;
   var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg, zapBannerBar, zapBannerBarFill, zapBannerDesc;
+  var radioCover, radioCoverLogo, radioCoverIcon, radioCoverName;
   var progBar;
   var progBarTimer = null;
   var zapBannerTimer = null;
@@ -163,7 +164,14 @@
       '  <div class="tracks-title">Sous-titres</div>' +
       '  <div id="tracksSubList"></div>' +
       '</div>' +
-      '<video id="playerVideo" playsinline controls autoplay></video>' +
+      '<div id="playerVideoWrap" class="player-video-wrap">' +
+      '  <video id="playerVideo" playsinline controls autoplay></video>' +
+      '  <div id="radioCover" class="radio-cover" style="display:none">' +
+      '    <img id="radioCoverLogo" class="radio-cover-logo" alt="" style="display:none" />' +
+      '    <div id="radioCoverIcon" class="radio-cover-icon">📻</div>' +
+      '    <div id="radioCoverName" class="radio-cover-name"></div>' +
+      '  </div>' +
+      '</div>' +
       '<div id="playerStatus" class="player-status"></div>' +
       '<div id="playerProgBar" class="prog-bar" style="display:none"></div>' +
       '<div id="zapBanner" class="zap-banner">' +
@@ -216,6 +224,16 @@
     infoBtn = overlay.querySelector('#playerInfo');
     progBar = overlay.querySelector('#playerProgBar');
     homeBtn = overlay.querySelector('#playerHome');
+    radioCover = overlay.querySelector('#radioCover');
+    radioCoverLogo = overlay.querySelector('#radioCoverLogo');
+    radioCoverIcon = overlay.querySelector('#radioCoverIcon');
+    radioCoverName = overlay.querySelector('#radioCoverName');
+    // Logo de station introuvable (playlist mal renseignée, réseau) : retombe
+    // sur l'icône plutôt que de laisser l'espace vide.
+    radioCoverLogo.addEventListener('error', function () {
+      radioCoverLogo.style.display = 'none';
+      radioCoverIcon.style.display = '';
+    });
     closeBtn.addEventListener('click', close);
     infoBtn.addEventListener('click', function () { showZapBanner(originalTitle, currentEpgKey, currentLogo); });
     homeBtn.addEventListener('click', function () {
@@ -883,7 +901,40 @@
   }
 
   function updatePipVisibility() {
-    pipBtn.style.display = (currentIsLive && pipSupported() && !isCasting()) ? '' : 'none';
+    // Une radio n'a pas d'image : une mini-fenêtre flottante n'y montrerait
+    // qu'un rectangle noir, sans utilité.
+    pipBtn.style.display = (currentIsLive && !currentIsRadio && pipSupported() && !isCasting()) ? '' : 'none';
+  }
+
+  // « dataset.capable » retient si l'appareil sait faire du VR (WebXR ou
+  // passerelle vers le casque, voir setupVr/setupPontVr) — déterminé une
+  // fois, parfois de façon asynchrone. Séparé de l'affichage réel du bouton
+  // pour pouvoir le recalculer à chaque changement de contenu (open()) :
+  // une radio n'a pas d'image, la VR n'y a donc aucun sens.
+  function updateVrVisibility() {
+    if (!vrBtn) return;
+    vrBtn.style.display = (vrBtn.dataset.capable && !currentIsRadio) ? '' : 'none';
+  }
+
+  // ---------- Visuel de radio (pas d'image à montrer) ----------
+  // La balise <video> reste utilisée pour l'audio (même moteur, même
+  // reprise sur coupure), mais afficher un rectangle noir pendant qu'une
+  // radio joue ne dit rien : logo de la station si connu, sinon une icône,
+  // et son nom.
+  function updateRadioCover() {
+    if (!radioCover) return;
+    if (!currentIsRadio) { radioCover.style.display = 'none'; return; }
+    radioCover.style.display = 'flex';
+    radioCoverName.textContent = originalTitle || '';
+    if (currentLogo) {
+      radioCoverLogo.src = currentLogo;
+      radioCoverLogo.style.display = '';
+      radioCoverIcon.style.display = 'none';
+    } else {
+      radioCoverLogo.removeAttribute('src');
+      radioCoverLogo.style.display = 'none';
+      radioCoverIcon.style.display = '';
+    }
   }
 
   function setupPip() {
@@ -1454,7 +1505,8 @@
     // Cas 1 — navigateur (PWA) capable de WebXR : la page VR s'ouvre sur
     // place, et la liste de zapping passe par sessionStorage (même origine).
     if (!nativePlayerPlugin() && global.navigator && navigator.xr) {
-      vrBtn.style.display = '';
+      vrBtn.dataset.capable = '1';
+      updateVrVisibility();
       vrBtn.title = 'Cinéma VR';
       vrBtn.addEventListener('click', function () {
         try {
@@ -1494,7 +1546,8 @@
     if (!P || !P.canOpenExternal || !global.PWA_URL) return;
     P.canOpenExternal().then(function (r) {
       if (!r || !r.value) return;
-      vrBtn.style.display = '';
+      vrBtn.dataset.capable = '1';
+      updateVrVisibility();
       vrBtn.title = 'Ouvrir dans le casque VR';
       vrBtn.addEventListener('click', function () {
         var lien = VrLink.construire(global.PWA_URL, originalUrl, originalTitle || '');
@@ -1798,6 +1851,8 @@
     overlay.classList.add('show');
     showPlayerUi();
     updatePipVisibility();
+    updateVrVisibility();
+    updateRadioCover();
     updateRecordVisibility();
     updateRemoteVisibility();
     updateInfoVisibility();

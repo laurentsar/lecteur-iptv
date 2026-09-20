@@ -1787,10 +1787,16 @@
     { name: 'France Culture', url: 'https://icecast.radiofrance.fr/franceculture-midfi.mp3' },
     { name: 'France Musique', url: 'https://icecast.radiofrance.fr/francemusique-midfi.mp3' },
     { name: 'FIP', url: 'https://icecast.radiofrance.fr/fip-midfi.mp3' },
+    { name: 'Mouv\'', url: 'https://icecast.radiofrance.fr/mouv-midfi.mp3' },
     { name: 'Europe 1', url: 'https://europe1.lmn.fm/europe1.mp3' },
     { name: 'RMC', url: 'https://audio.bfmtv.com/rmcradio_128.mp3' },
     { name: 'NRJ', url: 'https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3' },
-    { name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k' }
+    { name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k' },
+    { name: 'Radio Nova', url: 'https://novazz.ice.infomaniak.ch/novazz-128.mp3' },
+    { name: 'Radio Classique', url: 'https://radioclassique.ice.infomaniak.ch/radioclassique-high.mp3' },
+    { name: 'TSF Jazz', url: 'https://tsfjazz.ice.infomaniak.ch/tsfjazz-high.mp3' },
+    { name: 'Ouï FM', url: 'https://ouifm.ice.infomaniak.ch/ouifm-high.mp3' },
+    { name: 'Radio Meuh', url: 'https://radiomeuh.ice.infomaniak.ch/radiomeuh-128.mp3' }
   ].map(function (r) {
     return { key: 'default-radio:' + r.url, kind: 'radio', name: r.name, url: r.url, logo: null, group: 'Stations par défaut' };
   });
