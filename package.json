@@ -6,7 +6,7 @@
   "scripts": {
     "sync": "cap sync android",
     "open": "cap open android",
-    "test": "node tests/stereo.test.js && node tests/vrlink.test.js && node tests/quality.test.js && node tests/ui.test.js"
+    "test": "node tests/stereo.test.js && node tests/vrlink.test.js && node tests/quality.test.js && node tests/dpadnav.test.js && node tests/ui.test.js"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
