@@ -1815,7 +1815,12 @@
       logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/RMC_2025.svg/500px-RMC_2025.svg.png' },
     { name: 'NRJ', url: 'https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3',
       logo: 'https://upload.wikimedia.org/wikipedia/fr/thumb/d/dc/Logo_Nrj_%28radio%29_2008.svg/500px-Logo_Nrj_%28radio%29_2008.svg.png' },
-    { name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k',
+    // #radio.mp3 : astuce sans risque pour les flux sans extension (URL
+    // envoyée telle quelle au serveur, le fragment n'est jamais transmis —
+    // seul isDirectFile() dans player.js le lit, pour choisir la lecture
+    // directe plutôt que le démultiplexage mpeg-ts, qui échoue sur du MP3
+    // brut). Voir le correctif FIP (v2.35) pour l'historique du problème.
+    { name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k#radio.mp3',
       logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/SKYROCK_FM_LOGO.svg/500px-SKYROCK_FM_LOGO.svg.png' },
     { name: 'Radio Nova', url: 'https://novazz.ice.infomaniak.ch/novazz-128.mp3',
       logo: 'https://www.nova.fr/wp-content/uploads/sites/2/2021/02/cropped-favicon.png' },
@@ -1826,7 +1831,16 @@
     { name: 'Ouï FM', url: 'https://ouifm.ice.infomaniak.ch/ouifm-high.mp3',
       logo: 'https://bocir-prod-bucket.s3.amazonaws.com/radios/oui-fm/images/favicon.ico' },
     { name: 'Radio Meuh', url: 'https://radiomeuh.ice.infomaniak.ch/radiomeuh-128.mp3',
-      logo: 'https://upload.wikimedia.org/wikipedia/fr/thumb/9/9a/Radio_Meuh_Logo.svg/500px-Radio_Meuh_Logo.svg.png' }
+      logo: 'https://upload.wikimedia.org/wikipedia/fr/thumb/9/9a/Radio_Meuh_Logo.svg/500px-Radio_Meuh_Logo.svg.png' },
+    { name: 'Nostalgie', url: 'https://streaming.nrjaudio.fm/oug7girb92oc?origine=tingfm#radio.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2d/Nostalgie_logo_simple.png' },
+    // France Bleu a été rebaptisé « ici » (Radio France) : le favicon de
+    // francebleu.fr redirige désormais vers www.ici.fr — URL finale utilisée
+    // directement, sans passer par la redirection à chaque affichage.
+    { name: 'France Bleu Limousin', url: 'https://icecast.radiofrance.fr/fblimousin-midfi.mp3',
+      logo: 'https://www.ici.fr/images/favicon-112.png' },
+    { name: 'Sud Radio', url: 'https://ice.creacast.com/sudradio#radio.mp3',
+      logo: 'https://www.sudradio.fr/wp-content/uploads/2019/06/cropped-favicon-180x180.png' }
   ].map(function (r) {
     return { key: 'default-radio:' + r.url, kind: 'radio', name: r.name, url: r.url, logo: r.logo || null, group: 'Stations par défaut' };
   });
