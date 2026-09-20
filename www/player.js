@@ -209,7 +209,7 @@
     tracksBtn = overlay.querySelector('#playerTracks');
     tracksMenu = overlay.querySelector('#playerTracksMenu');
     castLauncher = overlay.querySelector('#castLauncher');
-    castLauncher.addEventListener('click', toggleCasting);
+    castLauncher.addEventListener('click', function () { toggleCasting(true); });
     castTvBtn = overlay.querySelector('#playerCastTv');
     vrBtn = overlay.querySelector('#playerVr');
     remoteBtn = overlay.querySelector('#playerRemote');
@@ -1197,21 +1197,41 @@
       );
       // Bouton normal (voir index.html) : c'est nous qui pilotons le
       // sélecteur d'appareil Cast, plutôt que de dépendre du rendu interne de
-      // <google-cast-launcher>. Un second clic pendant une diffusion en cours
-      // la coupe (endCurrentSession), comme le ferait le composant Google.
+      // <google-cast-launcher>. Depuis l'en-tête (aucune chaîne ouverte à ce
+      // stade — le lecteur plein écran le recouvrirait sinon), un second clic
+      // pendant une session en cours la coupe : c'est la seule action utile
+      // dans ce contexte.
       var header = document.getElementById('castHeader');
-      if (header) header.addEventListener('click', toggleCasting);
+      if (header) header.addEventListener('click', function () { toggleCasting(false); });
     };
     var s = document.createElement('script');
     s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
     document.head.appendChild(s);
   }
 
-  function toggleCasting() {
+  // depuisLecteur=true : appelé par le bouton du lecteur (une chaîne peut
+  // déjà être ouverte). Sinon (bouton de l'en-tête) : rien n'est encore
+  // choisi, voir setupChromecast.
+  function toggleCasting(depuisLecteur) {
     if (!global.cast || !cast.framework) return;
     var ctx = cast.framework.CastContext.getInstance();
-    if (ctx.getCurrentSession()) ctx.endCurrentSession(true);
-    else ctx.requestSession().catch(function () {}); // sélection annulée par l'utilisateur : rien à signaler
+    var session = ctx.getCurrentSession();
+    if (session) {
+      // Une session Cast peut déjà exister sans qu'on l'ait rouverte
+      // volontairement à l'instant — reprise automatique au démarrage de
+      // l'appli (autoJoinPolicy: ORIGIN_SCOPED), ou oubliée d'un essai
+      // précédent resté connecté côté TV. Depuis le lecteur, avec une
+      // chaîne déjà ouverte, l'intention en appuyant sur 📡 est de diffuser
+      // CE flux vers la TV — pas de couper une connexion dont on ignore
+      // l'existence : sans cette distinction, le bouton se contentait de
+      // fermer la session existante à chaque appui, et la TV restait
+      // plantée sur son icône d'attente puisque rien n'était jamais
+      // réellement envoyé.
+      if (depuisLecteur && currentUrl) castCurrentMedia();
+      else ctx.endCurrentSession(true);
+    } else {
+      ctx.requestSession().catch(function () {}); // sélection annulée par l'utilisateur : rien à signaler
+    }
   }
 
   function updateCastAvailability() {
