@@ -729,7 +729,6 @@ body.filtre-nuit::after {
   text-shadow: 0 0 14px rgba(63,199,199,.85);
   animation: splash-in .8s ease .25s both;
 }
-.splash-name { color: var(--accent); }
 .splash-sub {
   margin-top: 8px; color: var(--muted); font-size: 12px; letter-spacing: 5px;
   animation: splash-in .8s ease .6s both;
