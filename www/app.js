@@ -3172,10 +3172,30 @@
     });
   }
 
+  // Filtre lumière bleue : superposition ambre sur toute l'appli, pour le
+  // confort visuel en soirée (l'appli est déjà entièrement en thème sombre —
+  // il n'existe pas de mode clair à remplacer, voir body.filtre-nuit dans
+  // styles.css). Réglage manuel comme le mode TV : aucun moyen fiable de
+  // détecter l'heure du visionnage sans plus d'intrusion que ça n'en vaut
+  // la peine pour un simple confort d'affichage.
+  function setupFiltreNuit() {
+    var box = $id('optFiltreNuit');
+    if (!box) return;
+    function appliquer(actif) { document.body.classList.toggle('filtre-nuit', !!actif); }
+    box.checked = Store.getFiltreNuit();
+    appliquer(box.checked);
+    box.addEventListener('change', function () {
+      Store.setFiltreNuit(box.checked);
+      appliquer(box.checked);
+      toast(box.checked ? '🌙 Filtre lumière bleue activé' : 'Filtre lumière bleue désactivé');
+    });
+  }
+
   function init() {
     startSplash();
     setupCheckUpdate();
     setupModeTv();
+    setupFiltreNuit();
     ['plusDirect', 'plusFilms', 'plusSeries', 'plusRadio'].forEach(autoCharger);
     if (window.HaSync) HaSync.start();
     $id('verChip').textContent = 'v' + (window.APP_VERSION || '');

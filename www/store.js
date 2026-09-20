@@ -61,6 +61,9 @@
   // Affichage « TV » : caractères et cibles agrandis pour une lecture à
   // plusieurs mètres (voir body.tv dans styles.css).
   var K_MODE_TV = 'iptv:modeTv';
+  // Filtre lumière bleue (confort visuel en soirée) : superposition teintée
+  // ambre sur toute l'appli, voir body.filtre-nuit dans styles.css.
+  var K_FILTRE_NUIT = 'iptv:filtreNuit';
 
   // ---------- Miroir natif (Capacitor Preferences) ----------
   // Symptôme corrigé ici : les playlists disparaissaient à chaque mise à jour
@@ -166,6 +169,9 @@
 
   function getModeTv() { return lsGet(K_MODE_TV, false) === true; }
   function setModeTv(actif) { return lsSet(K_MODE_TV, !!actif); }
+
+  function getFiltreNuit() { return lsGet(K_FILTRE_NUIT, false) === true; }
+  function setFiltreNuit(actif) { return lsSet(K_FILTRE_NUIT, !!actif); }
 
   function getGuideAvecProgramme() { return lsGet(K_GUIDE_EPG, true) !== false; }
   function setGuideAvecProgramme(actif) { return lsSet(K_GUIDE_EPG, !!actif); }
@@ -341,6 +347,7 @@
     getLecteurNatif: getLecteurNatif, setLecteurNatif: setLecteurNatif,
     getGuideAvecProgramme: getGuideAvecProgramme, setGuideAvecProgramme: setGuideAvecProgramme,
     getModeTv: getModeTv, setModeTv: setModeTv,
+    getFiltreNuit: getFiltreNuit, setFiltreNuit: setFiltreNuit,
     getFavoris: getFavoris, setFavoris: setFavoris, isFavori: isFavori, toggleFavori: toggleFavori,
     getProgress: getProgress, setProgress: setProgress, clearProgress: clearProgress,
     getEnCours: getEnCours,

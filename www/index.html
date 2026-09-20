@@ -208,6 +208,11 @@
         <p class="hint">Agrandit les textes et cibles du curseur pour une lecture à plusieurs mètres (télé, boîtier). À activer soi-même : l'app ne peut pas détecter un téléviseur de façon fiable.</p>
         <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optModeTv" /> Grands caractères (mode TV)</label>
       </div>
+      <div class="card">
+        <h2>Filtre lumière bleue</h2>
+        <p class="hint">L'appli est déjà entièrement en thème sombre (pas de mode clair à désactiver) — ce filtre va plus loin en teintant l'écran d'ambre pour réduire la lumière bleue en soirée, plus reposant pour les yeux.</p>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optFiltreNuit" /> 🌙 Activer le filtre</label>
+      </div>
 
       <div class="cat-title" id="cat-lecture" style="display:none">▶️ Lecture</div>
       <div class="card" id="card-lecture" style="display:none">
@@ -431,7 +436,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.33';
+    window.APP_VERSION = '2.34';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans

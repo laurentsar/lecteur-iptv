@@ -447,6 +447,18 @@ body.tv .guide-chan:focus, body.tv .guide-prog:focus, body.tv .now-ligne:focus {
 }
 body.tv .version-item, body.tv .episode-row { font-size: 16px; padding: 14px; }
 
+/* ---------- filtre lumière bleue (confort visuel en soirée) ----------
+   L'appli est déjà entièrement en thème sombre : ce filtre ne remplace pas
+   un mode clair (il n'y en a pas), il ajoute une teinte ambre par-dessus
+   tout — y compris le lecteur vidéo/radio et l'émulateur — pour réduire la
+   lumière bleue, comme un filtre nuit de téléphone. Superposition simple
+   (pas de mix-blend-mode) pour ne pas assombrir les zones déjà sombres. */
+body.filtre-nuit::after {
+  content: ''; position: fixed; inset: 0;
+  background: rgba(255, 140, 0, .12);
+  pointer-events: none; z-index: 999999;
+}
+
 /* ---------- accueil ---------- */
 .projets-home { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .projet-home {
@@ -509,6 +521,15 @@ body.tv .version-item, body.tv .episode-row { font-size: 16px; padding: 14px; }
 .radio-cover-logo { width: 128px; height: 128px; border-radius: 16px; object-fit: cover; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
 .radio-cover-icon { font-size: 64px; }
 .radio-cover-name { color: #fff; font-size: 18px; font-weight: 600; text-align: center; padding: 0 24px; }
+/* Repère visuel que le son joue VRAIMENT (pas juste en pause/en attente de
+   données) : une légère pulsation du logo/icône, seule chose qui bouge à
+   l'écran pour de l'audio sans image. */
+.radio-cover.playing .radio-cover-logo,
+.radio-cover.playing .radio-cover-icon { animation: radio-pulse 1.8s ease-in-out infinite; }
+@keyframes radio-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.07); opacity: .82; }
+}
 
 /* ---------- émulateur (Mega Drive/NES) : même langage visuel que le lecteur vidéo ---------- */
 .emu-overlay { position: fixed; inset: 0; background: #000; z-index: 999; display: flex; flex-direction: column; }

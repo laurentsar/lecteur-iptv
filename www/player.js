@@ -277,6 +277,16 @@
     // automatique relancerait la chaîne juste après une mise en pause.
     video.addEventListener('pause', function () { if (!video.ended) userPaused = true; });
     video.addEventListener('play', function () { userPaused = false; });
+    // Pulsation du logo/icône radio (voir updateRadioCover) : uniquement
+    // pendant que le son joue vraiment, pas en pause ni en attente de
+    // données — un repère visuel de plus que « ça tourne » que le nom fixe
+    // de la station ne donne pas à lui seul.
+    ['playing'].forEach(function (evt) {
+      video.addEventListener(evt, function () { if (currentIsRadio && radioCover) radioCover.classList.add('playing'); });
+    });
+    ['pause', 'waiting', 'stalled'].forEach(function (evt) {
+      video.addEventListener(evt, function () { if (radioCover) radioCover.classList.remove('playing'); });
+    });
     setupAirplay();
     setupChromecast();
     updateCastAvailability();
@@ -923,6 +933,9 @@
   // et son nom.
   function updateRadioCover() {
     if (!radioCover) return;
+    // Nouveau contenu : la pulsation « en cours de lecture » repart de zéro,
+    // elle ne revient qu'au véritable évènement "playing" de ce flux-ci.
+    radioCover.classList.remove('playing');
     if (!currentIsRadio) { radioCover.style.display = 'none'; return; }
     radioCover.style.display = 'flex';
     radioCoverName.textContent = originalTitle || '';
