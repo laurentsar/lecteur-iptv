@@ -38,14 +38,14 @@ body {
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .cast-header {
-  /* L'icône officielle Google (fines lignes) se fondait dans l'en-tête : fond
-     bien plus contrasté, taille agrandie et léger liseré pour la détacher
-     nettement, surtout vue de loin sur une TV. */
-  --connected-color: var(--accent); --disconnected-color: #ffffff;
+  /* Bouton normal (pas <google-cast-launcher>, voir index.html) : son icône
+     à lui, rendue dans un Shadow DOM par le SDK Google, restait fondue dans
+     l'en-tête sombre quel que soit le réglage CSS essayé. */
   width: 42px; height: 42px; flex: none; cursor: pointer;
   background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.3);
-  border-radius: 10px; padding: 7px;
+  border-radius: 10px; font-size: 20px; line-height: 1; color: #fff;
 }
+.cast-header.active { background: var(--accent); border-color: var(--accent); color: #06181c; }
 .brand-logo { width: 38px; height: 38px; border-radius: 9px; flex: none; }
 .app-header h1 { margin: 0; font-size: 18px; letter-spacing: .2px; }
 .app-header .sub { margin: 1px 0 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -504,11 +504,10 @@ body.filtre-nuit::after {
 .player-overlay.ui-hidden { cursor: none; }
 .player-title { color: #fff; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .player-cast {
-  --connected-color: #3fc7c7; --disconnected-color: #fff;
   background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.3); color: #fff; font-size: 16px;
-  border-radius: 8px; width: 34px; height: 34px; cursor: pointer; flex: none; padding: 5px;
+  border-radius: 8px; width: 34px; height: 34px; cursor: pointer; flex: none;
 }
-.player-cast.active { background: var(--accent); color: #06181c; }
+.player-cast.active { background: var(--accent); border-color: var(--accent); color: #06181c; }
 .player-close { background: rgba(255,255,255,.12); border: none; color: #fff; font-size: 18px; border-radius: 8px; padding: 6px 11px; cursor: pointer; flex: none; }
 .player-video-wrap { position: relative; flex: 1; width: 100%; }
 #playerVideo { width: 100%; height: 100%; background: #000; }

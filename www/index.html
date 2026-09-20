@@ -46,8 +46,13 @@
     </div>
     <!-- Transfert sur la télé, disponible hors du lecteur : affiché seulement
          quand le SDK Cast détecte un appareil (voir setupChromecast dans
-         player.js). -->
-    <google-cast-launcher id="castHeader" class="cast-header" style="display:none" title="Diffuser sur la TV"></google-cast-launcher>
+         player.js). Bouton normal (pas <google-cast-launcher>) : son icône à
+         lui, rendue dans un Shadow DOM par le SDK Google, restait fondue dans
+         l'en-tête sombre malgré tout réglage CSS essayé (--connected-color,
+         fond, taille...) — ce bouton pilote directement
+         CastContext.requestSession()/endCurrentSession(), avec la même icône
+         que ses voisins du lecteur, systématiquement nette. -->
+    <button id="castHeader" class="cast-header" style="display:none" title="Diffuser sur la TV" aria-label="Diffuser sur la TV">📡</button>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -436,7 +441,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.44';
+    window.APP_VERSION = '2.45';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans

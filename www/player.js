@@ -140,7 +140,7 @@
     overlay.innerHTML =
       '<div class="player-top">' +
       '  <span id="playerTitle" class="player-title"></span>' +
-      '  <google-cast-launcher id="castLauncher" class="player-cast" style="display:none"></google-cast-launcher>' +
+      '  <button id="castLauncher" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📡</button>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
       '  <button id="playerCastTv" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📺</button>' +
       '  <button id="playerVr" class="player-cast" aria-label="Cinéma VR" style="display:none">🥽</button>' +
@@ -209,6 +209,7 @@
     tracksBtn = overlay.querySelector('#playerTracks');
     tracksMenu = overlay.querySelector('#playerTracksMenu');
     castLauncher = overlay.querySelector('#castLauncher');
+    castLauncher.addEventListener('click', toggleCasting);
     castTvBtn = overlay.querySelector('#playerCastTv');
     vrBtn = overlay.querySelector('#playerVr');
     remoteBtn = overlay.querySelector('#playerRemote');
@@ -1187,27 +1188,42 @@
             e.sessionState === cast.framework.SessionState.SESSION_RESUMED) {
             castCurrentMedia();
           }
+          updateCastAvailability();
           if (pipBtn) updatePipVisibility();
           if (recordBtn) updateRecordVisibility();
           if (remoteBtn) updateRemoteVisibility();
           if (infoBtn) updateInfoVisibility();
         }
       );
+      // Bouton normal (voir index.html) : c'est nous qui pilotons le
+      // sélecteur d'appareil Cast, plutôt que de dépendre du rendu interne de
+      // <google-cast-launcher>. Un second clic pendant une diffusion en cours
+      // la coupe (endCurrentSession), comme le ferait le composant Google.
+      var header = document.getElementById('castHeader');
+      if (header) header.addEventListener('click', toggleCasting);
     };
     var s = document.createElement('script');
     s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
     document.head.appendChild(s);
   }
 
+  function toggleCasting() {
+    if (!global.cast || !cast.framework) return;
+    var ctx = cast.framework.CastContext.getInstance();
+    if (ctx.getCurrentSession()) ctx.endCurrentSession(true);
+    else ctx.requestSession().catch(function () {}); // sélection annulée par l'utilisateur : rien à signaler
+  }
+
   function updateCastAvailability() {
-    var dispo = false;
+    var dispo = false, actif = false;
     try {
       var etat = cast.framework.CastContext.getInstance().getCastState();
       dispo = !!etat && etat !== 'NO_DEVICES_AVAILABLE';
+      actif = isCasting();
     } catch (e) { dispo = false; }
     var header = document.getElementById('castHeader');
-    if (header) header.style.display = dispo ? '' : 'none';
-    if (castLauncher) castLauncher.style.display = dispo ? '' : 'none';
+    if (header) { header.style.display = dispo ? '' : 'none'; header.classList.toggle('active', actif); }
+    if (castLauncher) { castLauncher.style.display = dispo ? '' : 'none'; castLauncher.classList.toggle('active', actif); }
   }
 
   function isCasting() {

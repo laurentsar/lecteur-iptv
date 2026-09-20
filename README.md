@@ -30,8 +30,11 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
 
 - **Chromecast** : sur l'APK Android (lecteur natif, bouton *MediaRouteButton*
   géré par Media3 `CastPlayer` + Google Play Services) et dans le lecteur
-  web (bouton `<google-cast-launcher>` du Cast Sender SDK de Google, chargé
-  à la demande) — fonctionne dans n'importe quel navigateur Chrome/Chromium.
+  web (bouton propre, pilotant directement `CastContext.requestSession()` du
+  Cast Sender SDK de Google, chargé à la demande — pas le composant
+  `<google-cast-launcher>` fourni par le SDK, dont l'icône restait fondue
+  dans l'interface sombre quel que soit le style CSS appliqué) —
+  fonctionne dans n'importe quel navigateur Chrome/Chromium.
 - **AirPlay** : dans le lecteur web sur Safari (iPhone/Mac) — bouton dédié
   qui ouvre le sélecteur AirPlay natif (`webkitShowPlaybackTargetPicker`).
   Comme l'app n'a pas de version iOS installable, c'est la seule façon
