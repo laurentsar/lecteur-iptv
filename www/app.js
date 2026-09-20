@@ -1781,24 +1781,44 @@
   // toujours disponibles en plus de celles éventuellement fournies par la
   // playlist active — mêmes flux que ceux utilisés par les lecteurs web
   // officiels de ces stations, vérifiés joignables.
+  // Logos : fichiers officiels/Wikimedia stables (URL "Special:FilePath" ou
+  // upload.wikimedia.org résolue vers le fichier courant), chacun vérifié
+  // joignable (HTTP 200) avant ajout. En cas d'échec de chargement (logo
+  // déplacé, offline...), le lecteur retombe déjà sur l'icône 📻 — voir
+  // radioCoverLogo.addEventListener('error', ...) dans player.js.
   var DEFAULT_RADIOS = [
-    { name: 'France Inter', url: 'https://icecast.radiofrance.fr/franceinter-midfi.mp3' },
-    { name: 'France Info', url: 'https://icecast.radiofrance.fr/franceinfo-midfi.mp3' },
-    { name: 'France Culture', url: 'https://icecast.radiofrance.fr/franceculture-midfi.mp3' },
-    { name: 'France Musique', url: 'https://icecast.radiofrance.fr/francemusique-midfi.mp3' },
-    { name: 'FIP', url: 'https://icecast.radiofrance.fr/fip-midfi.mp3' },
-    { name: 'Mouv\'', url: 'https://icecast.radiofrance.fr/mouv-midfi.mp3' },
-    { name: 'Europe 1', url: 'https://europe1.lmn.fm/europe1.mp3' },
-    { name: 'RMC', url: 'https://audio.bfmtv.com/rmcradio_128.mp3' },
-    { name: 'NRJ', url: 'https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3' },
-    { name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k' },
-    { name: 'Radio Nova', url: 'https://novazz.ice.infomaniak.ch/novazz-128.mp3' },
-    { name: 'Radio Classique', url: 'https://radioclassique.ice.infomaniak.ch/radioclassique-high.mp3' },
-    { name: 'TSF Jazz', url: 'https://tsfjazz.ice.infomaniak.ch/tsfjazz-high.mp3' },
-    { name: 'Ouï FM', url: 'https://ouifm.ice.infomaniak.ch/ouifm-high.mp3' },
-    { name: 'Radio Meuh', url: 'https://radiomeuh.ice.infomaniak.ch/radiomeuh-128.mp3' }
+    { name: 'France Inter', url: 'https://icecast.radiofrance.fr/franceinter-midfi.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/France_Inter_logo_2021.svg/500px-France_Inter_logo_2021.svg.png' },
+    { name: 'France Info', url: 'https://icecast.radiofrance.fr/franceinfo-midfi.mp3',
+      logo: 'https://www.francetvinfo.fr/assets/common/images/pwa/ios/120-5487caf3.png' },
+    { name: 'France Culture', url: 'https://icecast.radiofrance.fr/franceculture-midfi.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/France_Culture_logo_2021.svg/500px-France_Culture_logo_2021.svg.png' },
+    { name: 'France Musique', url: 'https://icecast.radiofrance.fr/francemusique-midfi.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/France_Musique_logo_2021.svg/500px-France_Musique_logo_2021.svg.png' },
+    { name: 'FIP', url: 'https://icecast.radiofrance.fr/fip-midfi.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/FIP_logo_2021.svg/500px-FIP_logo_2021.svg.png' },
+    { name: 'Mouv\'', url: 'https://icecast.radiofrance.fr/mouv-midfi.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Mouv_logo_2022.svg/500px-Mouv_logo_2022.svg.png' },
+    { name: 'Europe 1', url: 'https://europe1.lmn.fm/europe1.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Europe1_FLAT.png/500px-Europe1_FLAT.png' },
+    { name: 'RMC', url: 'https://audio.bfmtv.com/rmcradio_128.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/RMC_2025.svg/500px-RMC_2025.svg.png' },
+    { name: 'NRJ', url: 'https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/fr/thumb/d/dc/Logo_Nrj_%28radio%29_2008.svg/500px-Logo_Nrj_%28radio%29_2008.svg.png' },
+    { name: 'Skyrock', url: 'https://icecast.skyrock.net/s/natio_mp3_128k',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/SKYROCK_FM_LOGO.svg/500px-SKYROCK_FM_LOGO.svg.png' },
+    { name: 'Radio Nova', url: 'https://novazz.ice.infomaniak.ch/novazz-128.mp3',
+      logo: 'https://www.nova.fr/wp-content/uploads/sites/2/2021/02/cropped-favicon.png' },
+    { name: 'Radio Classique', url: 'https://radioclassique.ice.infomaniak.ch/radioclassique-high.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Logo_Radio_Classique.svg/500px-Logo_Radio_Classique.svg.png' },
+    { name: 'TSF Jazz', url: 'https://tsfjazz.ice.infomaniak.ch/tsfjazz-high.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/TSFJazz-2017.jpg/500px-TSFJazz-2017.jpg' },
+    { name: 'Ouï FM', url: 'https://ouifm.ice.infomaniak.ch/ouifm-high.mp3',
+      logo: 'https://bocir-prod-bucket.s3.amazonaws.com/radios/oui-fm/images/favicon.ico' },
+    { name: 'Radio Meuh', url: 'https://radiomeuh.ice.infomaniak.ch/radiomeuh-128.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/fr/thumb/9/9a/Radio_Meuh_Logo.svg/500px-Radio_Meuh_Logo.svg.png' }
   ].map(function (r) {
-    return { key: 'default-radio:' + r.url, kind: 'radio', name: r.name, url: r.url, logo: null, group: 'Stations par défaut' };
+    return { key: 'default-radio:' + r.url, kind: 'radio', name: r.name, url: r.url, logo: r.logo || null, group: 'Stations par défaut' };
   });
 
   function renderRadio() {
