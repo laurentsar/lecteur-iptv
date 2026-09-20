@@ -6,8 +6,9 @@
  *   window.UPDATE_REPO = 'laurentsar/<repo>';   // obligatoire
  *   window.APP_VERSION = '1.0';                  // obligatoire (version installée)
  *
- * Autonome : aucune dépendance, styles injectés. Anti-spam : 1 requête / 6 h,
- * mémorise la version ignorée. Échec réseau silencieux.
+ * Autonome : aucune dépendance, styles injectés. Vérifie à CHAQUE démarrage
+ * de l'appli (pas de temporisation) ; mémorise la version ignorée pour ne
+ * pas la re-proposer. Échec réseau silencieux.
  */
 (function () {
   'use strict';
@@ -15,14 +16,11 @@
   var CURRENT = window.APP_VERSION;
   if (!REPO || !CURRENT) return;
 
-  var POLL_INTERVAL = 6 * 3600 * 1000; // 6 h
-  var KEY_POLL = 'updPoll:' + REPO;
   var KEY_DISMISS = 'updDismiss:' + REPO;
 
   // Exposé pour une vérification déclenchée à la main depuis l'app (bouton
-  // « Vérifier maintenant » des réglages) : la temporisation de 6 h ci-dessous
-  // fait sinon sortir ce script sans rien définir, et la bannière ne pourrait
-  // pas être affichée à la demande. Déclaré AVANT ce retour anticipé.
+  // « Vérifier maintenant » des réglages), qui reste utile même en vérifiant
+  // déjà à chaque démarrage : on peut vouloir revérifier sans redémarrer.
   window.showUpdateBanner = showBanner;
 
   function ls(get, k, v) {
@@ -41,9 +39,6 @@
     return 0;
   }
 
-  var last = parseInt(ls(true, KEY_POLL), 10) || 0;
-  if (Date.now() - last < POLL_INTERVAL) return;
-
   // Cache-buster (_) : évite qu'un service worker "cache-first" serve une
   // réponse d'API périmée. GitHub ignore les paramètres inconnus.
   fetch('https://api.github.com/repos/' + REPO + '/releases/latest?_=' + Date.now(), {
@@ -52,7 +47,6 @@
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (rel) {
       if (!rel || !rel.tag_name) return;
-      ls(false, KEY_POLL, Date.now());
       var latest = String(rel.tag_name).replace(/^v/, '');
       if (cmp(latest, CURRENT) <= 0) return;          // déjà à jour
       if (ls(true, KEY_DISMISS) === latest) return;    // version déjà ignorée
