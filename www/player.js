@@ -1290,6 +1290,33 @@
   // Dans les deux cas, un second essai repart sur l'URL BRUTE d'origine, en
   // MPEG-TS explicite (video/mp2t) : certains récepteurs/téléviseurs la
   // décodent malgré tout, alors qu'aucun des deux n'était garanti d'avance.
+  //
+  // TROISIÈME cas, découvert ensuite : loadMedia() ne se résout NI ne
+  // rejette JAMAIS — confirmé par un essai où « Connexion à... » restait
+  // affiché indéfiniment, sans succès ni échec. Une session Cast reprise
+  // automatiquement au démarrage (autoJoinPolicy: ORIGIN_SCOPED) peut
+  // référencer un récepteur qui ne répond plus (fermé côté TV entre-temps) :
+  // le SDK ne signale pas toujours cette perte, et loadMedia() attend une
+  // réponse qui ne viendra jamais. Un délai explicite (avecDelai) coupe
+  // cette session muette pour qu'un nouvel appui reparte sur une connexion
+  // neuve, au lieu de rester bloqué sans le moindre indice.
+  var CAST_LOAD_TIMEOUT_MS = 9000;
+
+  function avecDelai(promesse, ms) {
+    return new Promise(function (resolve, reject) {
+      var fini = false;
+      var minuteur = setTimeout(function () {
+        if (fini) return;
+        fini = true;
+        reject(new Error('délai dépassé'));
+      }, ms);
+      promesse.then(
+        function (v) { if (!fini) { fini = true; clearTimeout(minuteur); resolve(v); } },
+        function (e) { if (!fini) { fini = true; clearTimeout(minuteur); reject(e); } }
+      );
+    });
+  }
+
   function castLoad(session, url, title, mime, repli) {
     var deviceName = session.getCastDevice() ? session.getCastDevice().friendlyName : 'la TV';
     var request = new chrome.cast.media.LoadRequest(castMediaInfo(url, title, mime));
@@ -1303,7 +1330,7 @@
       }
     }
 
-    session.loadMedia(request).then(
+    avecDelai(session.loadMedia(request), CAST_LOAD_TIMEOUT_MS).then(
       function () {
         castNotify('▶ Diffusion sur ' + deviceName);
         var media = session.getMediaSession();
@@ -1318,7 +1345,18 @@
         };
         media.addUpdateListener(suivi);
       },
-      function (err) { echec(err && err.description ? err.description : String(err)); }
+      function (err) {
+        if (err && err.message === 'délai dépassé') {
+          // Session muette : on la coupe plutôt que de la laisser traîner —
+          // un futur appui sur 📡 repartira sur une connexion neuve
+          // (requestSession()) au lieu de retomber sur la même session
+          // morte et de rester bloqué à nouveau.
+          try { session.endSession(true); } catch (e) {}
+          castNotify('Diffusion impossible : la TV ne répond plus. Réessaie — la connexion a été réinitialisée.');
+          return;
+        }
+        echec(err && err.description ? err.description : String(err));
+      }
     );
   }
 
