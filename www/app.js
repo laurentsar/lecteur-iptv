@@ -1840,7 +1840,9 @@
     { name: 'France Bleu Limousin', url: 'https://icecast.radiofrance.fr/fblimousin-midfi.mp3',
       logo: 'https://www.ici.fr/images/favicon-112.png' },
     { name: 'Sud Radio', url: 'https://ice.creacast.com/sudradio#radio.mp3',
-      logo: 'https://www.sudradio.fr/wp-content/uploads/2019/06/cropped-favicon-180x180.png' }
+      logo: 'https://www.sudradio.fr/wp-content/uploads/2019/06/cropped-favicon-180x180.png' },
+    { name: 'Europe 2', url: 'https://europe2.lmn.fm/europe2.mp3',
+      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Europe_2_blanc_2024.png/500px-Europe_2_blanc_2024.png' }
   ].map(function (r) {
     return { key: 'default-radio:' + r.url, kind: 'radio', name: r.name, url: r.url, logo: r.logo || null, group: 'Stations par défaut' };
   });
