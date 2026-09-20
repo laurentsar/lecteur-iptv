@@ -36,7 +36,8 @@ body {
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 20;
 }
-.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; border-radius: 10px; }
+.brand:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cast-header {
   /* Bouton normal (pas <google-cast-launcher>, voir index.html) : son icône
      à lui, rendue dans un Shadow DOM par le SDK Google, restait fondue dans

@@ -454,6 +454,10 @@
     var b = e.target.closest('.tab');
     if (b) goTab(b.dataset.tab);
   });
+  // Logo/titre de l'en-tête : retour à l'accueil en un tap, comme le logo
+  // d'un site web — makeFocusable() lui donne aussi Entrée/Espace (clavier,
+  // D-pad TV), un <div> n'étant pas nativement activable au clavier.
+  makeFocusable($id('brandHome')).addEventListener('click', function () { goTab('accueil'); });
   window.AppNav = { goHome: function () { goTab('accueil'); } };
 
   // Touche « Maison » (clavier physique/Bluetooth, ou télécommande TV quand

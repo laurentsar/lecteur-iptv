@@ -37,7 +37,7 @@
   </div>
 
   <header class="app-header">
-    <div class="brand">
+    <div class="brand" id="brandHome" role="button" aria-label="Retour à l'accueil" title="Retour à l'accueil">
       <img class="brand-logo" src="img/icon-192.png" alt="" />
       <div>
         <h1>Lecteur IPTV <span id="verChip" class="ver-chip"></span></h1>
@@ -465,7 +465,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.47';
+    window.APP_VERSION = '2.48';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
