@@ -3125,13 +3125,12 @@
   }
 
   // ---------- Vérification manuelle des mises à jour ----------
-  // La vérification automatique (www/update-check.js) est volontairement
-  // limitée à une requête toutes les 6 h — l'API GitHub n'autorise que 60
-  // appels par heure sans authentification. Ce bouton court-circuite cette
-  // temporisation quand on VEUT savoir tout de suite, et rend visible le cas
-  // « déjà à jour », que la bannière ne dit jamais puisqu'elle ne s'affiche
-  // pas. L'installation elle-même reste celle de la bannière (bouton
-  // « ⬇ Installer », via le plugin natif — voir www/apk-update.js).
+  // La vérification automatique (www/update-check.js) tourne déjà à chaque
+  // démarrage ; ce bouton sert surtout à revérifier sans redémarrer, et
+  // rend visible le cas « déjà à jour », que la bannière ne dit jamais
+  // puisqu'elle ne s'affiche pas dans ce cas. L'installation elle-même reste
+  // celle de la bannière (téléchargement + installation lancés tout seuls
+  // dès qu'elle s'affiche, via le plugin natif — voir www/apk-update.js).
   function setupCheckUpdate() {
     var btn = $id('btnCheckUpdate');
     var statut = $id('updateStatus');

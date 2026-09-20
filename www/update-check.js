@@ -1,6 +1,6 @@
 /* update-check.js — vérification de mise à jour applicative (générique).
  * Interroge la dernière Release GitHub, compare au numéro embarqué et affiche
- * une bannière de téléchargement si une version plus récente est publiée.
+ * une bannière annonçant la mise à jour trouvée.
  *
  * Config (dans index.html, avant ce script) :
  *   window.UPDATE_REPO = 'laurentsar/<repo>';   // obligatoire
@@ -9,6 +9,14 @@
  * Autonome : aucune dépendance, styles injectés. Vérifie à CHAQUE démarrage
  * de l'appli (pas de temporisation) ; mémorise la version ignorée pour ne
  * pas la re-proposer. Échec réseau silencieux.
+ *
+ * Dans l'APK (plugin natif présent, voir apk-update.js) : téléchargement et
+ * lancement de l'installation automatiques, sans action de l'utilisateur —
+ * seule la popup SYSTÈME Android « Installer cette appli ? » reste
+ * incontournable (Android ne laisse aucune appli tierce s'installer sans
+ * cette confirmation, sauf droits root/MDM). Dans la PWA (pas de plugin) :
+ * lien de téléchargement classique, qui reste manuel — un navigateur exige
+ * un geste utilisateur pour déclencher un téléchargement de fichier.
  */
 (function () {
   'use strict';
@@ -86,21 +94,34 @@
     txt.className = 'ub-txt';
     txt.innerHTML = '🔄 Nouvelle version <b>v' + version + '</b> disponible';
 
-    // Si le plugin natif est présent (APK) : bouton qui télécharge + INSTALLE
-    // directement. Sinon lien de téléchargement navigateur (PWA).
+    // Si le plugin natif est présent (APK) : télécharge + lance l'INSTALLATION
+    // tout seul, sans attendre un clic sur ce bouton — voir plus bas. Sinon
+    // lien de téléchargement navigateur (PWA), qui reste manuel : rien ne
+    // permet de déclencher un téléchargement de fichier sans geste utilisateur
+    // dans un navigateur.
     var canInstall = typeof window.installApkUpdate === 'function' &&
       window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.UpdatePlugin;
     var act;
     if (canInstall) {
       act = document.createElement('button');
       act.className = 'ub-act';
-      act.textContent = '⬇ Installer';
-      act.onclick = function () {
-        act.disabled = true; act.textContent = '⏳ Installation…';
+      var lancer = function () {
+        act.disabled = true; act.textContent = '⏳ Téléchargement…';
         window.installApkUpdate(url, act, function () {
-          act.disabled = false; act.textContent = '⬇ Installer';
+          // Échec (permission « sources inconnues » pas encore accordée,
+          // réseau coupé pendant le téléchargement...) : on rend la main
+          // pour un nouvel essai manuel, seul cas où un clic est encore
+          // nécessaire.
+          act.disabled = false; act.textContent = '⬇ Réessayer';
         });
       };
+      act.onclick = lancer;
+      // Aucune action requise pour la mise à jour elle-même : lancé tout
+      // seul dès l'affichage de la bannière. Seule la popup SYSTÈME Android
+      // « Installer cette appli ? » reste incontournable une fois le
+      // téléchargement terminé — aucune appli tierce sans droits root/MDM ne
+      // peut installer un APK sans cette confirmation, Android l'impose.
+      lancer();
     } else {
       act = document.createElement('a');
       act.className = 'ub-act';
