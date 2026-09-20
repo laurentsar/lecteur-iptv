@@ -332,6 +332,12 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
   }
+  // Exposé pour player.js (chargé avant app.js, mais n'appelle ceci qu'en
+  // réaction à un évènement plus tard — window.AppToast existe déjà à ce
+  // moment-là) : le bouton Cast de l'en-tête est utilisable en parcourant les
+  // listes, sans chaîne ouverte ni survol du lecteur — #toast est le seul
+  // retour visible dans ce cas, la barre de statut du lecteur étant masquée.
+  window.AppToast = toast;
 
   // ---------- onglets ----------
   function goTab(name) {

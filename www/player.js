@@ -1230,7 +1230,23 @@
 
   function castCurrentMedia() {
     var session = cast.framework.CastContext.getInstance().getCurrentSession();
-    if (!session || !currentUrl) return;
+    if (!session) return;
+    if (!currentUrl) {
+      // Connecté avant d'avoir choisi quoi que ce soit (bouton Cast de
+      // l'en-tête, voulu utilisable en parcourant les listes — voir le
+      // commentaire de setupChromecast) : rien à envoyer à la TV pour
+      // l'instant, la chaîne choisie ensuite partira automatiquement
+      // (isCasting() dans startPlayback). Sans ce message, la connexion
+      // réussissait en silence : la TV restait plantée sur l'icône Cast
+      // générique du récepteur, sans le moindre indice que ça avait
+      // fonctionné ou qu'il fallait juste choisir un contenu — le lecteur
+      // n'est pas ouvert à ce stade, donc setStatus (sa barre à lui) ne
+      // suffit pas : #toast (page entière) est le seul retour visible ici.
+      if (global.AppToast) {
+        global.AppToast('📡 Connecté à ' + (session.getCastDevice() ? session.getCastDevice().friendlyName : 'la TV') + ' — choisis une chaîne ou une vidéo à diffuser');
+      }
+      return;
+    }
     clearLoadTimeout();
     destroyPlayers();
     video.pause();
