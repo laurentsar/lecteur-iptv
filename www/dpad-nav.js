@@ -157,7 +157,22 @@
     var ae = document.activeElement;
     if (ae && ae.isContentEditable) return;
     if (rendLaFleche(ae, direction)) return;
-    if (!ae || ae === document.body) return; // pas de focus courant : rien à déplacer depuis
+
+    /* Aucun focus courant : on en pose un, au lieu de ne rien faire.
+     *
+     * C'est le cas au démarrage de l'app, et après chaque appui sur un
+     * onglet — sur Android, toucher un bouton ne lui donne PAS le focus DOM.
+     * La télécommande se retrouvait alors devant une page où aucune flèche
+     * n'avait d'effet : c'est ce qui rendait les Réglages « impossibles à
+     * modifier ». Le premier élément visible sert de point de départ. */
+    if (!ae || ae === document.body) {
+      var premiers = candidats(null);
+      if (!premiers.length) return;
+      e.preventDefault();
+      premiers[0].focus();
+      if (premiers[0].scrollIntoView) premiers[0].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      return;
+    }
 
     var fromRect = ae.getBoundingClientRect();
     var liste = candidats(ae);
