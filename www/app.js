@@ -3035,6 +3035,22 @@
           saved = Store.addPlaylist(draft);
           verbe = 'ajoutée';
         }
+
+        /* Un même compte ne doit rester qu'UNE fois.
+         *
+         * Des doublons ont pu s'accumuler avant que ce lien sache mettre à
+         * jour (deux envois, ou un changement d'adresse) : on les retire ici,
+         * ce qui évite d'aller les supprimer un par un à la télécommande. Le
+         * doublon retiré est forcément le même compte — même utilisateur pour
+         * un Xtream, même URL pour un M3U. */
+        var enTrop = Store.getPlaylists().filter(function (p) {
+          if (p.id === saved.id || p.type !== saved.type) return false;
+          return saved.type === 'xtream'
+            ? p.utilisateur === saved.utilisateur
+            : p.m3uUrl === saved.m3uUrl;
+        });
+        enTrop.forEach(function (p) { Store.cacheClear(p.id); Store.removePlaylist(p.id); });
+        if (enTrop.length) verbe += ' (' + enTrop.length + ' doublon' + (enTrop.length > 1 ? 's' : '') + ' retiré' + (enTrop.length > 1 ? 's' : '') + ')';
         setActivePlaylist(saved.id);
         renderPlaylists();
         toast('Configuration reçue : « ' + saved.nom + ' » ' + verbe);

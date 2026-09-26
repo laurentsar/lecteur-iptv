@@ -363,7 +363,18 @@ function verifie(nom, cond, detail) {
             'n=' + apres.length);
     verifie('la nouvelle adresse est enregistrée', apres[0].serveur === 'http://5.6.7.8:8080', apres[0].serveur);
     verifie('le cache d’une playlist peut être vidé', typeof w.Store.cacheClear === 'function');
-    w.Store.removePlaylist(idAvant);
+    // Doublons accumulés avant que le lien sache mettre à jour : deux entrées
+    // du même compte, dont une morte. Le nettoyage doit n'en laisser qu'une.
+    w.Store.addPlaylist({ nom: 'Doublon', type: 'xtream', serveur: 'http://1.2.3.4:8080', utilisateur: 'UTIL', motDePasse: 'MDP' });
+    verifie('deux entrées du même compte peuvent coexister (état hérité)',
+            w.Store.getPlaylists().filter((p) => p.utilisateur === 'UTIL').length === 2);
+    const gardee = w.Store.getPlaylists().filter((p) => p.utilisateur === 'UTIL')[0];
+    w.Store.getPlaylists()
+      .filter((p) => p.utilisateur === 'UTIL' && p.id !== gardee.id)
+      .forEach((p) => w.Store.removePlaylist(p.id));
+    verifie('après nettoyage, une seule entrée par compte',
+            w.Store.getPlaylists().filter((p) => p.utilisateur === 'UTIL').length === 1);
+    w.Store.removePlaylist(gardee.id);
   }
 
   console.log('\n— Vue Bouquets : ce qui est compté —');
