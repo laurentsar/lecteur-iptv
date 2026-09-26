@@ -61,5 +61,13 @@ verifie('aucun candidat -> -1', D.pickCandidate(rect(0, 0, 10, 10), [], 'right')
           D.pickCandidate(centre, cands, 'right') === cands.indexOf(procheDecalee));
 }
 
+
+// Les catégories des Réglages sont des <summary> : sans eux dans le sélecteur,
+// la télécommande ne pouvait atteindre aucun réglage (constaté sur les deux
+// télés le 2026-09-26).
+verifie('un <summary> est navigable au D-pad',
+        DpadNav.FOCUSABLE_SELECTOR.split(',').map(function (s) { return s.trim(); }).indexOf('summary') !== -1,
+        DpadNav.FOCUSABLE_SELECTOR);
+
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);

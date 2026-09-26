@@ -60,6 +60,13 @@
   // atteignable au clavier (voir makeFocusable) plus les contrôles natifs.
   var FOCUSABLE_SELECTOR = '.carte, .carte-lock, .chip, .tab, .now-ligne, ' +
     '.guide-chan, .guide-prog, .version-item, .scene3d, ' +
+    // <summary> : l'en-tête d'un <details>. Le navigateur le rend focusable
+    // tout seul, mais il n'était pas dans cette liste — donc la navigation
+    // D-pad ne le proposait jamais, et TOUTES les catégories des Réglages
+    // (Synchronisation, Affichage, Lecture, Playlists, Infos) étaient hors
+    // d'atteinte à la télécommande. C'était ça, « je ne peux pas modifier
+    // mes paramètres ».
+    'summary, ' +
     'button, a[href], input, select, textarea, [tabindex]';
 
   function estVisible(el) {
