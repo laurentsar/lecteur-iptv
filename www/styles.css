@@ -762,3 +762,19 @@ body.filtre-nuit::after {
   .splash-core { width: 130px; height: 130px; }
   .splash-logo { inset: 36px; }
 }
+
+/* Focus visible sur les catégories des Réglages et les autres <summary>.
+ *
+ * Elles sont focusables (c'est le navigateur qui le décide pour un
+ * <summary>), mais rien ne le montrait : à la télécommande, on déplaçait un
+ * focus invisible — indiscernable d'une télécommande qui ne répond pas. */
+summary:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
+body.tv summary:focus { outline-width: 3px; }
+
+/* Cases à cocher et boutons des Réglages : même traitement, pour la même
+ * raison. Le contour par défaut du navigateur est quasi invisible sur fond
+ * sombre, à trois mètres. */
+.panel input[type="checkbox"]:focus, .panel button:focus,
+.panel input[type="text"]:focus, .panel input[type="password"]:focus {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
