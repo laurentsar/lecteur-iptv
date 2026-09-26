@@ -354,6 +354,12 @@
     exportConfig: exportConfig, importConfig: importConfig,
     cacheGet: function (playlistId) { return idbGet('cache:' + playlistId); },
     cacheSet: function (playlistId, data) { return idbSet('cache:' + playlistId, data); },
+    // Vider le cache d'une playlist : nécessaire quand son serveur change
+    // d'adresse, sinon l'app continue de servir les chaînes de l'ancienne —
+    // avec des URL de flux qui ne répondent plus.
+    cacheClear: function (playlistId) {
+      return Promise.all([idbSet('cache:' + playlistId, null), idbSet('raw:' + playlistId, null)]);
+    },
     rawGet: function (playlistId) { return idbGet('raw:' + playlistId); },
     rawSet: function (playlistId, text) { return idbSet('raw:' + playlistId, text); }
   };

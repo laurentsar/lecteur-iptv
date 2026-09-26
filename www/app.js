@@ -3017,10 +3017,32 @@
         } else {
           return;
         }
-        var saved = Store.addPlaylist(draft);
+        /* Même compte, nouvelle adresse : on MET À JOUR, on ne duplique pas.
+         *
+         * Un fournisseur qui change d'IP est le cas courant (c'est arrivé le
+         * 2026-09-26), et l'ancienne version ajoutait alors une deuxième
+         * playlist portant les mêmes identifiants : deux entrées, dont une
+         * morte, et les favoris attachés à la mauvaise. Un compte Xtream est
+         * identifié par son UTILISATEUR, pas par son serveur ; une playlist
+         * M3U, par son URL. */
+        var existante = Store.getPlaylists().filter(function (p) {
+          if (p.type !== draft.type) return false;
+          return draft.type === 'xtream' ? p.utilisateur === draft.utilisateur : p.m3uUrl === draft.m3uUrl;
+        })[0];
+
+        var saved, verbe;
+        if (existante) {
+          saved = Store.updatePlaylist(existante.id, draft);
+          verbe = 'mise à jour';
+          // Le cache des chaînes appartenait à l'ancienne adresse.
+          Store.cacheClear(existante.id);
+        } else {
+          saved = Store.addPlaylist(draft);
+          verbe = 'ajoutée';
+        }
         setActivePlaylist(saved.id);
         renderPlaylists();
-        toast('Configuration reçue : « ' + saved.nom + ' » ajoutée');
+        toast('Configuration reçue : « ' + saved.nom + ' » ' + verbe);
         goTab('accueil');
       } catch (e) { console.error('appUrlOpen config', e); }
     });

@@ -347,6 +347,25 @@ function verifie(nom, cond, detail) {
     verifie('une radio porte une URL', radios.every(r => !!r.url));
   }
 
+  console.log('\n— Lien de configuration : même compte, nouvelle adresse —');
+  {
+    // Un fournisseur qui change d'IP ne doit pas produire une deuxième
+    // playlist : c'est arrivé en vrai, avec les favoris restés sur la morte.
+    const avant = w.Store.getPlaylists().length;
+    w.Store.addPlaylist({ nom: 'Compte test', type: 'xtream', serveur: 'http://1.2.3.4:8080', utilisateur: 'UTIL', motDePasse: 'MDP' });
+    const idAvant = w.Store.getPlaylists().slice(-1)[0].id;
+    // Même utilisateur, serveur différent.
+    const meme = w.Store.getPlaylists().filter((p) => p.type === 'xtream' && p.utilisateur === 'UTIL');
+    verifie('le compte est retrouvé par son utilisateur', meme.length === 1);
+    w.Store.updatePlaylist(idAvant, { serveur: 'http://5.6.7.8:8080' });
+    const apres = w.Store.getPlaylists().filter((p) => p.utilisateur === 'UTIL');
+    verifie('mise à jour sur place, pas de doublon', apres.length === 1 && w.Store.getPlaylists().length === avant + 1,
+            'n=' + apres.length);
+    verifie('la nouvelle adresse est enregistrée', apres[0].serveur === 'http://5.6.7.8:8080', apres[0].serveur);
+    verifie('le cache d’une playlist peut être vidé', typeof w.Store.cacheClear === 'function');
+    w.Store.removePlaylist(idAvant);
+  }
+
   console.log('\n— Vue Bouquets : ce qui est compté —');
   {
     // Chaque bouquet de la playlist de test contient exactement 500/7 chaînes
