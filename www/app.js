@@ -2044,7 +2044,13 @@
           .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, logo: it.tvgLogo, chno: it.tvgChno || '' }); });
       });
     }
-    return ensureAllDirectItems().then(function (items) { return excludeHidden(excludeRadio(items)); });
+    // Meme filtre que la branche M3U juste au-dessus : sans lui, les lignes de
+    // separation du fournisseur arrivaient jusqu'au Guide, qui les comptait
+    // parmi ses chaines (« ... sur 2409 ») et leur reservait une ligne sans le
+    // moindre programme.
+    return ensureAllDirectItems().then(function (items) {
+      return excludeHidden(excludeRadio(items)).filter(function (it) { return !looksLikeSeparator(it.name); });
+    });
   }
 
   // ---------- Actions sur une émission du Guide ----------
