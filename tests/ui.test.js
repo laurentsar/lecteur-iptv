@@ -57,6 +57,14 @@ let m3u = '#EXTM3U url-tvg="http://example.invalid/epg.xml"\n';
 for (let i = 1; i <= NB; i++) {
   m3u += `#EXTINF:-1 tvg-id="c${i}" tvg-chno="${i}" group-title="Bouquet FR ${i % 7}",Chaine ${i}\nhttp://example.invalid/live/${i}.ts\n`;
 }
+// Lignes de séparation telles que les insèrent les fournisseurs IPTV : ce sont
+// des entrées de playlist ordinaires, avec une URL, mais ce ne sont pas des
+// chaînes. Placées après les 500 vraies (donc au-delà de la 2e page) pour ne
+// décaler aucune assertion de pagination.
+for (let g = 0; g < 7; g++) {
+  m3u += `#EXTINF:-1 group-title="Bouquet FR ${g}",||--- |FR| SEPARATEUR ${g} |FR| ---||\nhttp://example.invalid/live/sep${g}.ts\n`;
+}
+
 // Films et séries, pour exercer les menus VR au-delà du direct. Les chaînes en
 // direct restent au nombre de 500 dans 7 bouquets : les tests d'affichage
 // précédents ne doivent pas bouger.
@@ -337,6 +345,24 @@ function verifie(nom, cond, detail) {
     const radios = await w.AppZap.vrRadios();
     verifie('radios exposées', Array.isArray(radios) && radios.length > 0, 'n=' + radios.length);
     verifie('une radio porte une URL', radios.every(r => !!r.url));
+  }
+
+  console.log('\n— Vue Bouquets : ce qui est compté —');
+  {
+    // Chaque bouquet de la playlist de test contient exactement 500/7 chaînes
+    // plus UN séparateur. Le total annoncé par les tuiles doit donc rester 500 :
+    // un séparateur compté ferait promettre une chaîne qui n'existe pas, et la
+    // liste du bouquet l'affiche en titre de section, pas en carte.
+    $('tabs').querySelector('[data-tab="direct"]').click();
+    await attendre(150);
+    w.document.querySelector('#directViewToggle [data-view="bouquets"]').click();
+    await attendre(300);
+    const tuiles = Array.from($('listeDirect').querySelectorAll('.carte'));
+    const comptes = tuiles.map(t => parseInt((t.querySelector('.carte-groupe') || {}).textContent || '0', 10));
+    const total = comptes.reduce((a, b) => a + b, 0);
+    verifie('7 bouquets en tuiles', tuiles.length === 7, 'n=' + tuiles.length);
+    verifie('les séparateurs ne sont pas comptés comme des chaînes',
+            total === 500, 'total annoncé=' + total + ' (attendu 500) — ' + comptes.join('+'));
   }
 
   console.log('\n— Erreurs JS survenues pendant le test —');

@@ -1690,6 +1690,11 @@
   // recherche, regroupement des doublons s'appliquent de la même façon).
   function afficheImmersion(kindKey, items, opts, moreBtn) {
     if (kindKey !== 'direct' || state.directView !== '3d') return false;
+    // La grille rend les separateurs du fournisseur en titre de section
+    // (renderItems) ; ici il n'y a pas de section, une carte par chaine et une
+    // seule a l'ecran. Un separateur y devenait une fausse chaine, comptee dans
+    // « 1 / N » et atteignable au zapping -- qui ne peut rien lire.
+    items = items.filter(function (it) { return !looksLikeSeparator(it.name); });
     setZapList(items);
     render3d(items, opts);
     moreBtn.style.display = 'none';
@@ -1751,7 +1756,12 @@
 
     if (pl.type === 'm3u') {
       ensureM3uLoaded().then(function (data) {
-        var pool = data.items.filter(function (it) { return it.kind === 'live' && !isHiddenChannel(it.name); });
+        // Les lignes de separation du fournisseur ("||--- |FR| GENERALISTES
+        // |FR| ---||") sont des entrees comme les autres dans la playlist. La
+        // liste les affiche deja en titre de section (voir renderItems et
+        // looksLikeSeparator), donc les compter ici ferait annoncer a la tuile
+        // plus de chaines qu'il n'y en a de lisibles.
+        var pool = data.items.filter(function (it) { return it.kind === 'live' && !isHiddenChannel(it.name) && !looksLikeSeparator(it.name); });
         var byGroup = {};
         pool.forEach(function (it) {
           var g = it.groupTitle || 'Sans groupe';
@@ -1764,7 +1774,11 @@
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); });
     } else {
       Promise.all([ensureXtreamCats('direct'), ensureAllDirectItems()]).then(function (r) {
-        var cats = r[0].filter(function (c) { return !/radio/i.test(c.label || ''); }), items = excludeHidden(excludeRadio(r[1]));
+        // Meme regle que la branche M3U ci-dessus : les separateurs ne sont pas
+        // des chaines. Ils faussaient aussi le logo de la tuile, pris sur la
+        // premiere entree du bouquet -- souvent le drapeau colle au separateur.
+        var cats = r[0].filter(function (c) { return !/radio/i.test(c.label || ''); }),
+            items = excludeHidden(excludeRadio(r[1])).filter(function (it) { return !looksLikeSeparator(it.name); });
         var countByLabel = {}, logoByLabel = {};
         items.forEach(function (it) {
           var g = it.group || '';
