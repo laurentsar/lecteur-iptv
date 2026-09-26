@@ -376,7 +376,13 @@
     // Une tuile d'abord ; à défaut seulement (liste encore vide), un filtre.
     var found = pick(panel.querySelectorAll('.scene3d')) ||
       pick(panel.querySelectorAll('.carte')) ||
-      pick(panel.querySelectorAll('.chip, .version-item'));
+      pick(panel.querySelectorAll('.chip, .version-item')) ||
+      // Les Réglages n'ont ni tuile ni filtre : leur contenu, ce sont les
+      // catégories (<summary>). Sans cette ligne, le focus retombait sur
+      // l'onglet actif, et depuis la barre d'onglets la télécommande ne
+      // trouvait plus comment entrer dans la page — les réglages étaient
+      // inatteignables (constaté sur les deux télés).
+      pick(panel.querySelectorAll('summary'));
     return found;
 
     function pick(nodes) {
