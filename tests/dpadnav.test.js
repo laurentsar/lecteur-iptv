@@ -62,6 +62,21 @@ verifie('aucun candidat -> -1', D.pickCandidate(rect(0, 0, 10, 10), [], 'right')
 }
 
 
+{
+  // Le cas qui a bloqué les Réglages sur les deux télés : depuis un onglet du
+  // bas, la flèche « haut » doit entrer dans le bloc large juste au-dessus,
+  // pas sauter à l'onglet voisin de la même rangée.
+  const ongletDroite = rect(1700, 980, 1900, 1060);
+  const ongletVoisin = rect(1480, 980, 1690, 1060);
+  const blocLarge = rect(80, 580, 1830, 660);       // une catégorie des Réglages
+  const cands = [blocLarge, ongletVoisin];
+  verifie('haut -> le bloc large au-dessus, pas l\'onglet voisin',
+          D.pickCandidate(ongletDroite, cands, 'up') === cands.indexOf(blocLarge),
+          'choisi=' + D.pickCandidate(ongletDroite, cands, 'up'));
+  verifie('gauche -> l\'onglet voisin (même rangée)',
+          D.pickCandidate(ongletDroite, cands, 'left') === cands.indexOf(ongletVoisin));
+}
+
 // Les catégories des Réglages sont des <summary> : sans eux dans le sélecteur,
 // la télécommande ne pouvait atteindre aucun réglage (constaté sur les deux
 // télés le 2026-09-26).

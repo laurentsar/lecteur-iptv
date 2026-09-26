@@ -21,18 +21,48 @@
 (function (global) {
   'use strict';
 
+  // Distance entre deux intervalles : 0 s'ils se chevauchent.
+  //
+  // C'est la pièce qui manquait. En mesurant l'écart perpendiculaire entre
+  // les CENTRES, un bloc large aligné juste au-dessus (une catégorie des
+  // Réglages, pleine largeur) écopait d'une pénalité énorme parce que son
+  // centre est loin à gauche — et la flèche « haut » préférait sauter à
+  // l'onglet voisin, qui est pourtant sur la même rangée. Avec l'écart entre
+  // BORDS, un candidat qui recouvre la colonne courante a une pénalité nulle,
+  // ce qui est exactement ce que l'œil attend.
+  function ecart(a1, a2, b1, b2) {
+    if (a2 < b1) return b1 - a2;
+    if (b2 < a1) return a1 - b2;
+    return 0;
+  }
+
+  // Tolérance : deux éléments d'une même rangée ne sont jamais alignés au
+  // pixel près (une bordure de focus suffit à les décaler).
+  var MARGE = 6;
+
   // Repli sur l'ordre naturel de tabulation à égalité de score : les rangées
   // d'une grille sont dans l'ordre du DOM, ce qui donne un résultat stable.
   function score(from, cand, direction) {
-    var fcx = (from.left + from.right) / 2, fcy = (from.top + from.bottom) / 2;
-    var ccx = (cand.left + cand.right) / 2, ccy = (cand.top + cand.bottom) / 2;
-    var dx = ccx - fcx, dy = ccy - fcy;
+    var perpH = ecart(from.left, from.right, cand.left, cand.right);
+    var perpV = ecart(from.top, from.bottom, cand.top, cand.bottom);
     // Poids fort sur l'axe perpendiculaire : on ne quitte la rangée/colonne
     // courante que si rien de mieux ne s'y trouve.
-    if (direction === 'right') return dx <= 0 ? null : dx + Math.abs(dy) * 2;
-    if (direction === 'left') return dx >= 0 ? null : -dx + Math.abs(dy) * 2;
-    if (direction === 'down') return dy <= 0 ? null : dy + Math.abs(dx) * 2;
-    if (direction === 'up') return dy >= 0 ? null : -dy + Math.abs(dx) * 2;
+    if (direction === 'right') {
+      if (cand.left < from.right - MARGE) return null;
+      return (cand.left - from.right) + perpV * 2;
+    }
+    if (direction === 'left') {
+      if (cand.right > from.left + MARGE) return null;
+      return (from.left - cand.right) + perpV * 2;
+    }
+    if (direction === 'down') {
+      if (cand.top < from.bottom - MARGE) return null;
+      return (cand.top - from.bottom) + perpH * 2;
+    }
+    if (direction === 'up') {
+      if (cand.bottom > from.top + MARGE) return null;
+      return (from.top - cand.bottom) + perpH * 2;
+    }
     return null;
   }
 
