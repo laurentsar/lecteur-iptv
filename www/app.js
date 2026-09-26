@@ -1690,11 +1690,6 @@
   // recherche, regroupement des doublons s'appliquent de la même façon).
   function afficheImmersion(kindKey, items, opts, moreBtn) {
     if (kindKey !== 'direct' || state.directView !== '3d') return false;
-    // La grille rend les separateurs du fournisseur en titre de section
-    // (renderItems) ; ici il n'y a pas de section, une carte par chaine et une
-    // seule a l'ecran. Un separateur y devenait une fausse chaine, comptee dans
-    // « 1 / N » et atteignable au zapping -- qui ne peut rien lire.
-    items = items.filter(function (it) { return !looksLikeSeparator(it.name); });
     setZapList(items);
     render3d(items, opts);
     moreBtn.style.display = 'none';
@@ -1756,12 +1751,11 @@
 
     if (pl.type === 'm3u') {
       ensureM3uLoaded().then(function (data) {
-        // Les lignes de separation du fournisseur ("||--- |FR| GENERALISTES
-        // |FR| ---||") sont des entrees comme les autres dans la playlist. La
-        // liste les affiche deja en titre de section (voir renderItems et
-        // looksLikeSeparator), donc les compter ici ferait annoncer a la tuile
-        // plus de chaines qu'il n'y en a de lisibles.
-        var pool = data.items.filter(function (it) { return it.kind === 'live' && !isHiddenChannel(it.name) && !looksLikeSeparator(it.name); });
+        // Les lignes de separation du fournisseur sont comptees et affichees
+        // comme des entrees ordinaires : c'est le comportement demande (elles
+        // servent de reperes dans la liste, et le compte de la tuile doit
+        // correspondre a ce que la liste contient, separateurs inclus).
+        var pool = data.items.filter(function (it) { return it.kind === 'live' && !isHiddenChannel(it.name); });
         var byGroup = {};
         pool.forEach(function (it) {
           var g = it.groupTitle || 'Sans groupe';
@@ -1774,11 +1768,12 @@
       }).catch(function (err) { container.innerHTML = ''; container.appendChild(el('div', 'hint', 'Impossible de charger la playlist : ' + err.message)); });
     } else {
       Promise.all([ensureXtreamCats('direct'), ensureAllDirectItems()]).then(function (r) {
-        // Meme regle que la branche M3U ci-dessus : les separateurs ne sont pas
-        // des chaines. Ils faussaient aussi le logo de la tuile, pris sur la
-        // premiere entree du bouquet -- souvent le drapeau colle au separateur.
+        // Meme regle que la branche M3U ci-dessus : les separateurs comptent
+        // comme des entrees, et le logo de la tuile reste celui de la premiere
+        // entree du bouquet (souvent le drapeau du pays, porte par le
+        // separateur) -- c'est le reperage voulu.
         var cats = r[0].filter(function (c) { return !/radio/i.test(c.label || ''); }),
-            items = excludeHidden(excludeRadio(r[1])).filter(function (it) { return !looksLikeSeparator(it.name); });
+            items = excludeHidden(excludeRadio(r[1]));
         var countByLabel = {}, logoByLabel = {};
         items.forEach(function (it) {
           var g = it.group || '';
@@ -2044,13 +2039,7 @@
           .map(function (it) { return Object.assign({}, it, { epgKey: it.tvgId || null, logo: it.tvgLogo, chno: it.tvgChno || '' }); });
       });
     }
-    // Meme filtre que la branche M3U juste au-dessus : sans lui, les lignes de
-    // separation du fournisseur arrivaient jusqu'au Guide, qui les comptait
-    // parmi ses chaines (« ... sur 2409 ») et leur reservait une ligne sans le
-    // moindre programme.
-    return ensureAllDirectItems().then(function (items) {
-      return excludeHidden(excludeRadio(items)).filter(function (it) { return !looksLikeSeparator(it.name); });
-    });
+    return ensureAllDirectItems().then(function (items) { return excludeHidden(excludeRadio(items)); });
   }
 
   // ---------- Actions sur une émission du Guide ----------

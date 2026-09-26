@@ -177,7 +177,7 @@ function verifie(nom, cond, detail) {
   croix.click();
   await attendre(500);
   verifie('champ vidé', rech.value === '');
-  verifie('liste complète restaurée', scene.querySelector('.scene3d-pos').textContent.endsWith('/ 500'),
+  verifie('liste complète restaurée', scene.querySelector('.scene3d-pos').textContent.endsWith('/ 507'),
           scene.querySelector('.scene3d-pos').textContent);
 
   console.log('\n— Retour arrière —');
@@ -368,10 +368,14 @@ function verifie(nom, cond, detail) {
 
   console.log('\n— Vue Bouquets : ce qui est compté —');
   {
-    // Chaque bouquet de la playlist de test contient exactement 500/7 chaînes
-    // plus UN séparateur. Le total annoncé par les tuiles doit donc rester 500 :
-    // un séparateur compté ferait promettre une chaîne qui n'existe pas, et la
-    // liste du bouquet l'affiche en titre de section, pas en carte.
+    /* Choix de l'utilisateur (2026-09-26) : les lignes de séparation du
+     * fournisseur RESTENT comptées et affichées. Elles servent de repères
+     * dans la liste, et le compte de la tuile doit correspondre à ce que la
+     * liste contient. La playlist de test a 500 chaînes plus un séparateur
+     * par bouquet, soit 507.
+     *
+     * Ce test garde la trace de la décision : sans lui, « corriger » ce
+     * comptage paraîtrait une évidence et le travail serait refait. */
     $('tabs').querySelector('[data-tab="direct"]').click();
     await attendre(150);
     w.document.querySelector('#directViewToggle [data-view="bouquets"]').click();
@@ -380,8 +384,8 @@ function verifie(nom, cond, detail) {
     const comptes = tuiles.map(t => parseInt((t.querySelector('.carte-groupe') || {}).textContent || '0', 10));
     const total = comptes.reduce((a, b) => a + b, 0);
     verifie('7 bouquets en tuiles', tuiles.length === 7, 'n=' + tuiles.length);
-    verifie('les séparateurs ne sont pas comptés comme des chaînes',
-            total === 500, 'total annoncé=' + total + ' (attendu 500) — ' + comptes.join('+'));
+    verifie('les séparateurs sont comptés avec les chaînes (choix utilisateur)',
+            total === 507, 'total annoncé=' + total + ' (attendu 507) — ' + comptes.join('+'));
   }
 
   console.log('\n— Erreurs JS survenues pendant le test —');
