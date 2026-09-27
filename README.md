@@ -41,6 +41,16 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
   d'utiliser le lecteur sur iPhone (la PWA fonctionne dans Safari).
 - Aucun compte ni inscription requis (récepteur Cast « par défaut » de
   Google, pas d'application Cast dédiée à enregistrer).
+- **Fire TV** (et toute TV / boîtier Android où l'APK est installé) : les
+  Fire TV ne font pas Chromecast et n'apparaissent donc jamais dans le
+  sélecteur Cast. Bouton **📲 Envoyer sur la Fire TV** dans le lecteur du
+  téléphone (écran natif et lecteur web de l'APK) : l'appli ouverte sur la
+  TV s'annonce sur le wifi (mDNS, `_lecteuriptv._tcp`), le téléphone la
+  liste, et la chaîne s'ouvre sur la TV ; le téléphone arrête alors sa
+  lecture (une seule connexion par abonnement chez beaucoup de
+  fournisseurs). Si la box filtre la recherche automatique : « Adresse
+  IP… », l'adresse s'affiche sur la TV dans Réglages → Infos. Voir
+  `ci/patch_tv_link.py` et `www/tvlink.js`.
 
 ## Compatibilité TV Android et casque VR (Quest 3)
 
@@ -381,6 +391,7 @@ ci/patch_native_player.py  injecte (à chaque build) dans android/ :
   NativePlayerPlugin.java     plugin Capacitor, ouvre l'écran natif
   NativePlayerActivity.java   lecteur plein écran (Media3 ExoPlayer + FFmpeg + Cast)
   CastOptionsProvider.java    config. Google Cast (récepteur par défaut)
+  TvLink(Plugin).java         envoi téléphone → Fire TV (mDNS + HTTP local)
   activity_native_player.xml  mise en page (PlayerView + titre + cast + fermer)
 
 ci/patch_recorder.py  injecte (à chaque build) dans android/ :

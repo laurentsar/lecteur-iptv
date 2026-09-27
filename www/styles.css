@@ -609,6 +609,18 @@ body.filtre-nuit::after {
 .remote-panel-card .hint { font-size: 11px; }
 .version-item.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
 
+/* ---------- envoyer sur la Fire TV (tvlink.js) ---------- */
+/* Au-dessus du lecteur plein écran (.player-overlay, z-index 999). */
+.tvlink-fond {
+  position: fixed; inset: 0; z-index: 1500; background: rgba(6,10,16,.7);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.tvlink-carte { width: 320px; max-width: 100%; max-height: 80vh; }
+.tvlink-ip { margin: 10px 0 6px; flex-wrap: nowrap; }
+.tvlink-ip input { flex: 1 1 auto; min-width: 0; font-size: 13px; padding: 6px 8px; }
+.tvlink-ip button { flex: 0 0 auto; }
+.tvlink-annuler { width: 100%; }
+
 /* ---------- guide TV (agenda heure par heure) ---------- */
 .guide-daynav { display: flex; align-items: center; gap: 6px; }
 .daynav-btn {

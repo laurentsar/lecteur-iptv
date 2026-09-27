@@ -62,6 +62,7 @@ jobs:
         ci/patch_radio_background.py
         ci/patch_keep_awake.py
         ci/patch_updater.py
+        ci/patch_tv_link.py
         ci/patch_tv_keys.py
         ci/patch_tv_focus.py
         ci/patch_abi.py

@@ -76,7 +76,7 @@
   var currentEpgKey = ''; // retenu pour pouvoir rappeler le bandeau d'infos (playerInfo) à tout moment, pas seulement au zapping
   var triedNativeFallback = false, triedM3u8Fallback = false, triedAudioFallback = false;
   var overlay, video, titleEl, statusEl, closeBtn, airplayBtn, pipBtn, recordBtn, tracksBtn, tracksMenu, castLauncher;
-  var remoteBtn, remotePanel, castTvBtn, vrBtn, infoBtn;
+  var remoteBtn, remotePanel, castTvBtn, sendTvBtn, vrBtn, infoBtn;
   var fullscreenBtn, homeBtn;
   var zapBanner, zapBannerLogo, zapBannerName, zapBannerProg, zapBannerBar, zapBannerBarFill, zapBannerDesc;
   var radioCover, radioCoverLogo, radioCoverIcon, radioCoverName;
@@ -143,6 +143,7 @@
       '  <button id="castLauncher" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📡</button>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
       '  <button id="playerCastTv" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📺</button>' +
+      '  <button id="playerSendTv" class="player-cast" aria-label="Envoyer sur la Fire TV" title="Envoyer sur la Fire TV" style="display:none">📲</button>' +
       '  <button id="playerVr" class="player-cast" aria-label="Cinéma VR" style="display:none">🥽</button>' +
       '  <button id="playerInfo" class="player-cast" aria-label="Programme en cours" style="display:none">ℹ️</button>' +
       '  <button id="playerRemote" class="player-cast" aria-label="Télécommande" style="display:none">🕹️</button>' +
@@ -211,6 +212,7 @@
     castLauncher = overlay.querySelector('#castLauncher');
     castLauncher.addEventListener('click', function () { toggleCasting(true); });
     castTvBtn = overlay.querySelector('#playerCastTv');
+    sendTvBtn = overlay.querySelector('#playerSendTv');
     vrBtn = overlay.querySelector('#playerVr');
     remoteBtn = overlay.querySelector('#playerRemote');
     remotePanel = overlay.querySelector('#remotePanel');
@@ -292,6 +294,7 @@
     setupChromecast();
     updateCastAvailability();
     setupCastTv();
+    setupSendTv();
     setupVr();
     setupPip();
     setupTracks();
@@ -1654,6 +1657,27 @@
     castTvBtn.style.display = '';
     castTvBtn.addEventListener('click', function () {
       tryNativePlayer(originalUrl, originalTitle, 'Ouverture du lecteur natif (diffusion TV)…');
+    });
+  }
+
+  // Envoyer sur la Fire TV (www/tvlink.js) : la Fire TV n'est pas un
+  // Chromecast, c'est l'APK installé dessus qui reçoit la chaîne. Bouton
+  // présent seulement dans l'APK, sur un appareil qui n'est pas une TV. Une
+  // fois l'envoi accepté, on arrête la lecture ici : beaucoup d'abonnements
+  // n'autorisent qu'une connexion à la fois.
+  function setupSendTv() {
+    if (!global.TvLinkUI) return;
+    TvLinkUI.whenSender(function () {
+      sendTvBtn.style.display = '';
+      sendTvBtn.addEventListener('click', function () {
+        TvLinkUI.choisir({
+          url: originalUrl, title: originalTitle, live: currentIsLive,
+          logo: currentLogo, epgKey: currentEpgKey
+        }, function (nom) {
+          close();
+          if (global.AppToast) global.AppToast('▶ Lecture lancée sur ' + nom);
+        });
+      });
     });
   }
 

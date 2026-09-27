@@ -79,7 +79,7 @@ for (let se = 1; se <= 3; se++) {
 w.localStorage.setItem('iptv:playlists', JSON.stringify([{ id: 'p1', nom: 'Test', type: 'm3u', m3uUrl: 'http://example.invalid/pl.m3u', creeLe: 1 }]));
 w.localStorage.setItem('iptv:active', JSON.stringify('p1'));
 
-['net.js', 'serveurs.js', 'hls-native-loader.js', 'source-quality.js', 'store.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'player.js', 'recorder.js', 'app.js'].forEach(charger);
+['net.js', 'serveurs.js', 'hls-native-loader.js', 'source-quality.js', 'store.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'player.js', 'recorder.js', 'tvlink.js', 'app.js'].forEach(charger);
 
 // Net est chargé : on court-circuite le réseau pour servir la playlist de test.
 w.Net.fetchText = () => Promise.resolve(m3u);
