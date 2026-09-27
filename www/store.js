@@ -360,6 +360,9 @@
     cacheClear: function (playlistId) {
       return Promise.all([idbSet('cache:' + playlistId, null), idbSet('raw:' + playlistId, null)]);
     },
+    // Stockage clé/valeur générique (cache des listes Xtream, voir xtream.js).
+    kvGet: function (key) { return idbGet('kv:' + key); },
+    kvSet: function (key, value) { return idbSet('kv:' + key, value); },
     rawGet: function (playlistId) { return idbGet('raw:' + playlistId); },
     rawSet: function (playlistId, text) { return idbSet('raw:' + playlistId, text); }
   };

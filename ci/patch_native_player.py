@@ -45,7 +45,9 @@ RES_DIR = "android/app/src/main/res"
 
 PLUGIN_JAVA = """package com.laurent.iptvlecteur;
 
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.net.Uri;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -77,6 +79,26 @@ public class NativePlayerPlugin extends Plugin {
     @Override
     public void load() {
         instance = this;
+    }
+
+    // Onglet YouTube : ouvre un lien dans l'appli qui sait le lire (YouTube
+    // pour TV sur un téléviseur, YouTube sur téléphone). La WebView ne peut
+    // pas le faire elle-même : un window.open y reste sans effet.
+    @PluginMethod
+    public void openExternal(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null || url.isEmpty()) {
+            call.reject("url manquante");
+            return;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getActivity().startActivity(intent);
+            call.resolve();
+        } catch (ActivityNotFoundException e) {
+            call.reject("aucune appli pour ouvrir ce lien");
+        }
     }
 
     @PluginMethod

@@ -62,6 +62,7 @@
     <button class="tab" data-tab="films"><span class="tab-ic">🎬</span><span class="tab-lb">Films</span></button>
     <button class="tab" data-tab="series"><span class="tab-ic">🎞️</span><span class="tab-lb">Séries</span></button>
     <button class="tab" data-tab="radio"><span class="tab-ic">📻</span><span class="tab-lb">Radio</span></button>
+    <button class="tab" data-tab="youtube"><span class="tab-ic">▶️</span><span class="tab-lb">YouTube</span></button>
     <button class="tab" data-tab="jeux"><span class="tab-ic">🎮</span><span class="tab-lb">Jeux</span></button>
     <button class="tab" data-tab="maliste"><span class="tab-ic">⭐</span><span class="tab-lb">Ma liste</span></button>
     <button class="tab" data-tab="reglages"><span class="tab-ic">⚙️</span><span class="tab-lb">Réglages</span></button>
@@ -145,6 +146,14 @@
       </div>
       <div id="listeRadio" class="grid-cartes liste"></div>
       <div class="row"><button id="plusRadio" class="ghost" style="display:none">Charger plus</button></div>
+    </section>
+
+    <!-- ================= YOUTUBE (top 5 francophone par catégorie, voir youtube.js) ================= -->
+    <section class="panel" id="tab-youtube">
+      <div class="cat-title">▶️ YouTube — top 5 francophone</div>
+      <div id="ytCategories" class="chips"></div>
+      <p class="hint">Chaque chaîne s’ouvre dans l’appli YouTube, comme une playlist de ses dernières vidéos.</p>
+      <div id="ytChaines" class="grid-cartes yt-grille"></div>
     </section>
 
     <!-- ================= JEUX (émulateur Mega Drive / NES) ================= -->
@@ -465,7 +474,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.67';
+    window.APP_VERSION = '2.68';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
@@ -495,6 +504,7 @@
   <script src="player.js"></script>
   <script src="recorder.js"></script>
   <script src="dpad-nav.js"></script>
+  <script src="youtube.js"></script>
   <script src="app.js"></script>
   <script>AutoBackup.mount(document.getElementById('backup-panel'));</script>
   <script src="apk-update.js"></script>

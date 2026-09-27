@@ -349,6 +349,7 @@
     else if (name === 'series') { $id('serieDetail').style.display = 'none'; $id('seriesRacine').style.display = ''; renderKind('series'); }
     else if (name === 'guide') renderGuide(true);
     else if (name === 'radio') renderRadio();
+    else if (name === 'youtube') { if (window.YouTubeTab) YouTubeTab.render(); }
     else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
     else if (name === 'reglages') { renderPlaylists(); if (window.HaSync) HaSync.mount($id('haSyncPanel')); }
     scheduleStartFocus();
@@ -585,28 +586,33 @@
     if (pl.type === 'm3u') {
       ensureM3uLoaded(true).then(afterRefresh).catch(function (err) { toast('Erreur : ' + err.message); });
     } else {
-      afterRefresh();
+      Xtream.oublier(xtreamCfg(pl)).then(afterRefresh);
     }
   }
 
   // Comme refreshActivePlaylist, mais silencieux et déclenché tout seul à
-  // l'ouverture de l'appli : le Xtream est de toute façon déjà rechargé à
-  // chaque démarrage (state.xtreamCats/Items repartent à zéro dans
-  // setActivePlaylist), seul le M3U reste en cache indéfiniment sans ce
-  // rafraîchissement automatique. Se fait en tâche de fond, sans bloquer
+  // l'ouverture de l'appli (le Xtream, lui, a son propre cache de 24 h dans
+  // xtream.js) : sans ce rafraîchissement, le M3U resterait en cache
+  // indéfiniment. Se fait en tâche de fond, sans bloquer
   // l'affichage initial (qui utilise le cache existant) ; si l'onglet
   // concerné est déjà ouvert quand les données fraîches arrivent, on le
   // re-affiche pour qu'elles apparaissent sans action de l'utilisateur.
   function refreshOnOpen() {
     var pl = state.playlist;
-    if (!pl || pl.type !== 'm3u') return;
-    ensureM3uLoaded(true).then(function () {
+    if (!pl || pl.type !== 'm3u' || pl.m3uUpload) return;
+    // Une fois par 24 h au plus : retélécharger toute la playlist à chaque
+    // ouverture était perçu comme « la playlist se synchronise à chaque
+    // ouverture ». Le bouton 🔄 reste là pour forcer.
+    Store.cacheGet(pl.id).then(function (c) {
+      if (c && c.fetchedAt && Date.now() - c.fetchedAt < 24 * 3600 * 1000) return;
+      return ensureM3uLoaded(true).then(function () {
       state.searchCache = {};
       if (isTabActive('direct')) renderKind('direct');
       else if (isTabActive('films')) renderKind('films');
       else if (isTabActive('series')) renderKind('series');
       else if (isTabActive('radio')) renderRadio();
       else if (isTabActive('guide')) renderGuide(false);
+      });
     }).catch(function () {}); // échec silencieux : on garde les données déjà affichées
   }
 
@@ -2976,6 +2982,7 @@
         // affichage, et resynchroniser l'état en mémoire si c'est la
         // playlist actuellement active.
         if (saved.type === 'm3u') Store.cacheSet(saved.id, null);
+        else Xtream.oublier(xtreamCfg(saved));
         if (state.playlist && state.playlist.id === saved.id) setActivePlaylist(saved.id);
       } else {
         setActivePlaylist(saved.id);

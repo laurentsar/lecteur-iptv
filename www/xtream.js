@@ -19,17 +19,49 @@
 
   function auth(cfg) { return api(cfg, ''); }
 
-  function liveCategories(cfg) { return api(cfg, 'get_live_categories'); }
+  /* Listes (catégories, chaînes, films, séries) gardées 24 h en IndexedDB.
+   *
+   * Avant, elles ne vivaient qu'en mémoire : chaque ouverture de l'appli
+   * retéléchargeait tout le catalogue du fournisseur (plusieurs Mo, de
+   * longues secondes sur une télé) — « la playlist se synchronise à chaque
+   * ouverture ». Le bouton 🔄 et la modification d'une playlist appellent
+   * oublier(), qui invalide tout ce qui a été mis en cache avant. */
+  var TTL_LISTES = 24 * 3600 * 1000;
+
+  function compte(cfg) { return baseUrl(cfg.serveur) + '|' + cfg.utilisateur; }
+
+  function listeEnCache(cfg, action, extra) {
+    var St = global.Store;
+    if (!St || !St.kvGet) return api(cfg, action, extra);
+    var cle = 'xt:' + compte(cfg) + '|' + action + '|' + (extra || '');
+    return Promise.all([St.kvGet(cle), St.kvGet('xt-epoch:' + compte(cfg))]).catch(function () { return [null, null]; })
+      .then(function (r) {
+        var c = r[0], epoch = r[1] || 0, now = Date.now();
+        if (c && c.t > epoch && now - c.t < TTL_LISTES && c.data) return c.data;
+        return api(cfg, action, extra).then(function (data) {
+          if (data) St.kvSet(cle, { t: now, data: data }).catch(function () {});
+          return data;
+        });
+      });
+  }
+
+  function oublier(cfg) {
+    var St = global.Store;
+    if (!St || !St.kvSet) return Promise.resolve();
+    return St.kvSet('xt-epoch:' + compte(cfg), Date.now()).catch(function () {});
+  }
+
+  function liveCategories(cfg) { return listeEnCache(cfg, 'get_live_categories'); }
   function liveStreams(cfg, categoryId) {
-    return api(cfg, 'get_live_streams', categoryId ? '&category_id=' + encodeURIComponent(categoryId) : '');
+    return listeEnCache(cfg, 'get_live_streams', categoryId ? '&category_id=' + encodeURIComponent(categoryId) : '');
   }
-  function vodCategories(cfg) { return api(cfg, 'get_vod_categories'); }
+  function vodCategories(cfg) { return listeEnCache(cfg, 'get_vod_categories'); }
   function vodStreams(cfg, categoryId) {
-    return api(cfg, 'get_vod_streams', categoryId ? '&category_id=' + encodeURIComponent(categoryId) : '');
+    return listeEnCache(cfg, 'get_vod_streams', categoryId ? '&category_id=' + encodeURIComponent(categoryId) : '');
   }
-  function seriesCategories(cfg) { return api(cfg, 'get_series_categories'); }
+  function seriesCategories(cfg) { return listeEnCache(cfg, 'get_series_categories'); }
   function seriesList(cfg, categoryId) {
-    return api(cfg, 'get_series', categoryId ? '&category_id=' + encodeURIComponent(categoryId) : '');
+    return listeEnCache(cfg, 'get_series', categoryId ? '&category_id=' + encodeURIComponent(categoryId) : '');
   }
   function seriesInfo(cfg, seriesId) {
     return api(cfg, 'get_series_info', '&series_id=' + encodeURIComponent(seriesId));
@@ -85,6 +117,7 @@
     vodCategories: vodCategories, vodStreams: vodStreams,
     seriesCategories: seriesCategories, seriesList: seriesList, seriesInfo: seriesInfo, vodInfo: vodInfo,
     shortEpg: shortEpg, streamUrl: streamUrl, xmltvUrl: xmltvUrl, xmltvFromM3uUrl: xmltvFromM3uUrl,
+    oublier: oublier,
     baseUrl: baseUrl, b64decode: b64decode
   };
 })(window);
