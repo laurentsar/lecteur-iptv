@@ -2872,8 +2872,16 @@
     $id('formPlaylistTitre').textContent = 'Modifier la playlist';
     $id('btnAjouterPlaylist').textContent = '💾 Enregistrer les modifications';
     $id('btnAnnulerEdition').style.display = '';
-    goTab('reglages');
-    $id('pl_nom').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    // Déjà dans les Réglages (cas du bouton ✏️) : surtout ne pas repasser par
+    // goTab, qui re-rend la liste des playlists. Le ✏️ qui avait le focus
+    // disparaissait du DOM, le placement automatique renvoyait le focus sur
+    // la première catégorie, hors écran — et à la télécommande, la flèche
+    // suivante repartait tout en haut au lieu d'entrer dans le formulaire.
+    if (!$id('tab-reglages').classList.contains('active')) goTab('reglages');
+    focusToken++;   // annule un placement automatique encore en attente
+    var champ = $id('pl_nom');
+    champ.focus({ preventScroll: true });
+    champ.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   function stopEditPlaylist() {
