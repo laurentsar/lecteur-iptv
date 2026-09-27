@@ -26,6 +26,7 @@ function page(infoTv, avecPlugin = true) {
           addListener: (ev, fn) => { journal.ecouteurs[ev] = fn; return Promise.resolve({ remove() { delete journal.ecouteurs[ev]; } }); },
           startDiscovery: () => { journal.recherche++; return Promise.resolve(); },
           stopDiscovery: () => { journal.arret++; return Promise.resolve(); },
+          openScreenCast: () => { journal.partage = (journal.partage || 0) + 1; return Promise.resolve(); },
           send: (o) => { journal.envois.push(o); return o.host === '10.0.0.99' ? Promise.reject(new Error('TV injoignable')) : Promise.resolve(); }
         }
       }
@@ -57,13 +58,25 @@ function page(infoTv, avecPlugin = true) {
     verifie('recherche lancée', journal.recherche === 1);
     journal.ecouteurs.device({ name: 'Fire TV du salon', host: '192.168.1.30', port: 47800 });
     journal.ecouteurs.device({ name: 'Fire TV du salon', host: '192.168.1.30', port: 47800 });
-    const items = w.document.querySelectorAll('.tvlink-carte .version-item');
+    const items = w.document.querySelectorAll('.tvlink-carte .version-item:not(.tvlink-partage)');
     verifie('TV listée une seule fois', items.length === 1 && /Fire TV du salon/.test(items[0].textContent), items.length);
     items[0].click();
     await attendre(10);
     const e = journal.envois[0] || {};
     verifie('chaîne envoyée à la bonne TV', e.host === '192.168.1.30' && e.port === 47800 && e.url === 'http://srv/live/1.ts' && e.title === 'TF1' && e.epgKey === 'tf1');
     verifie('fenêtre refermée, recherche arrêtée, rappel fait', !w.document.querySelector('.tvlink-fond') && journal.arret === 1 && envoyeA === 'Fire TV du salon');
+  }
+
+  console.log('Téléphone : partage d\'écran (Fire TV sous Vega OS)');
+  {
+    const { w, journal } = page({ tv: false });
+    w.TvLinkUI.choisir({ url: 'http://srv/live/1.ts', title: 'TF1' }, () => {});
+    await attendre(10);
+    const b = w.document.querySelector('.tvlink-partage');
+    verifie('entrée « Partage d\'écran » en tête, avec le focus', !!b && w.document.activeElement === b);
+    b.click();
+    await attendre(10);
+    verifie('panneau de diffusion ouvert, fenêtre refermée', journal.partage === 1 && !w.document.querySelector('.tvlink-fond'));
   }
 
   console.log('Téléphone : envoi par IP qui échoue');

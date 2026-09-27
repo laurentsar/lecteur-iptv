@@ -69,9 +69,15 @@
     var fond = el('div', 'tvlink-fond');
     var carte = el('div', 'remote-panel-card tvlink-carte');
     carte.setAttribute('role', 'dialog');
-    carte.setAttribute('aria-label', 'Envoyer sur la Fire TV');
-    carte.appendChild(el('div', 'tracks-title', '📲 Envoyer sur la Fire TV'));
-    var statut = el('p', 'hint', 'Recherche des TV sur le wifi…');
+    carte.setAttribute('aria-label', 'Diffuser sur la TV');
+    carte.appendChild(el('div', 'tracks-title', '📲 Diffuser sur la TV'));
+    // Partage d'écran du téléphone (panneau « Diffuser » d'Android) : seule
+    // voie vers une Fire TV sous Vega OS, où Lecteur IPTV ne s'installe pas.
+    var partage = el('button', 'version-item tvlink-partage', '🖥 Partage d\'écran (Diffuser)');
+    partage.style.display = 'block';
+    partage.style.width = '100%';
+    carte.appendChild(partage);
+    var statut = el('p', 'hint', 'Recherche des TV équipées de Lecteur IPTV sur le wifi…');
     carte.appendChild(statut);
     var liste = el('div');
     carte.appendChild(liste);
@@ -124,12 +130,22 @@
       b.addEventListener('click', function () { envoyer(d.host, d.port, d.name); });
       trouvees[d.name] = b;
       liste.appendChild(b);
-      statut.textContent = 'Choisis la TV :';
+      statut.textContent = 'Choisis :';
       if (!liste.querySelector(':focus')) b.focus();
     }
     function retirer(d) {
       if (d && trouvees[d.name]) { liste.removeChild(trouvees[d.name]); delete trouvees[d.name]; }
     }
+
+    partage.addEventListener('click', function () {
+      P.openScreenCast().then(function () {
+        fermer();
+        if (global.AppToast) global.AppToast('Choisis la TV, puis reviens dans Lecteur IPTV.');
+      }).catch(function () {
+        statut.textContent = 'Ce téléphone n\'ouvre pas le panneau de diffusion depuis une appli : ' +
+          'volet du haut → « Diffuser » (ou « Smart View », « Caster »), puis choisis la TV.';
+      });
+    });
 
     btnIp.addEventListener('click', function () {
       var a = parseAdresse(champ.value);
@@ -142,8 +158,8 @@
 
     var minuteur = setTimeout(function () {
       if (!Object.keys(trouvees).length) {
-        statut.textContent = 'Aucune TV trouvée. Ouvre Lecteur IPTV sur la Fire TV (même wifi), ' +
-          'ou tape son adresse IP — elle s\'affiche sur la TV dans Réglages → Infos.';
+        statut.textContent = 'Aucune TV équipée de Lecteur IPTV trouvée : utilise le partage d\'écran. ' +
+          '(Appli ouverte sur la TV mais invisible ? Tape son adresse IP, affichée sur la TV dans Réglages → Infos.)';
       }
     }, 8000);
 
@@ -154,7 +170,7 @@
     }).catch(function () {
       statut.textContent = 'Recherche automatique impossible : tape l\'adresse IP de la TV.';
     });
-    annuler.focus();
+    partage.focus();
     return { fermer: fermer };
   }
 

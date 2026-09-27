@@ -51,6 +51,10 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
   fournisseurs). Si la box filtre la recherche automatique : « Adresse
   IP… », l'adresse s'affiche sur la TV dans Réglages → Infos. Voir
   `ci/patch_tv_link.py` et `www/tvlink.js`.
+- **Partage d'écran** : première ligne du même bouton 📲. Ouvre le panneau
+  « Diffuser » d'Android (copie de l'écran du téléphone). Seule voie vers
+  une Fire TV sous **Vega OS** (Fire TV Stick 4K Select…), qui n'installe
+  pas d'APK et ne fait pas Chromecast.
 
 ## Compatibilité TV Android et casque VR (Quest 3)
 

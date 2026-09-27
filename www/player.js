@@ -143,7 +143,7 @@
       '  <button id="castLauncher" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📡</button>' +
       '  <button id="playerAirplay" class="player-cast" aria-label="AirPlay" style="display:none">📡</button>' +
       '  <button id="playerCastTv" class="player-cast" aria-label="Diffuser sur la TV" style="display:none">📺</button>' +
-      '  <button id="playerSendTv" class="player-cast" aria-label="Envoyer sur la Fire TV" title="Envoyer sur la Fire TV" style="display:none">📲</button>' +
+      '  <button id="playerSendTv" class="player-cast" aria-label="Diffuser sur la TV" title="Diffuser sur la TV" style="display:none">📲</button>' +
       '  <button id="playerVr" class="player-cast" aria-label="Cinéma VR" style="display:none">🥽</button>' +
       '  <button id="playerInfo" class="player-cast" aria-label="Programme en cours" style="display:none">ℹ️</button>' +
       '  <button id="playerRemote" class="player-cast" aria-label="Télécommande" style="display:none">🕹️</button>' +

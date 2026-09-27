@@ -150,6 +150,29 @@ final class TvLink {
         return "";
     }
 
+    // Panneau « Diffuser » / partage d'écran d'Android. Aucune API publique ne
+    // lance la diffusion elle-même : on ouvre le réglage, l'utilisateur choisit
+    // la TV. Plusieurs noms selon la version et le fabricant, essayés dans
+    // l'ordre ; false si aucun n'existe (l'appelant explique le volet).
+    static boolean openScreenCast(android.app.Activity activity) {
+        String[] actions = {
+                "android.settings.CAST_SETTINGS",
+                "android.settings.WIFI_DISPLAY_SETTINGS",
+        };
+        for (String action : actions) {
+            try {
+                // Pas de resolveActivity : depuis Android 11 il répond null
+                // pour les activités des autres applis non déclarées
+                // (<queries>). On tente, l'absence lève une exception.
+                activity.startActivity(new android.content.Intent(action));
+                return true;
+            } catch (Exception e) {
+                // action absente ou refusée : suivante
+            }
+        }
+        return false;
+    }
+
     // ---------- côté TV : serveur + annonce ----------
 
     private static ServerSocket server;
@@ -721,6 +744,15 @@ public class TvLinkPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void openScreenCast(PluginCall call) {
+        if (TvLink.openScreenCast(getActivity())) {
+            call.resolve();
+        } else {
+            call.reject("panneau de diffusion introuvable");
+        }
+    }
+
+    @PluginMethod
     public void startDiscovery(PluginCall call) {
         stopSearch();
         search = TvLink.discover(getContext(), new TvLink.Discovery() {
@@ -804,7 +836,7 @@ LAYOUT_BUTTON = """        <ImageButton
             android:scaleType="fitCenter"
             android:background="@drawable/bg_player_btn"
             android:src="@drawable/ic_send_tv"
-            android:contentDescription="Envoyer sur la Fire TV"
+            android:contentDescription="Diffuser sur la TV"
             android:visibility="gone" />
 
 """
@@ -874,14 +906,19 @@ ACTIVITY_METHODS = """    // ---------- Envoyer sur la Fire TV (voir ci/patch_tv
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setPadding(pad, pad / 2, pad, 0);
         final TextView status = new TextView(this);
-        status.setText("Recherche des TV sur le wifi…");
+        status.setText("Recherche des TV équipées de Lecteur IPTV sur le wifi…");
         box.addView(status);
         final android.widget.ListView list = new android.widget.ListView(this);
+        // Première ligne, toujours là : le partage d'écran du téléphone
+        // (panneau « Diffuser » d'Android). Seule voie vers une Fire TV sous
+        // Vega OS, où Lecteur IPTV ne s'installe pas. Les TV trouvées
+        // suivent : ligne i+1 = found.get(i).
+        adapter.add("🖥  Partage d'écran (Diffuser)");
         list.setAdapter(adapter);
         box.addView(list);
 
         final AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Envoyer sur la Fire TV")
+                .setTitle("Diffuser sur la TV")
                 .setView(box)
                 .setNeutralButton("Adresse IP…", new DialogInterface.OnClickListener() {
                     @Override
@@ -908,7 +945,11 @@ ACTIVITY_METHODS = """    // ---------- Envoyer sur la Fire TV (voir ci/patch_tv
             public void onItemClick(android.widget.AdapterView<?> parent, View view, int position, long id) {
                 stopTvSearch();
                 dialog.dismiss();
-                TvLink.Device device = found.get(position);
+                if (position == 0) {
+                    startScreenCast();
+                    return;
+                }
+                TvLink.Device device = found.get(position - 1);
                 sendToTv(device.host, device.port, device.name);
             }
         });
@@ -923,13 +964,13 @@ ACTIVITY_METHODS = """    // ---------- Envoyer sur la Fire TV (voir ci/patch_tv
                         for (int i = 0; i < found.size(); i++) {
                             if (found.get(i).name.equals(device.name)) {
                                 found.remove(i);
-                                adapter.remove(adapter.getItem(i));
+                                adapter.remove(adapter.getItem(i + 1));
                                 break;
                             }
                         }
                         found.add(device);
                         adapter.add("📺  " + device.name);
-                        status.setText("Choisis la TV :");
+                        status.setText("Choisis :");
                     }
                 });
             }
@@ -942,7 +983,7 @@ ACTIVITY_METHODS = """    // ---------- Envoyer sur la Fire TV (voir ci/patch_tv
                         for (int i = 0; i < found.size(); i++) {
                             if (found.get(i).name.equals(name)) {
                                 found.remove(i);
-                                adapter.remove(adapter.getItem(i));
+                                adapter.remove(adapter.getItem(i + 1));
                                 break;
                             }
                         }
@@ -951,19 +992,37 @@ ACTIVITY_METHODS = """    // ---------- Envoyer sur la Fire TV (voir ci/patch_tv
             }
         });
         if (tvSearch == null) {
-            status.setText("Recherche impossible sur cet appareil. Utilise « Adresse IP… ».");
+            status.setText("Recherche impossible sur cet appareil : partage d'écran ou « Adresse IP… ».");
         }
         uiHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 if (dialog.isShowing() && found.isEmpty()) {
-                    status.setText("Aucune TV trouvée. Ouvre Lecteur IPTV sur la Fire TV (même wifi), "
-                            + "ou utilise « Adresse IP… » — elle s'affiche sur la TV dans Réglages → Infos.");
+                    status.setText("Aucune TV équipée de Lecteur IPTV trouvée : utilise le partage d'écran. "
+                            + "(Appli ouverte sur la TV mais invisible ? « Adresse IP… », affichée sur la TV "
+                            + "dans Réglages → Infos.)");
                 }
             }
         }, 8000);
         trackDialog(dialog);
         dialog.show();
+    }
+
+    private void startScreenCast() {
+        if (!TvLink.openScreenCast(this)) {
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                    .setTitle("Partage d'écran")
+                    .setMessage("Ce téléphone n'ouvre pas le panneau de diffusion depuis une appli. "
+                            + "Fais glisser le volet du haut → « Diffuser » (ou « Smart View », "
+                            + "« Caster »), choisis la TV, puis reviens ici.")
+                    .setPositiveButton("OK", null)
+                    .create();
+            trackDialog(dialog);
+            dialog.show();
+            return;
+        }
+        Toast.makeText(getApplicationContext(), "Choisis la TV, puis reviens dans Lecteur IPTV (bouton Retour).",
+                Toast.LENGTH_LONG).show();
     }
 
     private void askTvAddress() {
