@@ -150,9 +150,9 @@
 
     <!-- ================= YOUTUBE (top 5 francophone par catégorie, voir youtube.js) ================= -->
     <section class="panel" id="tab-youtube">
-      <div class="cat-title">▶️ YouTube — top 5 francophone</div>
+      <div class="cat-title">▶️ YouTube — top francophone</div>
       <div id="ytCategories" class="chips"></div>
-      <p class="hint">Chaque chaîne s’ouvre dans l’appli YouTube, comme une playlist de ses dernières vidéos.</p>
+      <p class="hint"><span id="ytSources"></span> Chaque chaîne s’ouvre dans l’appli YouTube, comme une playlist de ses dernières vidéos.</p>
       <div id="ytChaines" class="grid-cartes yt-grille"></div>
     </section>
 
@@ -474,7 +474,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.68';
+    window.APP_VERSION = '2.69';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans

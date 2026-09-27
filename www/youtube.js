@@ -1,8 +1,9 @@
-/* youtube.js — onglet YouTube : un top 5 de chaînes francophones par
- * sous-catégorie, chacune ouverte comme une playlist (ses dernières vidéos).
+/* youtube.js — onglet YouTube : un top 5 (ou plus) de chaînes francophones
+ * par sous-catégorie, chacune ouverte comme une playlist (ses dernières
+ * vidéos).
  *
  * Sans clé d'API YouTube, aucun classement « en direct » n'est possible :
- * la sélection est donc écrite ici, à la main. Chaque identifiant a été
+ * le classement est tiré de sources publiques croisées (voir CATEGORIES). Chaque identifiant a été
  * vérifié le 2026-09-27 par le flux RSS officiel de la chaîne
  * (youtube.com/feeds/videos.xml?channel_id=…), qui renvoie son nom — ne pas
  * en ajouter un sans la même vérification : un identifiant faux ouvre une
@@ -15,69 +16,127 @@
 (function (global) {
   'use strict';
 
+  /* Chaque catégorie croise au moins 3 classements publics (liens dans
+   * `sources`, affichés sous les onglets). Règle : on compte combien de
+   * sources citent la chaîne (`cite`), puis on départage par le rang moyen ;
+   * on garde toutes celles citées par ≥ 3 sources, et on complète jusqu'à 5
+   * avec les mieux classées citées par 2. Relevé du 2026-09-27.
+   * Écartées faute d'identifiant vérifiable : Wiloo (sport, 3 citations),
+   * Grizzy & les Lemmings (enfants, aucune chaîne FR officielle trouvée). */
   var CATEGORIES = [
-    { id: 'actus', nom: '📰 Actualités', chaines: [
-      { id: 'UCAcAnMF0OrCtUep3Y4M-ZPw', nom: 'HugoDécrypte', desc: 'L’actu du jour expliquée' },
-      { id: 'UCO6K_kkdP-lnSCiO3tPx7WA', nom: 'franceinfo', desc: 'Info en continu, reportages' },
-      { id: 'UCCCPCZNChQdGa9EkATeye4g', nom: 'FRANCE 24', desc: 'Actualité internationale' },
-      { id: 'UCYpRDnhk5H8h16jpS84uqsA', nom: 'Le Monde', desc: 'Vidéos explicatives du quotidien' },
-      { id: 'UCJE3Mi77VYiirkGW_l_SpGQ', nom: 'ARTE Info', desc: 'Journal et décryptages d’ARTE' }
+    { id: 'actus', nom: '📰 Actualités', sources: [
+      { nom: 'HypeAuditor', url: 'https://hypeauditor.com/top-youtube-news-politics-france/' },
+      { nom: 'Insight NPA', url: 'https://insight.npaconseil.com/contenus-audiences/chaines-info-youtube/' },
+      { nom: 'Netguide', url: 'https://www.netguide.com/Chaines-Youtube-sur-l-actualite/' }
+    ], chaines: [
+      { id: 'UCewhc0fvja891XkpIPGRMxQ', nom: 'LCI', cite: 3 },
+      { id: 'UCXwDLMDV86ldKoFVc_g8P0g', nom: 'BFMTV', cite: 2 },
+      { id: 'UCIMGfEAERXjmWwQeg15BFsg', nom: 'Europe 1', cite: 2 },
+      { id: 'UCW2QcKZiU8aUGg4yxCIditg', nom: 'euronews (en français)', cite: 2 },
+      { id: 'UCXKJrYczY2_fJEZgFPGY0HQ', nom: 'CNEWS', cite: 2 }
     ] },
-    { id: 'sciences', nom: '🔬 Sciences', chaines: [
-      { id: 'UCaNlbnghtwlsGF-KzAFThqA', nom: 'ScienceEtonnante', desc: 'Physique, maths, IA' },
-      { id: 'UCWnfDPdZw6A23UtuBpYBbAg', nom: 'Dr Nozman', desc: 'Sciences et expériences' },
-      { id: 'UCtqICqGbPSbTN09K1_7VZ3Q', nom: 'DirtyBiology', desc: 'Biologie décalée' },
-      { id: 'UC5X4e8ScZI2AFd_vkjSoyoQ', nom: 'AstronoGeek', desc: 'Astronomie et espace' },
-      { id: 'UCLXDNUOO3EQ80VmD9nQBHPg', nom: 'Fouloscopie', desc: 'Science des foules' }
+    { id: 'sciences', nom: '🔬 Sciences', sources: [
+      { nom: 'OkayDoc', url: 'https://okaydoc.fr/vulgarisation-scientifique-top-10-influenceurs-francais/' },
+      { nom: 'Agence Waldo', url: 'https://www.blog.agencewaldo.com/classement-de-12-chaines-youtube-francaises-specialisees-en-sciences/' },
+      { nom: 'TechRadar', url: 'https://global.techradar.com/fr-fr/news/meilleures-chaines-youtube-science' },
+      { nom: 'Ekole', url: 'https://www.ekole.fr/blog/top-15-influenceurs-science-education' }
+    ], chaines: [
+      { id: 'UCWnfDPdZw6A23UtuBpYBbAg', nom: 'Dr Nozman', cite: 4 },
+      { id: 'UC4ii4_aeS8iOFzsHuhJTq2w', nom: 'Poisson Fécond', cite: 4 },
+      { id: 'UCaNlbnghtwlsGF-KzAFThqA', nom: 'ScienceEtonnante', cite: 4 },
+      { id: 'UC5X4e8ScZI2AFd_vkjSoyoQ', nom: 'AstronoGeek', cite: 4 },
+      { id: 'UCtqICqGbPSbTN09K1_7VZ3Q', nom: 'DirtyBiology', cite: 3 },
+      { id: 'UCS_7tplUgzJG4DhA16re5Yg', nom: 'Balade Mentale', cite: 3 }
     ] },
-    { id: 'culture', nom: '📚 Histoire & culture', chaines: [
-      { id: 'UCP46_MXP_WG_auH88FnfS1A', nom: 'Nota Bene', desc: 'Histoire racontée' },
-      { id: 'UC5Twj1Axp_-9HLsZ5o_cEQQ', nom: 'Doc Seven', desc: 'Anecdotes et culture générale' },
-      { id: 'UC7sXGI8p8PvKosLWagkK9wQ', nom: 'Heu?reka', desc: 'Économie et finance' },
-      { id: 'UCqA8H22FwgBVcF3GJpp0MQw', nom: 'Monsieur Phi', desc: 'Philosophie' },
-      { id: 'UCofQxJWd4qkqc7ZgaLkZfcw', nom: 'Linguisticae', desc: 'Langues et linguistique' }
+    { id: 'histoire', nom: '📚 Histoire', sources: [
+      { nom: 'GoStudent', url: 'https://www.gostudent.org/fr-fr/blog/meilleures-chaines-youtube-histoire' },
+      { nom: 'SensCritique', url: 'https://www.senscritique.com/liste/10_meilleures_chaines_youtube_d_histoire_youtubeur_histoire/3219066' },
+      { nom: 'Master Your French', url: 'https://www.masteryourfrench.com/culture/history-youtube-channels/' },
+      { nom: 'Histoire itinérante', url: 'https://histoire-itinerante.fr/conseils-visionnages/chaines-histoire-youtube-youtubing-historique/' }
+    ], chaines: [
+      { id: 'UCCGRtSqLfljpX9mzCYDsQIg', nom: 'Questions d’Histoire', cite: 4 },
+      { id: 'UCP46_MXP_WG_auH88FnfS1A', nom: 'Nota Bene', cite: 3 },
+      { id: 'UCcT7B4zCzrfywO2Q19OJIzA', nom: 'Histoire Appliquée', cite: 3 },
+      { id: 'UCoTIMvoWvphhITZJ62Vr0AQ', nom: 'Sur le Champ', cite: 3 },
+      { id: 'UCqMMC5g3WBuc3LmxIgqIsRw', nom: 'Batailles de France', cite: 2 }
     ] },
-    { id: 'humour', nom: '😂 Humour', chaines: [
-      { id: 'UCWeg2Pkate69NFdBeuRFTAw', nom: 'Squeezie', desc: 'Divertissement, concepts' },
-      { id: 'UCyWqModMQlbIo8274Wh_ZsQ', nom: 'Cyprien', desc: 'Sketchs et vidéos humour' },
-      { id: 'UCww2zZWg4Cf5xcRKG-ThmXQ', nom: 'Norman', desc: 'Sketchs du quotidien' },
-      { id: 'UCgvqvBoSHB1ctlyyhoHrGwQ', nom: 'Amixem', desc: 'Défis et divertissement' },
-      { id: 'UCo3i0nUzZjjLuM7VjAVz4zA', nom: 'Michou', desc: 'Défis et vlogs' }
+    { id: 'humour', nom: '😂 Humour', sources: [
+      { nom: 'L’ADN', url: 'https://www.ladn.eu/media-mutants/reseaux-sociaux/classement-youtubeurs-humour-influence/' },
+      { nom: 'Webeev', url: 'https://www.webeev.fr/top/top-10-meilleurs-youtubeurs-francais-plus-droles/' },
+      { nom: '10h26', url: 'https://www.10h26.com/top-youtubeurs-francais-droles-interessants' },
+      { nom: 'O-pentech', url: 'https://www.o-pentech.com/meilleurs-youtubeurs-francais/' },
+      { nom: 'Woo Paris', url: 'https://www.woo.paris/blog/top-chaines-youtube-france' }
+    ], chaines: [
+      { id: 'UCyWqModMQlbIo8274Wh_ZsQ', nom: 'Cyprien', cite: 5 },
+      { id: 'UCWeg2Pkate69NFdBeuRFTAw', nom: 'Squeezie', cite: 4 },
+      { id: 'UCtihF1ZtlYVzoaj_bKLQZ-Q', nom: 'Natoo', cite: 4 },
+      { id: 'UCww2zZWg4Cf5xcRKG-ThmXQ', nom: 'Norman', cite: 3 },
+      { id: 'UC8Q0SLrZLiTj5s4qc9aad-w', nom: 'Mister V', cite: 3 },
+      { id: 'UCDPK_MTu3uTUFJXRVcTJcEw', nom: 'McFly et Carlito', cite: 3 },
+      { id: 'UCK3inMNRNAVUleEbpDU1k2g', nom: 'SEB', cite: 3 }
     ] },
-    { id: 'jeux', nom: '🎮 Jeux vidéo', chaines: [
-      { id: 'UC_yP2DpIgs5Y1uWC0T03Chw', nom: 'Joueur du Grenier', desc: 'Tests de jeux rétro' },
-      { id: 'UCCMxHHciWRBBouzk-PGzmtQ', nom: 'Bazar du Grenier', desc: 'Parties et découvertes' },
-      { id: 'UCYGjxo5ifuhnmvhPvCc3DJQ', nom: 'Wankil Studio', desc: 'Laink et Terracid' },
-      { id: 'UC9NB2nXjNtRabu3YLPB16Hg', nom: 'J’suis pas content TV', desc: 'Critiques de jeux' },
-      { id: 'UCLOAPb7ATQUs_nDs9ViLcMw', nom: 'Benjamin Code', desc: 'Informatique et jeux' }
+    { id: 'jeux', nom: '🎮 Jeux vidéo', sources: [
+      { nom: 'Influence4You', url: 'https://blogfr.influence4you.com/classement-des-5-youtubers-de-jeux-video/' },
+      { nom: 'TechRadar', url: 'https://global.techradar.com/fr-fr/news/meilleures-chaines-youtube-jeux-video' },
+      { nom: 'Filmora', url: 'https://filmora.wondershare.fr/vlogger/top10-gameurs-francais-youtube.html' },
+      { nom: 'Woo Paris', url: 'https://www.woo.paris/blog/top-chaines-youtube-france' },
+      { nom: 'HypeAuditor', url: 'https://hypeauditor.com/top-youtube-video-games-france/' }
+    ], chaines: [
+      { id: 'UCY-_QmcW09PHAImgVnKxU2g', nom: 'Squeezie Gaming', cite: 4 },
+      { id: 'UCCFqUJYKT97UerMmb6DM0bw', nom: 'Gotaga', cite: 4 },
+      { id: 'UC_yP2DpIgs5Y1uWC0T03Chw', nom: 'Joueur du Grenier', cite: 3 },
+      { id: 'UCgvqvBoSHB1ctlyyhoHrGwQ', nom: 'Amixem', cite: 2 },
+      { id: 'UCDlg0T0r9v2_XRCG8yqB2vQ', nom: 'Galax', cite: 2 }
     ] },
-    { id: 'cuisine', nom: '🍳 Cuisine', chaines: [
-      { id: 'UCgCEqjKOabA2_IvZ-agkQCQ', nom: 'Hervé Cuisine', desc: 'Recettes pas à pas' },
-      { id: 'UCmKCpHH5ATFMURHTRC2jLyA', nom: 'Marmiton', desc: 'Recettes du quotidien' },
-      { id: 'UC8qxftC5pwxJZsfuLrlClJA', nom: '750g', desc: 'Recettes et techniques' },
-      { id: 'UC8AdLDn2gJf2sam4HJXGX3g', nom: 'CuisineAZ', desc: 'Recettes faciles' },
-      { id: 'UC-gypmlgWrRXTW_TGgrgtZg', nom: 'Ma cuisine du monde', desc: 'Cuisines d’ailleurs' }
+    { id: 'cuisine', nom: '🍳 Cuisine', sources: [
+      { nom: 'Agence Waldo', url: 'https://www.blog.agencewaldo.com/classement-de-12-chaines-youtube-francaises-specialisees-en-food/' },
+      { nom: 'L’ADN', url: 'https://www.ladn.eu/media-mutants/top-chaine-cuisine-reseaux-sociaux/' },
+      { nom: 'SensCritique', url: 'https://www.senscritique.com/liste/30_meilleure_chaine_de_recette_de_cuisine_facile_vegetarienn/3219074' },
+      { nom: 'Woo Paris', url: 'https://www.woo.paris/blog/top-chaines-youtube-france' }
+    ], chaines: [
+      { id: 'UCT4mPf6yV7QJMhRSckfwghA', nom: 'Chez Jigmé', cite: 3 },
+      { id: 'UCfI1q93ZYNR_mJYKFEqxfrA', nom: 'Gastronogeek', cite: 2 },
+      { id: 'UCgCEqjKOabA2_IvZ-agkQCQ', nom: 'Hervé Cuisine', cite: 2 },
+      { id: 'UCKq9JxyISqBHDd-fXfV3QtQ', nom: 'FastGoodCuisine', cite: 2 },
+      { id: 'UC-YIuf9kbZoPcnmONP-iGIA', nom: 'JustInCooking', cite: 2 }
     ] },
-    { id: 'musique', nom: '🎵 Musique', chaines: [
-      { id: 'UCcVkWrg_Q00xVigRquzSY4g', nom: 'Universal Music France', desc: 'Clips officiels' },
-      { id: 'UCAJuYnKFVGBoVsBO4_svrrQ', nom: 'Warner Music France', desc: 'Clips officiels' },
-      { id: 'UC2kZYr2B929kXdSG6LPa9pQ', nom: 'NRJ', desc: 'Hits et lives' },
-      { id: 'UC-OLGr8mJW6EfFbCt-E6yOg', nom: 'Nostalgie', desc: 'Années 70, 80, 90' },
-      { id: 'UC-smeLB9AnOTeypr1YyjJ3A', nom: 'ARTE Concert', desc: 'Concerts filmés' }
+    { id: 'musique', nom: '🎵 Musique', sources: [
+      { nom: 'Digitiz', url: 'https://digitiz.fr/chaines-youtube-france/' },
+      { nom: 'Blog du Modérateur', url: 'https://www.blogdumoderateur.com/chaines-youtube-suivies-france-monde/' },
+      { nom: 'Les 10 meilleurs', url: 'https://les10meilleurs.net/chaines-youtube-francaises-avec-le-plus-abonnes/' },
+      { nom: 'HypeAuditor', url: 'https://hypeauditor.com/top-youtube-all-france/' },
+      { nom: 'Séries Animes', url: 'https://www.series-animes.fr/youtube-classement-france-2026/' }
+    ], chaines: [
+      { id: 'UCCB1Byx5yTbLpQaV-rlfmtA', nom: 'GIMS', cite: 5 },
+      { id: 'UCSJ4gkVC6NrvII8umztf0Ow', nom: 'Lofi Girl', cite: 4 },
+      { id: 'UCz6JjQtnK9XjMwKuqlEkRxw', nom: 'Soolking', cite: 4 },
+      { id: 'UC-69vhXlCa3XHbF8JHCQHfg', nom: 'Aya Nakamura', cite: 2 }
     ] },
-    { id: 'sport', nom: '⚽ Sport', chaines: [
-      { id: 'UC8ggH3zU61XO0nMskSQwZdA', nom: 'CANAL+ Sport', desc: 'Foot, rugby, F1' },
-      { id: 'UCfj4kQ6_mYO5r4hzX5KloVw', nom: 'beIN SPORTS France', desc: 'Résumés et temps forts' },
-      { id: 'UCGSiCI_RdAIezAAedP_46TA', nom: 'L’Équipe', desc: 'Toute l’actu sport' },
-      { id: 'UChysErndYl-zSsmB-0H0S_g', nom: 'FFF TV', desc: 'Équipes de France de foot' },
-      { id: 'UCDqrC9HH1w7hyZCspmukU6A', nom: 'RMC Sport Combat', desc: 'MMA, UFC, boxe' }
+    { id: 'sport', nom: '⚽ Sport', sources: [
+      { nom: 'LiveSports', url: 'https://livesports.co/fr/top-30-des-chaines-youtube-sportives-francophones-a-suivre-en-2026/' },
+      { nom: 'SPEAKRJ', url: 'https://www.speakrj.com/audit/top/youtube/fr/Sport' },
+      { nom: 'HypeAuditor', url: 'https://hypeauditor.com/top-youtube-sports-france/' }
+    ], chaines: [
+      { id: 'UCGSiCI_RdAIezAAedP_46TA', nom: 'L’Équipe', cite: 3 },
+      { id: 'UC0D-vfqoAHvOYmHxDJDlLFw', nom: 'Foot Mercato', cite: 3 },
+      { id: 'UCQEWraynL44i7RC8UZcjE8Q', nom: 'Oh My Goal', cite: 3 },
+      { id: 'UChysErndYl-zSsmB-0H0S_g', nom: 'FFF TV', cite: 2 },
+      { id: 'UCaHUPgzDZgMGGe0dAixfVhQ', nom: 'L’Immigré Parisien', cite: 2 }
     ] },
-    { id: 'enfants', nom: '🧸 Enfants', chaines: [
-      { id: 'UCaIcgxGFjyfZgoIaJT0s0hQ', nom: 'Gulli', desc: 'Dessins animés' },
-      { id: 'UCaAHSGlYiU2fgxwKOIWBlpQ', nom: 'Tchoupi', desc: 'Épisodes pour les petits' },
-      { id: 'UC8I-UIlXPNS4luC4iV7dRdQ', nom: 'Titounis', desc: 'Comptines' },
-      { id: 'UCCWAytpcZqyTfRsLJvDHxLg', nom: 'Comptines.net', desc: 'Chansons pour enfants' },
-      { id: 'UCSp2f6yQYuzOavit1V81pZA', nom: 'Little Angel Français', desc: 'Comptines animées' }
+    { id: 'enfants', nom: '🧸 Enfants', sources: [
+      { nom: 'Digitiz', url: 'https://digitiz.fr/chaines-youtube-france/' },
+      { nom: 'Blog du Modérateur', url: 'https://www.blogdumoderateur.com/chaines-youtube-suivies-france-monde/' },
+      { nom: 'Les 10 meilleurs', url: 'https://les10meilleurs.net/chaines-youtube-francaises-avec-le-plus-abonnes/' },
+      { nom: 'Happy Mums', url: 'https://www.happymumsandcoolkids.fr/chaines-youtubes-pour-enfants' },
+      { nom: 'Netguide', url: 'https://www.netguide.com/Chaines-Youtube-de-dessins-animes/' },
+      { nom: 'Hop’Toys', url: 'https://www.bloghoptoys.fr/5-chaine-youtubes-a-connaitre' },
+      { nom: 'Maxi Flash', url: 'https://haguenau.maxi-flash.com/confinement-des-chaines-youtube-pour-les-enfants/' }
+    ], chaines: [
+      { id: 'UCVJBBtQvsJVNkl9KGBnhAQA', nom: 'Oggy et les Cafards', cite: 3 },
+      { id: 'UCW9KPpAY22Nqdw-1heAh5Cw', nom: 'Mouk', cite: 2 },
+      { id: 'UCjd32KVfRCli1d9iqo4YZ5A', nom: 'Masha et Michka', cite: 2 },
+      { id: 'UCvMmE1XrtxPgxZNePpedUBg', nom: 'Le Monde des Titounis', cite: 2 },
+      { id: 'UC9pxNghOaqpW4FzW74_KS1Q', nom: 'Les P’tits z’Amis', cite: 2 }
     ] }
   ];
 
@@ -142,6 +201,9 @@
     });
 
     var cat = CATEGORIES.filter(function (c) { return c.id === courante; })[0];
+    var src = document.getElementById('ytSources');
+    if (src) src.textContent = 'Classement croisé de ' + cat.sources.length + ' sources : ' +
+      cat.sources.map(function (x) { return x.nom; }).join(', ') + '.';
     grille.innerHTML = '';
     cat.chaines.forEach(function (ch, i) {
       var carte = document.createElement('button');
@@ -158,7 +220,7 @@
       nom.textContent = ch.nom;
       var desc = document.createElement('div');
       desc.className = 'yt-desc';
-      desc.textContent = ch.desc;
+      desc.textContent = 'Cité par ' + ch.cite + ' source' + (ch.cite > 1 ? 's' : '') + ' sur ' + cat.sources.length;
       carte.appendChild(vignette);
       carte.appendChild(nom);
       carte.appendChild(desc);
@@ -169,7 +231,7 @@
       apercu(ch.id).then(function (a) {
         if (!a) return;
         vignette.style.backgroundImage = 'url("https://i.ytimg.com/vi/' + a.videoId + '/mqdefault.jpg")';
-        desc.textContent = 'Dernière vidéo : ' + a.titre;
+        desc.textContent = 'Cité par ' + ch.cite + ' sources sur ' + cat.sources.length + ' · ' + a.titre;
       });
     });
   }
