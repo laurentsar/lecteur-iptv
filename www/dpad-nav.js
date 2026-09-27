@@ -291,8 +291,12 @@
     if (e.key !== ' ' && estChampTexte(el) && el.hasAttribute('data-dpad-im')) {
       e.preventDefault();
       rendreClavier(el);
+      // blur puis focus dans la même tâche : la WebView ne voit aucun
+      // changement et n'ouvre pas le clavier (constaté sur la TCL). Le
+      // refocus décalé est vu comme un nouveau focus, fait dans la foulée
+      // d'un geste de l'utilisateur : le clavier s'ouvre.
       el.blur();
-      el.focus({ preventScroll: true });
+      setTimeout(function () { el.focus({ preventScroll: true }); }, 60);
       return;
     }
     if (el.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) {
