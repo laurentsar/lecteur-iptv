@@ -1813,6 +1813,28 @@
     plugin.addListener('closed', function () {
       clearInterval(nativeInfoTimer);
     });
+    // Numéro tapé dans le lecteur natif, absent de la liste qu'il a reçue :
+    // recherche dans tout le catalogue, puis on lui renvoie ce catalogue et
+    // la position de la chaîne (-1 = aucune, il l'affiche lui-même).
+    plugin.addListener('number', function (info) {
+      var num = info && info.number;
+      var App = global.AppZap;
+      if (!num || !App || !App.catalogue || !plugin.switchTo) return;
+      App.catalogue().then(function (tout) {
+        var voulu = String(num).replace(/^0+(?=\d)/, '');
+        var index = -1;
+        for (var i = 0; i < tout.length; i++) {
+          if (tout[i].chno && String(tout[i].chno).replace(/^0+(?=\d)/, '') === voulu) { index = i; break; }
+        }
+        if (index >= 0 && App.setListe) App.setListe(tout);
+        plugin.switchTo({
+          number: voulu, index: index,
+          channels: index < 0 ? [] : tout.map(function (it) {
+            return { name: it.name || '', url: it.url, chno: it.chno == null ? '' : String(it.chno), epgKey: it.epgKey || '', logo: it.logo || '' };
+          })
+        });
+      }).catch(function () { plugin.switchTo({ number: String(num), index: -1, channels: [] }); });
+    });
     // Position de lecture renvoyée par le lecteur natif : mêmes règles que
     // saveProgress() côté web (rien au tout début ni à la toute fin).
     plugin.addListener('progress', function (info) {

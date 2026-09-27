@@ -160,6 +160,37 @@ public class NativePlayerPlugin extends Plugin {
         instance.notifyListeners("zap", data);
     }
 
+    // Numéro tapé introuvable dans la liste reçue à l'ouverture (souvent une
+    // seule catégorie) : la page le cherche dans tout le catalogue et répond
+    // par switchTo().
+    static void notifyNumber(String number) {
+        if (instance == null) {
+            return;
+        }
+        JSObject data = new JSObject();
+        data.put("number", number);
+        instance.notifyListeners("number", data);
+    }
+
+    // Réponse de la page à « number » : nouvelle liste de chaînes (tout le
+    // catalogue numéroté) et position de la chaîne demandée, -1 si aucune.
+    @PluginMethod
+    public void switchTo(PluginCall call) {
+        final List<NativePlayerActivity.Channel> list = parseChannels(call.getArray("channels"));
+        final int index = call.getInt("index", -1);
+        final String number = call.getString("number", "");
+        final NativePlayerActivity activity = NativePlayerActivity.current();
+        if (activity != null) {
+            activity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    activity.switchTo(list, index, number);
+                }
+            });
+        }
+        call.resolve();
+    }
+
     // Écran natif refermé : la page arrête de pousser l'EPG (rien ne
     // l'affiche plus) et reprend la main.
     static void notifyClosed() {
@@ -1333,7 +1364,20 @@ public class NativePlayerActivity extends AppCompatActivity {
                 return;
             }
         }
-        Toast.makeText(this, "Aucune chaîne n° " + wanted, Toast.LENGTH_SHORT).show();
+        // Pas dans la liste reçue : la page cherche dans tout le catalogue.
+        NativePlayerPlugin.notifyNumber(wanted);
+    }
+
+    // Réponse de la page (voir NativePlayerPlugin.switchTo) : la liste devient
+    // le catalogue complet, pour que chaîne +/− suive la numérotation.
+    void switchTo(List<Channel> list, int index, String number) {
+        if (index < 0 || list == null || index >= list.size()) {
+            Toast.makeText(this, "Aucune chaîne n° " + number, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        channels = list;
+        NativePlayerPlugin.channels = list;
+        playChannel(index);
     }
 
     private void showChannelList() {

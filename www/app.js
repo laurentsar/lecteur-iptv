@@ -254,7 +254,10 @@
     // Même recherche, mais dans TOUT le catalogue direct (voir
     // chaineParNumero) : utilisée quand le numéro n'est pas dans la liste
     // affichée.
-    byNumberPartout: function (num) { return chaineParNumero(num); }
+    byNumberPartout: function (num) { return chaineParNumero(num); },
+    // Pour le lecteur natif (voir l'évènement « number » dans player.js).
+    catalogue: function () { return catalogueNumerote(); },
+    setListe: function (items) { setZapList(items); }
   };
 
   /* Numérotation des chaînes, pour le zapping au numéro.
