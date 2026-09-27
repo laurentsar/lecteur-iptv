@@ -782,21 +782,25 @@ body.tv summary:focus { outline-width: 4px; }
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 
-/* ---------- Onglet YouTube (youtube.js) ---------- */
+/* ---------- Onglet YouTube (youtube.js) : une chaîne par ligne ---------- */
 #ytCategories { margin: 4px 0 8px; }
-.yt-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.yt-carte { color: inherit; font: inherit; display: flex; flex-direction: column; align-items: stretch; text-align: left; padding: 0; overflow: hidden; }
+.yt-grille { display: flex; flex-direction: column; gap: 10px; }
+.yt-carte {
+  color: inherit; font: inherit; text-align: left; padding: 0; overflow: hidden;
+  display: flex; flex-direction: row; align-items: center; width: 100%;
+}
 .yt-vignette {
-  position: relative; aspect-ratio: 16 / 9; max-width: 100%;
+  position: relative; flex: 0 0 auto; width: 176px; max-width: 40%; aspect-ratio: 16 / 9;
   background: #1a0d10 center / cover no-repeat;
   background-image: linear-gradient(135deg, #3a0f14, #12151f);
 }
 .yt-rang {
-  position: absolute; left: 8px; top: 8px; min-width: 30px; height: 30px; padding: 0 8px;
-  border-radius: 15px; background: #e62117; color: #fff; font-weight: 700;
+  position: absolute; left: 6px; top: 6px; min-width: 26px; height: 26px; padding: 0 7px;
+  border-radius: 13px; background: #e62117; color: #fff; font-weight: 700; font-size: 14px;
   display: flex; align-items: center; justify-content: center;
 }
-.yt-nom { font-weight: 700; padding: 8px 10px 2px; }
-.yt-desc { color: var(--muted); font-size: 13px; padding: 0 10px 10px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.yt-texte { flex: 1 1 auto; min-width: 0; padding: 8px 14px; }
+.yt-nom { font-weight: 700; font-size: 17px; }
+.yt-desc { color: var(--muted); font-size: 13px; margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .yt-carte:focus { outline: 3px solid var(--accent); outline-offset: -3px; }

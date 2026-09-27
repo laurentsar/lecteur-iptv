@@ -201,9 +201,6 @@
     });
 
     var cat = CATEGORIES.filter(function (c) { return c.id === courante; })[0];
-    var src = document.getElementById('ytSources');
-    if (src) src.textContent = 'Classement croisé de ' + cat.sources.length + ' sources : ' +
-      cat.sources.map(function (x) { return x.nom; }).join(', ') + '.';
     grille.innerHTML = '';
     cat.chaines.forEach(function (ch, i) {
       var carte = document.createElement('button');
@@ -220,10 +217,13 @@
       nom.textContent = ch.nom;
       var desc = document.createElement('div');
       desc.className = 'yt-desc';
-      desc.textContent = 'Cité par ' + ch.cite + ' source' + (ch.cite > 1 ? 's' : '') + ' sur ' + cat.sources.length;
+      desc.textContent = '';
+      var texte = document.createElement('div');
+      texte.className = 'yt-texte';
+      texte.appendChild(nom);
+      texte.appendChild(desc);
       carte.appendChild(vignette);
-      carte.appendChild(nom);
-      carte.appendChild(desc);
+      carte.appendChild(texte);
       carte.title = 'Ouvrir la playlist de ' + ch.nom + ' dans YouTube';
       carte.addEventListener('click', function () { ouvrir(playlistUrl(ch.id)); });
       grille.appendChild(carte);
@@ -231,7 +231,7 @@
       apercu(ch.id).then(function (a) {
         if (!a) return;
         vignette.style.backgroundImage = 'url("https://i.ytimg.com/vi/' + a.videoId + '/mqdefault.jpg")';
-        desc.textContent = 'Cité par ' + ch.cite + ' sources sur ' + cat.sources.length + ' · ' + a.titre;
+        desc.textContent = 'Dernière vidéo : ' + a.titre;
       });
     });
   }
