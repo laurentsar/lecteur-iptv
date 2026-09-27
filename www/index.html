@@ -296,6 +296,11 @@
               </label>
             </div>
 
+            <label style="display:block; margin-top:10px">Serveurs de secours (facultatif)
+              <input type="text" id="pl_secours" autocomplete="off" placeholder="http://80.82.64.16:8080 http://autre-adresse:8080" />
+            </label>
+            <p class="hint" style="margin:4px 0 0">Autres adresses du même fournisseur, séparées par des espaces. Si l'adresse principale ne répond pas, l'appli essaie celles-ci une à une et garde la première qui marche (mêmes identifiants).</p>
+
             <div class="row" style="margin-top:12px">
               <button id="btnTester" class="ghost">🔌 Tester la connexion</button>
               <button id="btnAjouterPlaylist" class="primary">➕ Ajouter</button>
@@ -482,7 +487,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.75';
+    window.APP_VERSION = '2.76';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
@@ -496,6 +501,7 @@
   <script src="vr-link.js"></script>
   <script src="source-quality.js"></script>
   <script src="net.js"></script>
+  <script src="serveurs.js"></script>
   <script src="hls-native-loader.js"></script>
   <script>window.BACKUP_APP = 'lecteur-iptv';
     // Caches régénérables : la playlist brute et l'EPG se retéléchargent,

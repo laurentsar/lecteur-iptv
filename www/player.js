@@ -1738,10 +1738,11 @@
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
       if (!item || !item.url) continue;
-      if (item.url === url) index = channels.length;
+      var lien = vivante(item.url);
+      if (lien === url) index = channels.length;
       channels.push({
         name: item.name || '',
-        url: item.url,
+        url: lien,
         chno: item.chno == null ? '' : String(item.chno),
         epgKey: item.epgKey || '',
         logo: item.logo || ''
@@ -1751,13 +1752,13 @@
     if (currentVersions && currentVersions.length > 1) {
       for (var v = 0; v < currentVersions.length; v++) {
         if (currentVersions[v] && currentVersions[v].url) {
-          versions.push({ name: currentVersions[v].name || '', url: currentVersions[v].url, chno: '', epgKey: '', logo: currentVersions[v].logo || '' });
+          versions.push({ name: currentVersions[v].name || '', url: vivante(currentVersions[v].url), chno: '', epgKey: '', logo: currentVersions[v].logo || '' });
         }
       }
     }
     var favoris = [], brut = (global.AppZap && global.AppZap.favoris()) || [];
     for (var f = 0; f < brut.length; f++) {
-      if (brut[f] && brut[f].url) favoris.push({ name: brut[f].name || '', url: brut[f].url, chno: '', epgKey: '', logo: brut[f].logo || '' });
+      if (brut[f] && brut[f].url) favoris.push({ name: brut[f].name || '', url: vivante(brut[f].url), chno: '', epgKey: '', logo: brut[f].logo || '' });
     }
     return { channels: channels, index: index, versions: versions, favorites: favoris };
   }
@@ -1830,7 +1831,7 @@
         plugin.switchTo({
           number: voulu, index: index,
           channels: index < 0 ? [] : tout.map(function (it) {
-            return { name: it.name || '', url: it.url, chno: it.chno == null ? '' : String(it.chno), epgKey: it.epgKey || '', logo: it.logo || '' };
+            return { name: it.name || '', url: vivante(it.url), chno: it.chno == null ? '' : String(it.chno), epgKey: it.epgKey || '', logo: it.logo || '' };
           })
         });
       }).catch(function () { plugin.switchTo({ number: String(num), index: -1, channels: [] }); });
@@ -2013,7 +2014,11 @@
     }
   }
 
+  // Lien réécrit vers l'adresse de serveur retenue (secours, voir app.js).
+  function vivante(url) { return (url && global.AppUrlVivante) ? global.AppUrlVivante(url) : url; }
+
   function open(url, title, opts) {
+    url = vivante(url);
     if (overlay) saveProgress(true); // mémorise la position du contenu quitté avant de basculer
     clearInterval(nativeInfoTimer); // l'écran natif d'avant n'est plus à l'écran
     originalUrl = url;

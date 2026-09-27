@@ -280,7 +280,23 @@
   fetchJson = journalise(fetchJson, 'json');
   fetchBytes = journalise(fetchBytes, 'octets');
 
+  /* Le serveur répond-il ? Toute réponse HTTP (même 404 ou redirection)
+   * compte : on veut seulement savoir s'il est vivant, vite (8 s), pour
+   * choisir entre les adresses de secours d'une playlist (serveurs.js). */
+  function joignable(url, delai) {
+    var http = nativeHttp();
+    var essai = http
+      ? http.request({ url: url, method: 'GET', responseType: 'text', headers: { 'User-Agent': BROWSER_UA }, connectTimeout: delai || 8000, readTimeout: delai || 8000 })
+          .then(function () { return true; })
+      : fetch(url, { mode: 'no-cors' }).then(function () { return true; });
+    return withTimeout(essai, delai || 8000).then(function (ok) {
+      note((ok ? '✔ joignable ' : '✖ injoignable ') + masquer(url));
+      return ok;
+    }, function () { note('✖ injoignable ' + masquer(url)); return false; });
+  }
+
   global.Net = {
+    joignable: joignable,
     journal: function () { return journal.slice(); }, note: note,
     fetchText: fetchText, fetchJson: fetchJson, fetchBytes: fetchBytes,
     isNative: function () { return !!nativeHttp(); },

@@ -595,7 +595,12 @@
   }
 
   // ---------- chargement de la playlist active ----------
-  function xtreamCfg(pl) { return { serveur: pl.serveur, utilisateur: pl.utilisateur, motDePasse: pl.motDePasse }; }
+  function xtreamCfg(pl) {
+    // Playlist active : l'adresse retenue (secours éventuel), sinon la
+    // dernière qui a marché, sinon celle saisie.
+    var serveur = (state.playlist && pl.id === state.playlist.id && state.serveur) || pl.serveurOk || pl.serveur;
+    return { serveur: serveur, utilisateur: pl.utilisateur, motDePasse: pl.motDePasse };
+  }
 
   // Après un import (restauration sur un appareil vide), les playlists sont
   // en mémoire mais aucune n'est active : l'appli continue d'afficher « Aucune
@@ -618,8 +623,47 @@
     renderAccueil();
   }
 
+  // ---------- adresse du serveur (secours, voir serveurs.js) ----------
+  // Adresse retenue pour la playlist active pendant cette session, et
+  // adresses vues en panne (exclues au prochain choix).
+  function serveurActif() {
+    var pl = state.playlist;
+    if (!pl) return Promise.resolve(null);
+    if (!state.serveurPromise) {
+      state.serveurPromise = Serveurs.choisir(pl, function (o) { return Net.joignable(o + '/'); }, state.serveursHS)
+        .then(function (o) {
+          state.serveur = o;
+          if (o && o !== Serveurs.origine(pl.serveurOk) && Serveurs.candidats(pl).length > 1) {
+            Store.updatePlaylist(pl.id, { serveurOk: o });
+            pl.serveurOk = o;
+            Net.note('↪ serveur retenu : ' + o);
+          }
+          return o;
+        });
+    }
+    return state.serveurPromise;
+  }
+  // Une requête a échoué sur l'adresse retenue : on l'exclut et on en
+  // choisit une autre. Rend true s'il reste une autre adresse à essayer.
+  function basculerServeur() {
+    var pl = state.playlist;
+    if (!pl || !state.serveur || Serveurs.candidats(pl).length < 2) return Promise.resolve(false);
+    var hs = state.serveur;
+    state.serveursHS = (state.serveursHS || []).concat([hs]);
+    if (Serveurs.candidats(pl).every(function (o) { return state.serveursHS.indexOf(o) >= 0; })) return Promise.resolve(false);
+    state.serveurPromise = null;
+    Net.note('✖ serveur en panne : ' + hs + ' — essai des adresses de secours');
+    return serveurActif().then(function (o) { return !!o && o !== hs; });
+  }
+  // Lien de lecture réécrit vers l'adresse retenue (voir player.js).
+  window.AppUrlVivante = function (url) {
+    var pl = state.playlist;
+    return pl ? Serveurs.reecrire(url, pl, state.serveur || Serveurs.origine(pl.serveurOk)) : url;
+  };
+
   function setActivePlaylist(id) {
     Store.setActivePlaylistId(id);
+    state.serveur = null; state.serveurPromise = null; state.serveursHS = [];
     state.playlist = Store.getPlaylists().find(function (p) { return p.id === id; }) || null;
     state.m3uData = null; state.epgMap = null; state.epgLoading = false; state.epgError = null; state.epgFailedUrl = null; state.epgDebug = null;
     state.xtreamCats = { direct: null, films: null, series: null };
@@ -692,6 +736,19 @@
       : 'Aucune playlist';
   }
 
+  // Playlist M3U complète, sur l'adresse retenue ; en cas d'échec, on
+  // essaie les adresses de secours une à une. Grosse playlist : 3 min.
+  function telechargerM3u(pl) {
+    return serveurActif().then(function (o) {
+      return Net.fetchText(o ? Serveurs.remplacerOrigine(pl.m3uUrl, o) : pl.m3uUrl, 180000);
+    }).catch(function (err) {
+      return basculerServeur().then(function (ok) {
+        if (!ok) throw err;
+        return telechargerM3u(pl);
+      });
+    });
+  }
+
   function ensureM3uLoaded(force) {
     var pl = state.playlist;
     if (!pl || pl.type !== 'm3u') return Promise.resolve(null);
@@ -702,7 +759,7 @@
       if (cached && !force) { state.m3uData = cached; kickEpg(); return cached; }
       var textPromise = pl.m3uUpload
         ? Store.rawGet(pl.id).then(function (t) { if (!t) throw new Error('Fichier introuvable — réimporte la playlist.'); return t; })
-        : Net.fetchText(pl.m3uUrl, 180000);   // grosse playlist : 3 min, voir net.js
+        : telechargerM3u(pl);
       return textPromise.then(function (text) {
         var parsed = M3U.parse(text);
         var data = { epgUrl: parsed.epgUrl || pl.epgUrl || null, items: parsed.items, fetchedAt: Date.now() };
@@ -823,9 +880,16 @@
 
   function isTabActive(name) { var p = $id('tab-' + name); return p && p.classList.contains('active'); }
 
-  function ensureXtreamCats(kindKey) {
+  function ensureXtreamCats(kindKey, dejaBascule) {
     var pl = state.playlist;
     if (state.xtreamCats[kindKey]) return Promise.resolve(state.xtreamCats[kindKey]);
+    return serveurActif().then(function () { return chargerXtreamCats(kindKey); }).catch(function (err) {
+      if (dejaBascule) throw err;
+      return basculerServeur().then(function (ok) { if (!ok) throw err; return ensureXtreamCats(kindKey, true); });
+    });
+  }
+  function chargerXtreamCats(kindKey) {
+    var pl = state.playlist;
     var cfg = xtreamCfg(pl);
     var call = kindKey === 'direct' ? Xtream.liveCategories(cfg)
       : kindKey === 'films' ? Xtream.vodCategories(cfg)
@@ -837,7 +901,13 @@
     });
   }
 
-  function ensureXtreamItems(kindKey, categoryId) {
+  function ensureXtreamItems(kindKey, categoryId, dejaBascule) {
+    return serveurActif().then(function () { return chargerXtreamItems(kindKey, categoryId); }).catch(function (err) {
+      if (dejaBascule) throw err;
+      return basculerServeur().then(function (ok) { if (!ok) throw err; return ensureXtreamItems(kindKey, categoryId, true); });
+    });
+  }
+  function chargerXtreamItems(kindKey, categoryId) {
     var pl = state.playlist;
     var cfg = xtreamCfg(pl);
     var call = kindKey === 'direct' ? Xtream.liveStreams(cfg, categoryId)
@@ -2945,6 +3015,7 @@
       $id('pl_epgUrl').value = p.epgUrl || '';
     }
     $id('pl_m3uFile').value = '';
+    $id('pl_secours').value = (p.secours || []).join(' ');
     $id('testResult').textContent = p.m3uUpload
       ? 'Fichier déjà importé conservé — laisse ce champ vide, ou importe un nouveau fichier pour le remplacer.'
       : '';
@@ -2983,6 +3054,7 @@
   function reinitialiserFormulairePlaylist() {
     $id('pl_nom').value = ''; $id('pl_serveur').value = ''; $id('pl_user').value = ''; $id('pl_pass').value = '';
     $id('pl_m3uUrl').value = ''; $id('pl_m3uFile').value = ''; $id('pl_epgUrl').value = ''; $id('testResult').textContent = '';
+    $id('pl_secours').value = '';
   }
 
   $id('btnAnnulerEdition').addEventListener('click', function () {
@@ -3004,7 +3076,8 @@
       var user = $id('pl_user').value.trim();
       var pass = $id('pl_pass').value.trim();
       if (!serveur || !user || !pass) return { error: 'Renseigne le serveur, l’utilisateur et le mot de passe.' };
-      return { draft: { nom: nom, type: 'xtream', serveur: serveur, utilisateur: user, motDePasse: pass } };
+      return { draft: { nom: nom, type: 'xtream', serveur: serveur, utilisateur: user, motDePasse: pass,
+        secours: Serveurs.lireListe($id('pl_secours').value), serveurOk: null } };
     }
     var url = $id('pl_m3uUrl').value.trim();
     var file = $id('pl_m3uFile').files[0];
@@ -3016,7 +3089,8 @@
     var existante = editingPlaylistId && Store.getPlaylists().find(function (p) { return p.id === editingPlaylistId; });
     var conserveFichier = !url && !file && existante && existante.type === 'm3u' && existante.m3uUpload;
     if (!url && !file && !conserveFichier) return { error: 'Indique une URL de playlist ou importe un fichier.' };
-    var draft = { nom: nom, type: 'm3u', epgUrl: epgUrl, _file: file };
+    var draft = { nom: nom, type: 'm3u', epgUrl: epgUrl, _file: file,
+      secours: Serveurs.lireListe($id('pl_secours').value), serveurOk: null };
     if (conserveFichier) { draft.m3uUrl = null; draft.m3uUpload = true; }
     else { draft.m3uUrl = url || null; draft.m3uUpload = false; }
     return { draft: draft };
