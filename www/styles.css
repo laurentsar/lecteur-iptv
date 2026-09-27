@@ -804,3 +804,18 @@ body.tv summary:focus { outline-width: 4px; }
 .yt-desc { color: var(--muted); font-size: 13px; margin-top: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .yt-carte:focus { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+/* ---------- Mode TV : plus plein écran ----------
+   Sur un téléviseur, l'interface pensée pour un téléphone perdait de la
+   place partout : colonne de 1200 px centrée (bandes vides sur les côtés),
+   en-tête collé en haut en permanence, barre d'onglets haute (icône
+   au-dessus du libellé). En mode TV, le contenu prend toute la largeur,
+   l'en-tête défile avec la page et la barre d'onglets tient sur une ligne. */
+body.tv main { max-width: none; padding: 8px 2.5vw calc(56px + env(safe-area-inset-bottom)); }
+body.tv .app-header { position: static; padding: 6px 2.5vw; }
+body.tv .brand-logo { width: 30px; height: 30px; }
+body.tv .app-header h1 { font-size: 17px; }
+body.tv .app-header .sub { font-size: 13px; }
+body.tv .tabs { padding: 3px 1vw calc(3px + env(safe-area-inset-bottom)); }
+body.tv .tab { flex-direction: row; justify-content: center; gap: 6px; padding: 7px 4px; }
+body.tv .tab-ic { font-size: 18px; }

@@ -672,8 +672,14 @@
   // accumulées puis validées après une pause — comme un vrai décodeur TV).
   function goToChno(num) {
     var item = global.AppZap && global.AppZap.byNumber && global.AppZap.byNumber(num);
-    if (!item) { setStatus('Aucune chaîne n°' + num + '.'); return; }
-    open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
+    if (item) { open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo }); return; }
+    // Pas dans la liste affichée : on cherche dans tout le catalogue.
+    var partout = global.AppZap && global.AppZap.byNumberPartout;
+    if (!partout) { setStatus('Aucune chaîne n°' + num + '.'); return; }
+    partout(num).then(function (it) {
+      if (!it) { setStatus('Aucune chaîne n°' + num + '.'); return; }
+      open(it.url, it.name, { live: true, epgKey: it.epgKey, logo: it.logo });
+    });
   }
 
   var chnoBuffer = '', chnoBufferTimer = null;

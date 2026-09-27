@@ -154,30 +154,34 @@
     });
   }
 
-  function fetchText(url) {
-    return withHttpsDowngrade(url, fetchTextAttempt);
+  // `delai` facultatif : une playlist M3U complète pèse des dizaines de Mo et
+  // dépasse largement les 20 s par défaut sur une télé — elle échouait à
+  // chaque lancement sans jamais atteindre le cache, et le téléchargement
+  // natif, lui, continuait en arrière-plan pour rien.
+  function fetchText(url, delai) {
+    return withHttpsDowngrade(url, function (u) { return fetchTextAttempt(u, delai); });
   }
 
-  function fetchTextAttempt(url) {
+  function fetchTextAttempt(url, delai) {
     var http = nativeHttp();
     if (http) {
       return withNativeFallback(
         withTimeout(http.request({ url: url, method: 'GET', responseType: 'text', headers: { 'User-Agent': BROWSER_UA } }).then(function (res) {
           if (res.status && (res.status < 200 || res.status >= 300)) throw new Error('HTTP ' + res.status);
           return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-        })),
+        }), delai),
         function () {
           return browserFetch(url, function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.text();
-          });
+          }, delai);
         }
       );
     }
     return browserFetch(url, function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
-    });
+    }, delai);
   }
 
   // Octets bruts (pour l'EPG XMLTV, potentiellement gzip — voir epg.js) :

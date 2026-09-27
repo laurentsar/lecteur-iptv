@@ -250,8 +250,75 @@
       num = String(num).replace(/^0+(?=\d)/, '');
       return zapList().filter(function (it) { return it.chno; })
         .find(function (it) { return String(it.chno).replace(/^0+(?=\d)/, '') === num; }) || null;
-    }
+    },
+    // Même recherche, mais dans TOUT le catalogue direct (voir
+    // chaineParNumero) : utilisée quand le numéro n'est pas dans la liste
+    // affichée.
+    byNumberPartout: function (num) { return chaineParNumero(num); }
   };
+
+  /* Numérotation des chaînes, pour le zapping au numéro.
+   *
+   * La numérotation du fournisseur est prise quand elle existe (« num » d'un
+   * compte Xtream, tvg-chno d'une M3U). Sinon — beaucoup de M3U n'en ont
+   * pas —, le numéro est la position de la chaîne dans la playlist (1, 2, 3…),
+   * pour que les touches chiffres de la télécommande servent quand même. Le
+   * catalogue complet est celui déjà mis en cache (24 h, voir xtream.js) :
+   * aucune requête de plus en usage normal. */
+  function catalogueNumerote() {
+    var pl = state.playlist;
+    if (!pl) return Promise.resolve([]);
+    var p = pl.type === 'm3u'
+      ? ensureM3uLoaded().then(function (data) {
+          return (data.items || []).filter(function (it) { return it.kind === 'live' && it.url && !looksLikeSeparator(it.name); })
+            .map(function (it) { return { url: it.url, name: it.name, epgKey: it.tvgId || null, logo: it.tvgLogo || null, chno: it.tvgChno || '' }; });
+        })
+      : ensureAllDirectItems().then(function (items) {
+          return items.filter(function (it) { return it.kind === 'direct' && it.url; });
+        });
+    return p.then(function (items) {
+      var avecNumero = items.some(function (it) { return it.chno; });
+      return avecNumero ? items : items.map(function (it, i) { return Object.assign({}, it, { chno: String(i + 1) }); });
+    });
+  }
+
+  function chaineParNumero(num) {
+    num = String(num).replace(/^0+(?=\d)/, '');
+    return catalogueNumerote().then(function (items) {
+      return items.find(function (it) { return it.chno && String(it.chno).replace(/^0+(?=\d)/, '') === num; }) || null;
+    }).catch(function () { return null; });
+  }
+
+  // Touches chiffres HORS du lecteur (listes, accueil) : comme sur un
+  // décodeur, on tape le numéro et la chaîne se lance après une courte pause.
+  // Le lecteur, lui, gère ses propres chiffres (voir player.js).
+  (function () {
+    var tampon = '', minuteur = null;
+    document.addEventListener('keydown', function (e) {
+      if (e.key < '0' || e.key > '9' || e.key.length !== 1) return;
+      var ae = document.activeElement;
+      if (ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable)) return;
+      var ov = document.querySelector('.player-overlay.show, #playerOverlay.show');
+      if (ov) return;
+      if (!state.playlist) return;
+      e.preventDefault();
+      tampon += e.key;
+      toast('📺 Chaîne n° ' + tampon);
+      clearTimeout(minuteur);
+      minuteur = setTimeout(function () {
+        var n = tampon; tampon = '';
+        chaineParNumero(n).then(function (item) {
+          if (!item) { toast('Aucune chaîne n° ' + n); return; }
+          // Zapping (+/−, chiffres, y compris dans le lecteur natif) sur tout
+          // le catalogue numéroté, pas seulement sur la dernière liste vue.
+          return catalogueNumerote().then(function (tout) {
+            setZapList(tout);
+            Player.open(item.url, item.name, { live: true, epgKey: item.epgKey, logo: item.logo });
+          });
+        });
+      }, 1500);
+    });
+  })();
 
   // ---------- utilitaires ----------
   function $(sel) { return document.querySelector(sel); }
@@ -632,7 +699,7 @@
       if (cached && !force) { state.m3uData = cached; kickEpg(); return cached; }
       var textPromise = pl.m3uUpload
         ? Store.rawGet(pl.id).then(function (t) { if (!t) throw new Error('Fichier introuvable — réimporte la playlist.'); return t; })
-        : Net.fetchText(pl.m3uUrl);
+        : Net.fetchText(pl.m3uUrl, 180000);   // grosse playlist : 3 min, voir net.js
       return textPromise.then(function (text) {
         var parsed = M3U.parse(text);
         var data = { epgUrl: parsed.epgUrl || pl.epgUrl || null, items: parsed.items, fetchedAt: Date.now() };
