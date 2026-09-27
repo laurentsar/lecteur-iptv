@@ -174,7 +174,21 @@
     if (tag !== 'INPUT') return false;
     var type = (el.type || 'text').toLowerCase();
     if (type === 'range') return direction === 'left' || direction === 'right';
-    if (TEXTE.test(type)) return direction === 'left' || direction === 'right';
+    if (TEXTE.test(type)) {
+      if (direction !== 'left' && direction !== 'right') return false;
+      // Champ seulement sélectionné (clavier pas encore ouvert par OK) : on
+      // n'y écrit pas, toutes les flèches servent à se déplacer.
+      if (el.hasAttribute('data-dpad-im')) return false;
+      // Curseur déjà au bord : la flèche ne ferait rien dans le champ, c'est
+      // la WebView qui sauterait d'elle-même au champ voisin — en ouvrant le
+      // clavier. On déplace donc le focus nous-mêmes.
+      var debut, fin;
+      try { debut = el.selectionStart; fin = el.selectionEnd; } catch (err) { return true; }
+      if (debut == null) return true;           // email/number : pas de curseur lisible
+      if (debut !== fin) return true;           // une sélection : la flèche la réduit
+      var len = (el.value || '').length;
+      return direction === 'right' ? debut < len : debut > 0;
+    }
     return false;                          // checkbox, radio, file, button…
   }
 
