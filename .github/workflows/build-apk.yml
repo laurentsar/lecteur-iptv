@@ -3,6 +3,10 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
+    # Classement YouTube mis à jour chaque mois : l'appli le relit elle-même
+    # sur GitHub, inutile de republier un APK pour ça.
+    paths-ignore:
+      - 'www/youtube-top.json'
   workflow_dispatch:
 
 # La chaîne de build est mutualisée avec les autres applications Capacitor

@@ -178,15 +178,61 @@
     return s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
   }
 
+  /* Mise à jour mensuelle du classement.
+   *
+   * Le recalcul (lire les classements publics, les croiser, vérifier les
+   * identifiants) ne peut pas tourner dans l'appli : il demande du jugement.
+   * Il est refait une fois par mois hors de l'appli et publié dans
+   * www/youtube-top.json du dépôt ; l'appli relit ce fichier au plus une fois
+   * par mois (cache IndexedDB), et garde CATEGORIES ci-dessus si le réseau
+   * échoue ou si le fichier est mal formé. */
+  var URL_TOP = 'https://raw.githubusercontent.com/laurentsar/lecteur-iptv/main/www/youtube-top.json';
+  var MOIS = 30 * 24 * 3600 * 1000;
+  var distantes = null;
+
+  function valide(d) {
+    if (!d || !Array.isArray(d.categories) || !d.categories.length) return false;
+    return d.categories.every(function (c) {
+      return c && c.id && c.nom && Array.isArray(c.chaines) && c.chaines.length &&
+        c.chaines.every(function (ch) { return ch && ch.nom && /^UC[\w-]{22}$/.test(ch.id); });
+    });
+  }
+
+  function categories() { return distantes || CATEGORIES; }
+
+  function chargerDistant(apres) {
+    var St = global.Store, Net = global.Net;
+    if (!St || !St.kvGet || !Net) return;
+    St.kvGet('yt-top').catch(function () { return null; }).then(function (c) {
+      if (c && valide(c.data)) distantes = c.data;
+      if (c && Date.now() - c.t < MOIS) { if (distantes) apres(); return; }
+      return Net.fetchText(URL_TOP + '?t=' + Date.now()).then(function (txt) {
+        var d = JSON.parse(txt);
+        if (!valide(d)) return;
+        distantes = d;
+        St.kvSet('yt-top', { t: Date.now(), data: d }).catch(function () {});
+        apres();
+      });
+    }).catch(function () {});
+  }
+
   var courante = CATEGORIES[0].id;
+  var chargeLance = false;
 
   function render() {
+    if (!chargeLance) {
+      chargeLance = true;
+      chargerDistant(function () {
+        var panneau = document.getElementById('tab-youtube');
+        if (panneau && panneau.classList.contains('active')) render();
+      });
+    }
     var chips = document.getElementById('ytCategories');
     var grille = document.getElementById('ytChaines');
     if (!chips || !grille) return;
 
     chips.innerHTML = '';
-    CATEGORIES.forEach(function (c) {
+    categories().forEach(function (c) {
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'chip' + (c.id === courante ? ' active' : '');
@@ -200,7 +246,8 @@
       chips.appendChild(b);
     });
 
-    var cat = CATEGORIES.filter(function (c) { return c.id === courante; })[0];
+    var cat = categories().filter(function (c) { return c.id === courante; })[0] || categories()[0];
+    courante = cat.id;
     grille.innerHTML = '';
     cat.chaines.forEach(function (ch, i) {
       var carte = document.createElement('button');
@@ -236,7 +283,7 @@
     });
   }
 
-  global.YouTubeTab = { render: render, CATEGORIES: CATEGORIES, playlistUrl: playlistUrl };
+  global.YouTubeTab = { render: render, CATEGORIES: CATEGORIES, playlistUrl: playlistUrl, valide: valide };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) module.exports = globalThis.YouTubeTab;

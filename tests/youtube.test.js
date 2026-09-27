@@ -21,5 +21,8 @@ Y.CATEGORIES.forEach(function (c) {
 verifie('aucune chaîne en double', new Set(ids).size === ids.length);
 verifie('playlist = liste d\'envois (UU…)',
         Y.playlistUrl('UCAcAnMF0OrCtUep3Y4M-ZPw') === 'https://www.youtube.com/playlist?list=UUAcAnMF0OrCtUep3Y4M-ZPw');
+const fichier = JSON.parse(require('fs').readFileSync(__dirname + '/../www/youtube-top.json', 'utf8'));
+verifie('youtube-top.json (relu chaque mois par l\'appli) est valide', Y.valide(fichier));
+verifie('fichier mal formé refusé', !Y.valide({ categories: [{ id: 'x', nom: 'x', chaines: [{ id: 'faux', nom: 'x' }] }] }));
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);
