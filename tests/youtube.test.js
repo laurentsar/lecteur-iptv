@@ -24,5 +24,23 @@ verifie('playlist = liste d\'envois (UU…)',
 const fichier = JSON.parse(require('fs').readFileSync(__dirname + '/../www/youtube-top.json', 'utf8'));
 verifie('youtube-top.json (relu chaque mois par l\'appli) est valide', Y.valide(fichier));
 verifie('fichier mal formé refusé', !Y.valide({ categories: [{ id: 'x', nom: 'x', chaines: [{ id: 'faux', nom: 'x' }] }] }));
+
+console.log('\n— Classement mensuel par audience (calculé dans l\'appli) —');
+{
+  const J = 24 * 3600 * 1000, now = Date.parse('2026-10-01T00:00:00Z');
+  const entree = (joursAvant, vues) => '<entry><published>' + new Date(now - joursAvant * J).toISOString() +
+    '</published><media:group><media:statistics views="' + vues + '"/></media:group></entry>';
+  const xml = '<feed><published>2015-01-01T00:00:00Z</published>' + entree(1, 300) + entree(4, 500) + entree(10, 1200) + '</feed>';
+  const m = Y.audienceDepuisRss(xml, now);
+  verifie('vues par jour = total ÷ jours couverts (2000 / 10)', m && m.j === 200, JSON.stringify(m));
+  verifie('date de dernière vidéo', m && m.d === now - J);
+  verifie('flux vide -> null', Y.audienceDepuisRss('<feed></feed>', now) === null);
+  const ch = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }];
+  const aud = { a: { j: 10, d: now }, b: { j: 500, d: now }, d: { j: 70, d: now }, e: { j: 9999, d: now - 200 * J } };
+  const ordre = Y.trierParAudience(ch, aud, now).map(x => x.id).join('');
+  verifie('tri vues/jour décroissant, inactive > 6 mois retirée, sans mesure à la fin', ordre === 'bdac', ordre);
+  verifie('sans audience -> ordre d\'origine', Y.trierParAudience(ch, null).map(x => x.id).join('') === 'abcde');
+}
+
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);

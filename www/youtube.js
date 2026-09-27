@@ -98,7 +98,7 @@
       { id: 'UCfI1q93ZYNR_mJYKFEqxfrA', nom: 'Gastronogeek', cite: 2 },
       { id: 'UCgCEqjKOabA2_IvZ-agkQCQ', nom: 'Hervé Cuisine', cite: 2 },
       { id: 'UCKq9JxyISqBHDd-fXfV3QtQ', nom: 'FastGoodCuisine', cite: 2 },
-      { id: 'UC-YIuf9kbZoPcnmONP-iGIA', nom: 'JustInCooking', cite: 2 }
+      { id: 'UCtBzfGaJzGGNJVOVM0mK4uQ', nom: 'JustInCooking', cite: 2 }
     ] },
     { id: 'musique', nom: '🎵 Musique', sources: [
       { nom: 'Digitiz', url: 'https://digitiz.fr/chaines-youtube-france/' },
@@ -117,10 +117,10 @@
       { nom: 'SPEAKRJ', url: 'https://www.speakrj.com/audit/top/youtube/fr/Sport' },
       { nom: 'HypeAuditor', url: 'https://hypeauditor.com/top-youtube-sports-france/' }
     ], chaines: [
-      { id: 'UCGSiCI_RdAIezAAedP_46TA', nom: 'L’Équipe', cite: 3 },
-      { id: 'UC0D-vfqoAHvOYmHxDJDlLFw', nom: 'Foot Mercato', cite: 3 },
+      { id: 'UCyIV8rkza5Uk_sJIhqilBvQ', nom: 'L’Équipe', cite: 3 },
+      { id: 'UCrzDtXyuSBch2u_31JJj-Dw', nom: 'Foot Mercato', cite: 3 },
       { id: 'UCQEWraynL44i7RC8UZcjE8Q', nom: 'Oh My Goal', cite: 3 },
-      { id: 'UChysErndYl-zSsmB-0H0S_g', nom: 'FFF TV', cite: 2 },
+      { id: 'UCeJlXGyEl7kBgQJKADAHM3A', nom: 'Fédération Française de Football', cite: 2 },
       { id: 'UCaHUPgzDZgMGGe0dAixfVhQ', nom: 'L’Immigré Parisien', cite: 2 }
     ] },
     { id: 'enfants', nom: '🧸 Enfants', sources: [
@@ -135,7 +135,7 @@
       { id: 'UCVJBBtQvsJVNkl9KGBnhAQA', nom: 'Oggy et les Cafards', cite: 3 },
       { id: 'UCW9KPpAY22Nqdw-1heAh5Cw', nom: 'Mouk', cite: 2 },
       { id: 'UCjd32KVfRCli1d9iqo4YZ5A', nom: 'Masha et Michka', cite: 2 },
-      { id: 'UCvMmE1XrtxPgxZNePpedUBg', nom: 'Le Monde des Titounis', cite: 2 },
+      { id: 'UC8I-UIlXPNS4luC4iV7dRdQ', nom: 'Titounis', cite: 2 },
       { id: 'UC9pxNghOaqpW4FzW74_KS1Q', nom: 'Les P’tits z’Amis', cite: 2 }
     ] }
   ];
@@ -156,9 +156,8 @@
     return Promise.resolve();
   }
 
-  // Dernière vidéo de la chaîne (miniature + titre) lue dans son flux RSS :
-  // donne à chaque carte un visuel à jour, sans clé d'API. Échec = carte
-  // sans image, jamais bloquant.
+  // Dernière vidéo de la chaîne (miniature + titre) et audience, lues dans son
+  // flux RSS : sans clé d'API. Échec = carte sans image, jamais bloquant.
   var apercus = {};
   function apercu(channelId) {
     if (apercus[channelId]) return apercus[channelId];
@@ -168,10 +167,80 @@
         var vid = /<yt:videoId>([^<]+)<\/yt:videoId>/.exec(xml);
         var titres = xml.match(/<title>([^<]*)<\/title>/g) || [];
         var titre = titres[1] ? titres[1].replace(/<\/?title>/g, '') : '';
-        return vid ? { videoId: vid[1], titre: decode(titre) } : null;
+        return { videoId: vid ? vid[1] : null, titre: decode(titre), audience: audienceDepuisRss(xml, Date.now()) };
       }).catch(function () { return null; });
     apercus[channelId] = p;
     return p;
+  }
+
+  /* Audience d'une chaîne, mesurée dans son flux RSS (15 dernières vidéos) :
+   * - j : vues par jour = total des vues du flux ÷ nombre de jours qu'il
+   *   couvre. Juste pour tous les rythmes : une chaîne d'info qui publie 15
+   *   vidéos par jour et un vidéaste qui en sort une par mois sont comparés
+   *   sur ce qu'ils attirent réellement, par jour.
+   * - d : date de la dernière vidéo, pour écarter les chaînes à l'arrêt.
+   * null = flux vide ou illisible. */
+  function audienceDepuisRss(xml, maintenant) {
+    var entrees = String(xml || '').split('<entry>').slice(1);
+    var total = 0, premiere = maintenant, derniere = 0, n = 0;
+    entrees.forEach(function (e) {
+      var pub = /<published>([^<]+)<\/published>/.exec(e);
+      var st = /<media:statistics views="(\d+)"/.exec(e);
+      if (!pub || !st) return;
+      var t = Date.parse(pub[1]);
+      if (isNaN(t)) return;
+      total += Number(st[1]); n++;
+      premiere = Math.min(premiere, t); derniere = Math.max(derniere, t);
+    });
+    if (!n) return null;
+    var jours = Math.max(1, (maintenant - premiere) / (24 * 3600 * 1000));
+    return { j: Math.round(total / jours), d: derniere };
+  }
+
+  // Une chaîne sans nouvelle vidéo depuis 6 mois disparaît du classement.
+  var INACTIVE = 183 * 24 * 3600 * 1000;
+
+  // Ordre d'affichage : vues par jour décroissantes, chaînes à l'arrêt
+  // retirées ; celles sans mesure (réseau) gardent leur place, à la fin.
+  function trierParAudience(chaines, audiences, maintenant) {
+    if (!audiences) return chaines.slice();
+    maintenant = maintenant || Date.now();
+    return chaines.map(function (ch, i) { return { ch: ch, i: i, a: audiences[ch.id] }; })
+      .filter(function (x) { return !(x.a && maintenant - x.a.d > INACTIVE); })
+      .sort(function (x, y) {
+        if (x.a && y.a && x.a.j !== y.a.j) return y.a.j - x.a.j;
+        if (!!x.a !== !!y.a) return x.a ? -1 : 1;
+        return x.i - y.i;
+      })
+      .map(function (x) { return x.ch; });
+  }
+
+  /* Recalcul mensuel, dans l'appli : une fois par mois (cache IndexedDB),
+   * l'audience de toutes les chaînes est remesurée et le classement de chaque
+   * catégorie suit. Quatre flux à la fois au plus, pour ne pas saturer une
+   * télé ou une petite connexion. */
+  var audiences = null;
+  function recalculerAudience(apres) {
+    var St = global.Store;
+    if (!St || !St.kvGet) return;
+    St.kvGet('yt-audience-v2').catch(function () { return null; }).then(function (c) {
+      if (c && c.audiences) { audiences = c.audiences; apres(); }
+      if (c && Date.now() - c.t < MOIS) return;
+      var ids = [];
+      categories().forEach(function (cat) { cat.chaines.forEach(function (ch) { if (ids.indexOf(ch.id) < 0) ids.push(ch.id); }); });
+      var res = {}, k = 0;
+      function suivant() {
+        if (k >= ids.length) return Promise.resolve();
+        var id = ids[k++];
+        return apercu(id).then(function (a) { if (a && a.audience) res[id] = a.audience; }).then(suivant);
+      }
+      return Promise.all([suivant(), suivant(), suivant(), suivant()]).then(function () {
+        if (!Object.keys(res).length) return;   // hors ligne : on réessaiera
+        audiences = res;
+        St.kvSet('yt-audience-v2', { t: Date.now(), audiences: res }).catch(function () {});
+        apres();
+      });
+    }).catch(function () {});
   }
 
   function decode(s) {
@@ -222,10 +291,12 @@
   function render() {
     if (!chargeLance) {
       chargeLance = true;
-      chargerDistant(function () {
+      var rafraichir = function () {
         var panneau = document.getElementById('tab-youtube');
         if (panneau && panneau.classList.contains('active')) render();
-      });
+      };
+      chargerDistant(rafraichir);
+      recalculerAudience(rafraichir);
     }
     var chips = document.getElementById('ytCategories');
     var grille = document.getElementById('ytChaines');
@@ -249,7 +320,7 @@
     var cat = categories().filter(function (c) { return c.id === courante; })[0] || categories()[0];
     courante = cat.id;
     grille.innerHTML = '';
-    cat.chaines.forEach(function (ch, i) {
+    trierParAudience(cat.chaines, audiences).forEach(function (ch, i) {
       var carte = document.createElement('button');
       carte.type = 'button';
       carte.className = 'carte yt-carte';
@@ -276,14 +347,15 @@
       grille.appendChild(carte);
 
       apercu(ch.id).then(function (a) {
-        if (!a) return;
+        if (!a || !a.videoId) return;
         vignette.style.backgroundImage = 'url("https://i.ytimg.com/vi/' + a.videoId + '/mqdefault.jpg")';
         desc.textContent = 'Dernière vidéo : ' + a.titre;
       });
     });
   }
 
-  global.YouTubeTab = { render: render, CATEGORIES: CATEGORIES, playlistUrl: playlistUrl, valide: valide };
+  global.YouTubeTab = { render: render, CATEGORIES: CATEGORIES, playlistUrl: playlistUrl, valide: valide,
+    audienceDepuisRss: audienceDepuisRss, trierParAudience: trierParAudience };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) module.exports = globalThis.YouTubeTab;
