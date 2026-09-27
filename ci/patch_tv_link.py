@@ -235,6 +235,16 @@ final class TvLink {
         info.setServiceName(deviceName(ctx));
         info.setServiceType(SERVICE_TYPE);
         info.setPort(port);
+        // Adresse IPv4 aussi dans l'annonce : certains téléphones ne résolvent
+        // que l'adresse IPv6 locale de la TV, souvent injoignable.
+        String ip = localIp();
+        if (!ip.isEmpty()) {
+            try {
+                info.setAttribute("ip", ip);
+            } catch (Exception e) {
+                // attribut refusé : l'adresse résolue servira
+            }
+        }
         registration = new NsdManager.RegistrationListener() {
             @Override
             public void onServiceRegistered(NsdServiceInfo registered) {
@@ -473,10 +483,9 @@ final class TvLink {
 
                     @Override
                     public void onServiceResolved(NsdServiceInfo resolved) {
-                        InetAddress host = resolved.getHost();
-                        if (host != null && !isStopped()) {
-                            callback.onFound(new Device(resolved.getServiceName(),
-                                    host.getHostAddress(), resolved.getPort()));
+                        String hosts = candidates(resolved);
+                        if (!hosts.isEmpty() && !isStopped()) {
+                            callback.onFound(new Device(resolved.getServiceName(), hosts, resolved.getPort()));
                         }
                         done();
                     }
@@ -491,6 +500,61 @@ final class TvLink {
             resolving = false;
             next();
         }
+    }
+
+    // Adresses à essayer, séparées par des virgules : IPv4 annoncée par la TV,
+    // puis IPv4 résolues, puis le reste (IPv6).
+    static String candidates(NsdServiceInfo info) {
+        java.util.LinkedHashSet<String> v4 = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashSet<String> autres = new java.util.LinkedHashSet<>();
+        try {
+            java.util.Map<String, byte[]> attrs = info.getAttributes();
+            byte[] ip = attrs == null ? null : attrs.get("ip");
+            if (ip != null && ip.length > 0) {
+                v4.add(new String(ip, StandardCharsets.UTF_8).trim());
+            }
+        } catch (Exception e) {
+            // pas d'attribut
+        }
+        java.util.List<InetAddress> addrs = new java.util.ArrayList<>();
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                addrs.addAll(info.getHostAddresses());
+            } catch (Exception e) {
+                // repli sur getHost
+            }
+        }
+        InetAddress host = info.getHost();
+        if (host != null) {
+            addrs.add(host);
+        }
+        for (InetAddress a : addrs) {
+            String txt = a.getHostAddress();
+            if (txt == null || txt.isEmpty()) {
+                continue;
+            }
+            int scope = txt.indexOf('%');
+            if (scope > 0) {
+                txt = txt.substring(0, scope);
+            }
+            if (a instanceof Inet4Address) {
+                v4.add(txt);
+            } else {
+                autres.add(txt);
+            }
+        }
+        v4.addAll(autres);
+        StringBuilder sb = new StringBuilder();
+        for (String h : v4) {
+            if (h.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(h);
+        }
+        return sb.toString();
     }
 
     static Search discover(Context ctx, Discovery callback) {
@@ -525,6 +589,28 @@ final class TvLink {
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
+                String essais = "";
+                for (String un : host.split(",")) {
+                    String h = un.trim();
+                    if (h.isEmpty()) {
+                        continue;
+                    }
+                    essais += (essais.isEmpty() ? "" : ", ") + h + ":" + port;
+                    if (tryOne(h, port, media, result)) {
+                        return;
+                    }
+                }
+                result.onDone(false, "TV injoignable (" + essais + ") — Lecteur IPTV est-il ouvert sur la TV, "
+                        + "sur le même wifi ?");
+            }
+        }, "TvLink-send");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    // true si la TV a répondu (succès ou refus, déjà signalé) ; false si
+    // elle est injoignable à cette adresse, pour passer à la suivante.
+    private static boolean tryOne(String host, int port, JSONObject media, Result result) {
                 HttpURLConnection conn = null;
                 try {
                     String h = host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host;
@@ -549,17 +635,14 @@ final class TvLink {
                     } else {
                         result.onDone(false, "réponse inattendue de la TV (" + code + ")");
                     }
+                    return true;
                 } catch (Exception e) {
-                    result.onDone(false, "TV injoignable — l'appli est-elle ouverte dessus, sur le même wifi ?");
+                    return false;
                 } finally {
                     if (conn != null) {
                         conn.disconnect();
                     }
                 }
-            }
-        }, "TvLink-send");
-        t.setDaemon(true);
-        t.start();
     }
 }
 """
@@ -946,9 +1029,16 @@ ACTIVITY_METHODS = """    // ---------- Envoyer sur la Fire TV (voir ci/patch_tv
                             // Une seule connexion par abonnement chez beaucoup
                             // de fournisseurs : on libère le flux pour la TV.
                             finish();
-                        } else {
-                            Toast.makeText(getApplicationContext(), "Envoi impossible : " + message,
-                                    Toast.LENGTH_LONG).show();
+                        } else if (!isFinishing()) {
+                            // Fenêtre plutôt que Toast : le message (adresses
+                            // essayées) est trop long pour une bulle, coupée.
+                            AlertDialog dialog = new AlertDialog.Builder(NativePlayerActivity.this)
+                                    .setTitle("Envoi impossible")
+                                    .setMessage(message)
+                                    .setPositiveButton("OK", null)
+                                    .create();
+                            trackDialog(dialog);
+                            dialog.show();
                         }
                     }
                 });
