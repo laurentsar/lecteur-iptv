@@ -351,7 +351,7 @@
     else if (name === 'radio') renderRadio();
     else if (name === 'youtube') { if (window.YouTubeTab) YouTubeTab.render(); }
     else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
-    else if (name === 'reglages') { renderPlaylists(); if (window.HaSync) HaSync.mount($id('haSyncPanel')); }
+    else if (name === 'reglages') { afficherJournal(); renderPlaylists(); if (window.HaSync) HaSync.mount($id('haSyncPanel')); }
     scheduleStartFocus();
   }
   // Télécommande TV : livré à lui-même, le WebView place le curseur dans le
@@ -705,9 +705,12 @@
     // rend aussi le Guide consultable quand la source EPG est momentanément
     // injoignable.
     Store.epgGet(url).then(function (cached) {
-      if (cached) return cached;
+      if (cached) { Net.note('✔ cache EPG (' + Object.keys(cached).length + ' chaînes)'); return cached; }
+      Net.note('… EPG absent du cache ou périmé : téléchargement');
       return Epg.fetchXmltv(url).then(function (map) {
-        Store.epgSet(url, map);   // écriture en tâche de fond, échec sans conséquence
+        // écriture en tâche de fond ; un échec est noté dans le journal réseau
+        Store.epgSet(url, map).then(function () { Net.note('✔ EPG enregistré en cache'); },
+          function (e) { Net.note('✖ EPG NON enregistré en cache : ' + ((e && e.message) || e)); });
         return map;
       });
     }).then(function (map) {
@@ -2891,6 +2894,14 @@
     if (window.DpadNav) DpadNav.focusSansClavier(champ); else champ.focus({ preventScroll: true });
     champ.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
+
+  function afficherJournal() {
+    var pre = $id('journalReseau');
+    if (!pre || !window.Net || !Net.journal) return;
+    var lignes = Net.journal().map(function (e) { return '+' + Math.round(e.t / 1000) + ' s  ' + e.texte; });
+    pre.textContent = lignes.length ? lignes.join('\n') : 'Rien pour l’instant.';
+  }
+  $id('detJournal').addEventListener('toggle', function () { if (this.open) afficherJournal(); });
 
   function stopEditPlaylist() {
     editingPlaylistId = null;

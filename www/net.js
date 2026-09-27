@@ -239,7 +239,45 @@
     });
   }
 
+  /* Journal réseau de la session (Réglages → Infos → Journal réseau).
+   *
+   * Sert à répondre à « l'appli retélécharge-t-elle tout au démarrage ? » sur
+   * un téléviseur, où aucun outil de développeur n'est accessible : chaque
+   * téléchargement y est noté avec sa taille et sa durée, et les autres
+   * modules y notent leurs lectures de cache (note()). Mots de passe masqués. */
+  var journal = [];
+  var debutSession = Date.now();
+  function masquer(url) {
+    return String(url).replace(/(password=)[^&]*/i, '$1***').replace(/(username=)[^&]*/i, '$1***');
+  }
+  function note(texte) {
+    journal.push({ t: Date.now() - debutSession, texte: texte });
+    if (journal.length > 200) journal.shift();
+  }
+  function taille(v) {
+    if (v == null) return 0;
+    if (typeof v === 'string') return v.length;
+    if (v.byteLength != null) return v.byteLength;
+    try { return JSON.stringify(v).length; } catch (e) { return 0; }
+  }
+  function journalise(fn, genre) {
+    return function (url) {
+      var t0 = Date.now();
+      return fn.apply(null, arguments).then(function (v) {
+        note('⬇ ' + genre + ' ' + Math.round(taille(v) / 1024) + ' Ko en ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s — ' + masquer(url));
+        return v;
+      }, function (err) {
+        note('✖ ' + genre + ' échec après ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s (' + ((err && err.message) || err) + ') — ' + masquer(url));
+        throw err;
+      });
+    };
+  }
+  fetchText = journalise(fetchText, 'texte');
+  fetchJson = journalise(fetchJson, 'json');
+  fetchBytes = journalise(fetchBytes, 'octets');
+
   global.Net = {
+    journal: function () { return journal.slice(); }, note: note,
     fetchText: fetchText, fetchJson: fetchJson, fetchBytes: fetchBytes,
     isNative: function () { return !!nativeHttp(); },
     isMixedContentBlocked: isMixedContentBlocked

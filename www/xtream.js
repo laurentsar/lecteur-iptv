@@ -37,9 +37,14 @@
     return Promise.all([St.kvGet(cle), St.kvGet('xt-epoch:' + compte(cfg))]).catch(function () { return [null, null]; })
       .then(function (r) {
         var c = r[0], epoch = r[1] || 0, now = Date.now();
-        if (c && c.t > epoch && now - c.t < TTL_LISTES && c.data) return c.data;
+        if (c && c.t > epoch && now - c.t < TTL_LISTES && c.data) {
+          if (global.Net && global.Net.note) global.Net.note('✔ cache Xtream ' + action + (extra ? ' ' + extra : '') + ' (âge ' + Math.round((now - c.t) / 60000) + ' min)');
+          return c.data;
+        }
         return api(cfg, action, extra).then(function (data) {
-          if (data) St.kvSet(cle, { t: now, data: data }).catch(function () {});
+          if (data) St.kvSet(cle, { t: now, data: data }).catch(function (e) {
+            if (global.Net && global.Net.note) global.Net.note('✖ cache Xtream non enregistré ' + action + ' : ' + ((e && e.message) || e));
+          });
           return data;
         });
       });

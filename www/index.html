@@ -323,6 +323,14 @@
             <p>C'est un <strong>lecteur</strong> : il affiche et joue les flux d'une playlist M3U ou d'un compte Xtream Codes que <em>toi</em> tu fournis. L'app ne fournit, ne vend ni n'héberge aucune chaîne, film ou série.</p>
           </div>
 
+          <details class="saison" id="detJournal">
+            <summary class="saison-titre">📡 Journal réseau</summary>
+            <div class="card">
+              <p class="hint">Ce que l'appli a téléchargé depuis son ouverture, et ce qu'elle a repris de sa mémoire (cache).</p>
+              <pre id="journalReseau" style="white-space:pre-wrap; font-size:13px; margin:0"></pre>
+            </div>
+          </details>
+
           <details class="saison">
             <summary class="saison-titre">🔒 Code PIN (bouquet adulte)</summary>
             <div class="accordion-body">
@@ -474,7 +482,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '2.72';
+    window.APP_VERSION = '2.73';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
