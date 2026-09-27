@@ -84,5 +84,35 @@ verifie('un <summary> est navigable au D-pad',
         DpadNav.FOCUSABLE_SELECTOR.split(',').map(function (s) { return s.trim(); }).indexOf('summary') !== -1,
         DpadNav.FOCUSABLE_SELECTOR);
 
+
+console.log('\n— Candidat qui refuse le focus : on passe au suivant —');
+{
+  const depuis = rect(80, 450, 1830, 530);          // en-tête « Playlists »
+  const fantome = rect(80, 540, 1830, 560);         // contenu d'une section repliée
+  const vrai = rect(1530, 660, 1575, 710);          // bouton ✏️
+  const ordre = D.rankCandidates(depuis, [vrai, fantome], 'down');
+  verifie('rankCandidates classe tous les voisins, meilleur d\'abord',
+          ordre.length === 2 && ordre[0] === 1 && ordre[1] === 0, JSON.stringify(ordre));
+  verifie('rien dans la direction -> liste vide', D.rankCandidates(depuis, [vrai], 'up').length === 0);
+}
+
+console.log('\n— Contenu d\'un <details> replié : jamais candidat —');
+{
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM('<details id="d"><summary id="s">Infos</summary><input id="i"><details open><summary id="s2">PIN</summary></details></details>');
+  const doc = dom.window.document;
+  // jsdom ne fait pas de mise en page : on simule ce que la WebView renvoie
+  // (un offsetParent et une taille, même pour le contenu replié).
+  [doc.getElementById('s'), doc.getElementById('i'), doc.getElementById('s2')].forEach(function (n) {
+    Object.defineProperty(n, 'offsetParent', { get: function () { return doc.body; } });
+    n.getBoundingClientRect = function () { return { left: 0, top: 0, right: 100, bottom: 40, width: 100, height: 40 }; };
+  });
+  verifie('le <summary> d\'une section repliée reste navigable', D.estNavigable(doc.getElementById('s')));
+  verifie('un champ dans une section repliée est ignoré', !D.estNavigable(doc.getElementById('i')));
+  verifie('un <summary> imbriqué dans une section repliée est ignoré', !D.estNavigable(doc.getElementById('s2')));
+  doc.getElementById('d').open = true;
+  verifie('section ouverte -> son champ redevient navigable', D.estNavigable(doc.getElementById('i')));
+}
+
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);

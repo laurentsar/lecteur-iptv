@@ -76,14 +76,22 @@
    * ex. défilement de page).
    */
   function pickCandidate(fromRect, rects, direction) {
-    if (!fromRect || !rects || !rects.length) return -1;
-    var best = -1, bestScore = Infinity;
+    var ordre = rankCandidates(fromRect, rects, direction);
+    return ordre.length ? ordre[0] : -1;
+  }
+
+  /* Tous les candidats de la direction, du meilleur au moins bon (index dans
+   * `rects`). L'appelant essaie le premier, et passe au suivant si le focus
+   * n'a pas pris — voir onKeydown. À score égal, l'ordre du DOM. */
+  function rankCandidates(fromRect, rects, direction) {
+    if (!fromRect || !rects || !rects.length) return [];
+    var notes = [];
     for (var i = 0; i < rects.length; i++) {
       var s = score(fromRect, rects[i], direction);
-      if (s === null) continue;
-      if (s < bestScore) { bestScore = s; best = i; }
+      if (s !== null) notes.push({ i: i, s: s });
     }
-    return best;
+    notes.sort(function (a, b) { return a.s - b.s || a.i - b.i; });
+    return notes.map(function (n) { return n.i; });
   }
 
   // Sélecteur des éléments navigables : tout ce que app.js rend déjà
@@ -103,10 +111,30 @@
     return !!el.offsetParent || el === document.body;
   }
 
+  /* Dans un <details> REPLIÉ, hors de son propre <summary>.
+   *
+   * La WebView récente ne masque plus le contenu d'un <details> fermé par
+   * display:none mais par content-visibility : l'élément garde un
+   * offsetParent et une position, passe donc pour « visible »… et refuse le
+   * focus. La flèche le choisissait comme meilleur voisin, focus() échouait
+   * en silence, et le focus restait figé sur l'en-tête — d'où « impossible
+   * de modifier les playlists » sur les télés (flèche bas morte sous
+   * « Playlists », constaté sur la TCL le 2026-09-27). */
+  function dansDetailsFerme(el) {
+    for (var n = el; n && n.parentElement; n = n.parentElement) {
+      var p = n.parentElement;
+      if (p.tagName === 'DETAILS' && !p.open && !(n.tagName === 'SUMMARY' && p.querySelector('summary') === n)) return true;
+    }
+    return false;
+  }
+
   function estNavigable(el) {
     if (el.disabled) return false;
     if (el.tabIndex < 0) return false;
-    return estVisible(el);
+    if (!estVisible(el)) return false;
+    if (dansDetailsFerme(el)) return false;
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
   }
 
   function candidats(exclu) {
@@ -177,12 +205,21 @@
     var fromRect = ae.getBoundingClientRect();
     var liste = candidats(ae);
     var rects = liste.map(function (el) { return el.getBoundingClientRect(); });
-    var idx = pickCandidate(fromRect, rects, direction);
-    if (idx < 0) return; // rien dans cette direction : laisser le comportement par défaut
+    var ordre = rankCandidates(fromRect, rects, direction);
+    if (!ordre.length) return; // rien dans cette direction : laisser le comportement par défaut
 
     e.preventDefault();
-    liste[idx].focus();
-    if (liste[idx].scrollIntoView) liste[idx].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // Un candidat peut refuser le focus sans erreur (élément que le moteur
+    // juge inerte) : on vérifie qu'il a VRAIMENT pris, sinon on passe au
+    // suivant, plutôt que de laisser la télécommande figée.
+    for (var k = 0; k < ordre.length; k++) {
+      var cible = liste[ordre[k]];
+      cible.focus();
+      if (document.activeElement === cible) {
+        if (cible.scrollIntoView) cible.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        return;
+      }
+    }
   }
 
   /* Valider avec la télécommande.
@@ -273,7 +310,7 @@
     document.addEventListener('keydown', surEntree);
   }
 
-  global.DpadNav = { pickCandidate: pickCandidate, FOCUSABLE_SELECTOR: FOCUSABLE_SELECTOR };
+  global.DpadNav = { pickCandidate: pickCandidate, rankCandidates: rankCandidates, estNavigable: estNavigable, FOCUSABLE_SELECTOR: FOCUSABLE_SELECTOR };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) module.exports = globalThis.DpadNav;
