@@ -178,6 +178,45 @@
     return false;                          // checkbox, radio, file, button…
   }
 
+  /* Champ texte atteint à la flèche : PAS de clavier virtuel tout de suite.
+   *
+   * Sur la TCL, poser le focus dans un champ texte ouvre le clavier à
+   * l'écran, qui capte ensuite toutes les flèches : pour traverser le
+   * formulaire d'une playlist (nom, serveur, utilisateur, mot de passe), il
+   * fallait appuyer sur Retour à CHAQUE champ. Comme dans les applis TV, le
+   * champ est seulement sélectionné ; le bouton OK ouvre le clavier (voir
+   * surEntree). inputmode="none" retient le clavier, l'attribut d'origine est
+   * rendu à la sortie du champ ou au premier toucher du doigt. */
+  function estChampTexte(el) {
+    if (!el) return false;
+    if (el.tagName === 'TEXTAREA') return true;
+    return el.tagName === 'INPUT' && TEXTE.test((el.type || 'text').toLowerCase());
+  }
+
+  var SANS_ATTR = '\u0000';   // « l'attribut inputmode n'existait pas »
+
+  function rendreClavier(el) {
+    if (!el.hasAttribute('data-dpad-im')) return;
+    var avant = el.getAttribute('data-dpad-im');
+    el.removeAttribute('data-dpad-im');
+    if (avant === SANS_ATTR) el.removeAttribute('inputmode'); else el.setAttribute('inputmode', avant);
+  }
+
+  function focusSansClavier(el) {
+    if (estChampTexte(el) && !el.hasAttribute('data-dpad-im')) {
+      el.setAttribute('data-dpad-im', el.hasAttribute('inputmode') ? el.getAttribute('inputmode') : SANS_ATTR);
+      el.setAttribute('inputmode', 'none');
+      var fin = function () {
+        rendreClavier(el);
+        el.removeEventListener('blur', fin);
+        el.removeEventListener('pointerdown', fin);
+      };
+      el.addEventListener('blur', fin);
+      el.addEventListener('pointerdown', fin);
+    }
+    el.focus({ preventScroll: true });
+  }
+
   function onKeydown(e) {
     var direction = KEY_TO_DIR[e.key];
     if (!direction) return;
@@ -197,7 +236,7 @@
       var premiers = candidats(null);
       if (!premiers.length) return;
       e.preventDefault();
-      premiers[0].focus();
+      focusSansClavier(premiers[0]);
       if (premiers[0].scrollIntoView) premiers[0].scrollIntoView({ block: 'nearest', inline: 'nearest' });
       return;
     }
@@ -214,7 +253,7 @@
     // suivant, plutôt que de laisser la télécommande figée.
     for (var k = 0; k < ordre.length; k++) {
       var cible = liste[ordre[k]];
-      cible.focus();
+      focusSansClavier(cible);
       if (document.activeElement === cible) {
         if (cible.scrollIntoView) cible.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         return;
@@ -234,6 +273,14 @@
     var el = document.activeElement;
     if (!el || e.defaultPrevented) return;
 
+    // OK sur un champ sélectionné à la flèche : ouvrir le clavier maintenant.
+    if (e.key !== ' ' && estChampTexte(el) && el.hasAttribute('data-dpad-im')) {
+      e.preventDefault();
+      rendreClavier(el);
+      el.blur();
+      el.focus({ preventScroll: true });
+      return;
+    }
     if (el.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) {
       e.preventDefault();
       el.checked = el.type === 'radio' ? true : !el.checked;
@@ -310,7 +357,7 @@
     document.addEventListener('keydown', surEntree);
   }
 
-  global.DpadNav = { pickCandidate: pickCandidate, rankCandidates: rankCandidates, estNavigable: estNavigable, FOCUSABLE_SELECTOR: FOCUSABLE_SELECTOR };
+  global.DpadNav = { pickCandidate: pickCandidate, rankCandidates: rankCandidates, estNavigable: estNavigable, focusSansClavier: focusSansClavier, FOCUSABLE_SELECTOR: FOCUSABLE_SELECTOR };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) module.exports = globalThis.DpadNav;

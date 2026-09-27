@@ -114,5 +114,22 @@ console.log('\n— Contenu d\'un <details> replié : jamais candidat —');
   verifie('section ouverte -> son champ redevient navigable', D.estNavigable(doc.getElementById('i')));
 }
 
+
+console.log('\n— Champ texte atteint à la flèche : clavier retenu, OK l\'ouvre —');
+{
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM('<input id="a" type="text"><input id="b" type="text" inputmode="url">');
+  const w = dom.window, doc = w.document;
+  const a = doc.getElementById('a'), b = doc.getElementById('b');
+  D.focusSansClavier(a);
+  verifie('focus posé', doc.activeElement === a);
+  verifie('clavier retenu (inputmode=none)', a.getAttribute('inputmode') === 'none');
+  a.blur();
+  verifie('à la sortie : attribut d\'origine absent rendu', !a.hasAttribute('inputmode') && !a.hasAttribute('data-dpad-im'));
+  D.focusSansClavier(b);
+  b.dispatchEvent(new w.Event('pointerdown'));
+  verifie('au toucher : inputmode d\'origine rendu', b.getAttribute('inputmode') === 'url');
+}
+
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);

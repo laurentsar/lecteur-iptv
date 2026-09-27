@@ -2880,7 +2880,9 @@
     if (!$id('tab-reglages').classList.contains('active')) goTab('reglages');
     focusToken++;   // annule un placement automatique encore en attente
     var champ = $id('pl_nom');
-    champ.focus({ preventScroll: true });
+    // Sans clavier virtuel : il recouvrirait le formulaire et capterait les
+    // flèches de la télécommande. OK (ou un toucher) l'ouvre.
+    if (window.DpadNav) DpadNav.focusSansClavier(champ); else champ.focus({ preventScroll: true });
     champ.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
