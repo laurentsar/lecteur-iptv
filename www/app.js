@@ -3117,7 +3117,7 @@
     } else {
       Net.fetchText(res.draft.m3uUrl)
         .then(function (text) { var parsed = M3U.parse(text); out.textContent = '✅ Playlist lue — ' + parsed.items.length + ' entrée(s) trouvée(s).'; })
-        .catch(function (err) { out.textContent = '❌ Impossible de charger la playlist : ' + err.message + ' (le serveur bloque peut-être les requêtes navigateur — CORS).'; });
+        .catch(function (err) { out.textContent = '❌ Impossible de charger la playlist : ' + err.message; });
     }
   });
 

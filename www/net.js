@@ -144,7 +144,26 @@
       if (relais) return withTimeout(fetch(relais).then(transform), timeout);
       return Promise.reject(mixedContentError());
     }
-    return withTimeout(fetch(url).then(transform), timeout);
+    // Serveur en https:// mais sans en-têtes CORS (cas de la plupart des
+    // fournisseurs IPTV) : fetch() rejette avec un TypeError « Failed to
+    // fetch » sans autre détail, affiché tel quel à l'utilisateur. On retente
+    // alors par le relais Home Assistant s'il est configuré (il n'était
+    // jusqu'ici utilisé que pour les serveurs http://), sinon on remplace le
+    // message par une explication exploitable.
+    var essai = fetch(url).catch(function (err) {
+      if (!(err instanceof TypeError)) throw err;
+      var relais = (global.HaSync && global.HaSync.proxyActif && global.HaSync.proxyActif())
+        ? global.HaSync.proxyUrl(url) : null;
+      if (relais) return fetch(relais);
+      throw corsError();
+    });
+    return withTimeout(essai.then(transform), timeout);
+  }
+
+  function corsError() {
+    return new Error('le serveur n’accepte pas les requêtes venant d’une page web (CORS) ou est ' +
+      'injoignable. Utilise l’APK Android (pas soumise à cette limite), ou coche « relais vidéo » ' +
+      'dans Réglages → Home Assistant pour passer par ton Home Assistant.');
   }
 
   function withHttpsDowngrade(url, attempt) {
