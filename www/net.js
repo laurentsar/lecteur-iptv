@@ -141,7 +141,7 @@
       // plutôt qu'un fetch() voué à l'échec.
       var relais = (global.HaSync && global.HaSync.proxyActif && global.HaSync.proxyActif())
         ? global.HaSync.proxyUrl(url) : null;
-      if (relais) return withTimeout(fetch(relais).then(transform), timeout);
+      if (relais) return withTimeout(fetchRelais(relais).then(transform), timeout);
       return Promise.reject(mixedContentError());
     }
     // Serveur en https:// mais sans en-têtes CORS (cas de la plupart des
@@ -154,10 +154,30 @@
       if (!(err instanceof TypeError)) throw err;
       var relais = (global.HaSync && global.HaSync.proxyActif && global.HaSync.proxyActif())
         ? global.HaSync.proxyUrl(url) : null;
-      if (relais) return fetch(relais);
+      if (relais) return fetchRelais(relais);
       throw corsError();
     });
     return withTimeout(essai.then(transform), timeout);
+  }
+
+  // Le relais lui-même peut échouer (composant iptv_proxy non installé :
+  // HA répond 404 sans en-têtes CORS ; HA injoignable) — sans ce message,
+  // l'échec remontait à nouveau en « Failed to fetch » brut, indiscernable
+  // du blocage que le relais devait justement contourner.
+  function fetchRelais(relais) {
+    return fetch(relais).then(function (r) {
+      if (r.status === 404) throw relaisError('le composant iptv_proxy n’est pas installé sur Home Assistant (voir homeassistant/README.md)');
+      if (r.status === 401 || r.status === 403) throw relaisError('jeton Home Assistant refusé');
+      return r;
+    }, function (err) {
+      if (!(err instanceof TypeError)) throw err;
+      throw relaisError('Home Assistant injoignable, ou composant iptv_proxy absent (voir homeassistant/README.md)');
+    });
+  }
+
+  function relaisError(detail) {
+    return new Error('le relais Home Assistant (« relais vidéo ») a échoué : ' + detail +
+      '. Décoche « relais vidéo » ou utilise l’APK Android.');
   }
 
   function corsError() {
