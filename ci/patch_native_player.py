@@ -659,8 +659,16 @@ public class NativePlayerActivity extends AppCompatActivity {
         // stabilité sur un débit faible/instable plutôt qu'au démarrage
         // rapide. La sélection adaptative de piste (ABR) reste celle
         // d'ExoPlayer par défaut pour les sources HLS/DASH multi-débits.
+        //
+        // Direct : un flux en direct arrive au rythme de la lecture, la
+        // réserve ne grossit donc jamais après le démarrage — toute la marge
+        // contre les gels se constitue AVANT de lancer l'image. 8 s au départ
+        // (au lieu de 2,5), 15 s après un gel : quelques secondes de plus au
+        // zapping, beaucoup moins d'images figées sur un serveur IPTV qui
+        // livre par à-coups. Le seuil en durée prime sur la taille mémoire.
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(30000, 90000, 2500, 15000)
+                .setBufferDurationsMs(30000, isLive ? 120000 : 90000, isLive ? 8000 : 2500, 15000)
+                .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
         return new ExoPlayer.Builder(this, renderersFactory)
                 .setLoadControl(loadControl)
@@ -750,8 +758,17 @@ public class NativePlayerActivity extends AppCompatActivity {
         private final androidx.media3.exoplayer.hls.HlsMediaSource.Factory hls;
 
         FabriqueSources(android.content.Context context) {
+            // Délais réseau élargis : un serveur IPTV qui marque une pause de
+            // quelques secondes ne doit pas faire échouer la lecture (puis
+            // reconnecter, ce qui fige l'image bien plus longtemps). Redirection
+            // http→https suivie (adresses de secours des fournisseurs).
+            androidx.media3.datasource.DefaultHttpDataSource.Factory http =
+                    new androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                            .setConnectTimeoutMs(12000)
+                            .setReadTimeoutMs(20000)
+                            .setAllowCrossProtocolRedirects(true);
             androidx.media3.datasource.DataSource.Factory donnees =
-                    new androidx.media3.datasource.DefaultDataSource.Factory(context);
+                    new androidx.media3.datasource.DefaultDataSource.Factory(context, http);
             androidx.media3.extractor.DefaultExtractorsFactory extracteurs =
                     new androidx.media3.extractor.DefaultExtractorsFactory().setTsExtractorFlags(
                             androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS);
@@ -814,13 +831,24 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         boolean audioPresent = false;
         boolean audioLisible = false;
+        boolean videoPresente = false;
         for (Tracks.Group group : tracks.getGroups()) {
             if (group.getType() == C.TRACK_TYPE_AUDIO && group.length > 0) {
                 audioPresent = true;
                 if (group.isSupported()) {
                     audioLisible = true;
                 }
+            } else if (group.getType() == C.TRACK_TYPE_VIDEO && group.length > 0) {
+                videoPresente = true;
             }
+        }
+        // Chaîne en direct avec image mais sans aucune piste son (constaté :
+        // Canal+ FHD chez un fournisseur, alors que la HD a du son) : autre
+        // source, une fois.
+        if (isLive && videoPresente && !audioPresent && !sonBasculeTente) {
+            sonBasculeTente = true;
+            basculerSource("Pas de son sur cette source");
+            return;
         }
         if (!audioPresent || audioLisible) {
             return;
