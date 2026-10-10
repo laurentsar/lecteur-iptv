@@ -1461,16 +1461,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         enterPictureInPictureMode(params);
     }
 
-    @Override
-    public void onUserLeaveHint() {
-        super.onUserLeaveHint();
-        // Quitter l'appli (bouton Accueil) pendant une chaîne en direct
-        // réduit automatiquement le lecteur en PiP au lieu d'interrompre la
-        // diffusion — comportement standard attendu pour du direct.
-        if (isLive) {
-            enterPip();
-        }
-    }
+    // Plus de passage automatique en PiP en quittant l'appli : la chaîne
+    // continuait à jouer dans une mini-fenêtre alors que l'utilisateur
+    // voulait passer à autre chose. Quitter l'appli met désormais en pause
+    // (onStop) ; la mini-fenêtre reste au choix, par son bouton.
 
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
@@ -1649,10 +1643,17 @@ public class NativePlayerActivity extends AppCompatActivity {
         // appareil sans PiP disponible ; le direct AVEC PiP, lui, doit
         // continuer à jouer, visiblement, dans la mini-fenêtre — voir
         // onUserLeaveHint/isInPip).
+        Player p = playerView == null ? null : playerView.getPlayer();
         if (isInPip()) {
+            // Arrêté alors qu'il est en mini-fenêtre : c'est qu'on vient de
+            // la fermer (croix ou glissé vers le bas). Sans ceci le son
+            // continuait sans aucune fenêtre pour l'arrêter.
+            if (p != null && p == localPlayer) {
+                p.setPlayWhenReady(false);
+            }
+            finish();
             return;
         }
-        Player p = playerView == null ? null : playerView.getPlayer();
         if (p != null && p == localPlayer && p.getPlayWhenReady() && !userPaused) {
             p.setPlayWhenReady(false);
             pausedByBackground = true;

@@ -592,9 +592,29 @@
     return (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.RadioPlayer) || null;
   }
 
+  // TV et films, eux, s'arrêtent quand on quitte l'appli : la WebView
+  // n'est pas toujours suspendue (le son continuait selon les appareils), on
+  // met donc en pause explicitement, et on reprend au retour.
+  var pauseParArrierePlan = false;
   function setupRadioBackground() {
     if (!(isNativeApp() && global.Capacitor.Plugins && global.Capacitor.Plugins.App)) return;
     global.Capacitor.Plugins.App.addListener('appStateChange', function (state) {
+      // Sauf en mini-fenêtre (PiP demandé par son bouton) : là, continuer
+      // à jouer hors de l'appli est justement le but.
+      var enPip = !!video && (document.pictureInPictureElement === video || video.webkitPresentationMode === 'picture-in-picture');
+      if (overlay && overlay.classList.contains('show') && !currentIsRadio && video && !isCasting() && !enPip) {
+        if (!state.isActive) {
+          // La pause passe pour volontaire (userPaused) : aucune
+          // reconnexion automatique tant que l'appli est en arrière-plan.
+          if (!video.paused) { pauseParArrierePlan = true; video.pause(); }
+        } else if (pauseParArrierePlan) {
+          pauseParArrierePlan = false;
+          // Un direct reprend au présent, pas là où on l'avait laissé.
+          if (currentIsLive) startPlayback(originalUrl, originalTitle);
+          else video.play().catch(function () {});
+        }
+        return;
+      }
       var rp = radioPlayerPlugin();
       if (!rp || !overlay || !overlay.classList.contains('show') || !currentIsRadio) return;
       if (!state.isActive) {
@@ -2060,6 +2080,7 @@
     // pas. (Volontairement ici et non dans startPlayback, qui est justement
     // rappelée PAR les tentatives de reprise.)
     resetRecovery();
+    pauseParArrierePlan = false;
     ensureDom();
     overlay.classList.add('show');
     showPlayerUi();

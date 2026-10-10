@@ -185,8 +185,10 @@ pas de contrôles lecture/pause utiles depuis une mini-fenêtre pour de la VOD).
   WebView (`requestPictureInPicture`), ou mode présentation de Safari sur
   iPhone/Mac.
 - **APK Android**, lecteur natif de secours (HEVC/audio non décodables par
-  le navigateur) : PiP système Android (Media3 ExoPlayer), avec réduction
-  automatique en appuyant sur le bouton Accueil pendant une lecture en direct.
+  le navigateur) : PiP système Android (Media3 ExoPlayer), par le bouton
+  uniquement. Quitter l'appli (Accueil, autre appli) **met la lecture en
+  pause** — direct compris — et elle reprend au retour ; fermer la
+  mini-fenêtre arrête la lecture.
 
 ## Langue audio et sous-titres
 
