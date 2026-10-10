@@ -635,7 +635,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         // rapide. La sélection adaptative de piste (ABR) reste celle
         // d'ExoPlayer par défaut pour les sources HLS/DASH multi-débits.
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(30000, 90000, 2500, 10000)
+                .setBufferDurationsMs(30000, 90000, 2500, 15000)
                 .build();
         return new ExoPlayer.Builder(this, renderersFactory).setLoadControl(loadControl).build();
     }
@@ -1158,7 +1158,23 @@ public class NativePlayerActivity extends AppCompatActivity {
     // utilise déjà comme repli.
     private MediaItem buildMediaItem(boolean forCast) {
         if (!forCast) {
-            return MediaItem.fromUri(mediaUrl);
+            if (!isLive) {
+                return MediaItem.fromUri(mediaUrl);
+            }
+            // Direct HLS : par défaut ExoPlayer se cale à quelques secondes
+            // du bord du direct, sans marge — au moindre retard du réseau ou
+            // du serveur IPTV l'image se fige le temps de recharger. On se
+            // tient plus loin du bord (20 s visés, 10 s au plus près) : un
+            // léger différé contre beaucoup moins de gels. Sans effet sur un
+            // flux .ts brut, qui n'a pas de fenêtre de direct.
+            return new MediaItem.Builder()
+                    .setUri(mediaUrl)
+                    .setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
+                            .setTargetOffsetMs(20000)
+                            .setMinOffsetMs(10000)
+                            .setMaxPlaybackSpeed(1.0f)
+                            .build())
+                    .build();
         }
         String url = castUrl(mediaUrl);
         String mime = castMimeType(url);
