@@ -442,6 +442,14 @@ public class NativePlayerActivity extends AppCompatActivity {
     // Sources déjà tombées pour la chaîne en cours : on n'y revient pas en
     // boucle. Vidé à chaque changement de chaîne (playUrl).
     private final Set<String> sourcesEchouees = new HashSet<>();
+    // Gels récents (passages en chargement après que l'image a déjà joué),
+    // horodatés : une source qui se fige sans arrêt mais repart à chaque fois
+    // ne tombe jamais assez longtemps pour épuiser les reconnexions — sans ce
+    // compteur, la bascule vers une version inférieure n'arrivait jamais.
+    private final java.util.ArrayDeque<Long> gelsRecents = new java.util.ArrayDeque<>();
+    private static final int GELS_AVANT_BASCULE = 4;
+    private static final long FENETRE_GELS_MS = 120000;
+    private boolean sonBasculeTente = false;
     private final Handler reconnectHandler = new Handler(Looper.getMainLooper());
 
     private final Runnable reconnectRunnable = new Runnable() {
@@ -542,6 +550,23 @@ public class NativePlayerActivity extends AppCompatActivity {
             return true;
         }
         return false;
+    }
+
+    // true si les gels répétés ont fait basculer sur une autre source.
+    private boolean compterGel() {
+        if (versions == null || versions.size() < 2 || playerView.getPlayer() != localPlayer) {
+            return false;
+        }
+        long maintenant = android.os.SystemClock.elapsedRealtime();
+        gelsRecents.add(maintenant);
+        while (!gelsRecents.isEmpty() && maintenant - gelsRecents.peekFirst() > FENETRE_GELS_MS) {
+            gelsRecents.poll();
+        }
+        if (gelsRecents.size() < GELS_AVANT_BASCULE) {
+            return false;
+        }
+        gelsRecents.clear();
+        return basculerSource("L'image se fige trop souvent");
     }
 
     private void reconnectNow() {
@@ -657,7 +682,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     // Une piste audio existe mais aucune n'est lisible ici : bascule une fois.
     private void verifierSon(Tracks tracks) {
-        if (autoAudioTente || audioCompat() || playerView.getPlayer() != localPlayer) {
+        if (playerView.getPlayer() != localPlayer) {
             return;
         }
         boolean audioPresent = false;
@@ -670,9 +695,19 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
             }
         }
-        if (audioPresent && !audioLisible) {
+        if (!audioPresent || audioLisible) {
+            return;
+        }
+        if (!autoAudioTente && !audioCompat()) {
             autoAudioTente = true;
             setAudioCompat(true, true);
+            return;
+        }
+        // Même décodé par l'appli, le son de cette source reste illisible :
+        // une autre version de la chaîne a peut-être un son ordinaire.
+        if (!sonBasculeTente) {
+            sonBasculeTente = true;
+            basculerSource("Pas de son lisible sur cette source");
         }
     }
 
@@ -774,6 +809,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 everReady = true;
                 statusView.setVisibility(View.GONE);
             } else if (state == Player.STATE_BUFFERING) {
+                if (everReady && !userPaused && compterGel()) {
+                    return;
+                }
                 reconnectHandler.removeCallbacks(stallRunnable);
                 if (!userPaused) {
                     reconnectHandler.postDelayed(stallRunnable, STALL_TIMEOUT_MS);
@@ -1344,6 +1382,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         reconnectAttempts = 0;
         userPaused = false;
         everReady = false;
+        gelsRecents.clear();
+        sonBasculeTente = false;
         dernierProgramme = "";
         startPositionMs = 0;
         qualiteForcee = false;
