@@ -590,7 +590,138 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     };
 
+    // ---------- Son : mode normal / mode compatible ----------
+    // Normal (ON, pas PREFER) : priorité au décodeur de la plateforme pour
+    // l'audio AC3/E-AC3/DTS/TrueHD. Sur un boîtier/TV relié en HDMI ARC/eARC
+    // à un ampli ou une barre de son compatible, la plateforme relaie le flux
+    // original en passthrough (bitstream) — la meilleure qualité possible.
+    //
+    // Compatible : certaines TV annoncent savoir recevoir ce bitstream sans
+    // savoir le jouer sur leurs haut-parleurs, ou n'ont aucun décodeur pour la
+    // piste : image sans son (constaté sur Canal+, son Dolby). Ici le son est
+    // décodé par l'appli (extension FFmpeg, native/decoder-ffmpeg, en
+    // priorité) et envoyé en PCM simple, sans passthrough : compris partout.
+    // Activé tout seul quand le défaut se voit (piste audio illisible, erreur
+    // audio), à la main sinon (menu ⚙️ « Pas de son ? »). Choix mémorisé.
+    private boolean autoAudioTente = false;
+
+    private boolean audioCompat() {
+        return getSharedPreferences("player", MODE_PRIVATE).getBoolean("audioCompat", false);
+    }
+
+    private ExoPlayer buildLocalPlayer() {
+        boolean compat = audioCompat();
+        DefaultRenderersFactory renderersFactory = compat
+                ? new DefaultRenderersFactory(this) {
+                    @Override
+                    protected androidx.media3.exoplayer.audio.AudioSink buildAudioSink(
+                            android.content.Context context, boolean enableFloatOutput,
+                            boolean enableAudioTrackPlaybackParams) {
+                        return new androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                                .setAudioCapabilities(
+                                        androidx.media3.exoplayer.audio.AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+                                .setEnableFloatOutput(enableFloatOutput)
+                                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                                .build();
+                    }
+                }
+                : new DefaultRenderersFactory(this);
+        renderersFactory.setExtensionRendererMode(compat
+                ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
+
+        // Tampon plus généreux qu'en réglages par défaut : priorité à la
+        // stabilité sur un débit faible/instable plutôt qu'au démarrage
+        // rapide. La sélection adaptative de piste (ABR) reste celle
+        // d'ExoPlayer par défaut pour les sources HLS/DASH multi-débits.
+        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(30000, 90000, 2500, 10000)
+                .build();
+        return new ExoPlayer.Builder(this, renderersFactory).setLoadControl(loadControl).build();
+    }
+
+    // Reconstruit le lecteur local avec le nouveau mode, sur la même chaîne.
+    private void setAudioCompat(boolean on, boolean auto) {
+        getSharedPreferences("player", MODE_PRIVATE).edit().putBoolean("audioCompat", on).apply();
+        ExoPlayer ancien = localPlayer;
+        boolean actif = playerView.getPlayer() == ancien;
+        localPlayer = buildLocalPlayer();
+        if (actif) {
+            switchPlayer(localPlayer);
+        }
+        ancien.release();
+        Toast.makeText(this, on
+                ? (auto ? "Pas de son détecté : décodage du son par l'appli activé" : "Mode audio compatible activé")
+                : "Mode audio normal", Toast.LENGTH_LONG).show();
+    }
+
+    // Une piste audio existe mais aucune n'est lisible ici : bascule une fois.
+    private void verifierSon(Tracks tracks) {
+        if (autoAudioTente || audioCompat() || playerView.getPlayer() != localPlayer) {
+            return;
+        }
+        boolean audioPresent = false;
+        boolean audioLisible = false;
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() == C.TRACK_TYPE_AUDIO && group.length > 0) {
+                audioPresent = true;
+                if (group.isSupported()) {
+                    audioLisible = true;
+                }
+            }
+        }
+        if (audioPresent && !audioLisible) {
+            autoAudioTente = true;
+            setAudioCompat(true, true);
+        }
+    }
+
+    // Le serveur IPTV a répondu par un code d'erreur HTTP : on le traduit,
+    // au lieu du seul « ERROR_CODE_IO_BAD_HTTP_STATUS » qui ne dit pas quoi
+    // faire.
+    private static String causeLisible(PlaybackException error) {
+        Throwable t = error;
+        while (t != null && !(t instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)) {
+            t = t.getCause();
+        }
+        if (t == null) {
+            return "Lecture interrompue (" + error.getErrorCodeName() + ")";
+        }
+        int code = ((androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) t).responseCode;
+        String sens;
+        if (code == 401) {
+            sens = "identifiants refusés — abonnement expiré ou mot de passe changé ?";
+        } else if (code == 403 || code == 429 || code == 456 || code == 458 || code == 509) {
+            sens = "accès refusé — trop d'appareils connectés en même temps sur l'abonnement "
+                    + "(ferme la lecture sur le téléphone) ou abonnement expiré";
+        } else if (code == 404 || code == 410) {
+            sens = "chaîne introuvable sur le serveur — elle a peut-être changé d'adresse "
+                    + "(recharge la playlist dans Réglages)";
+        } else if (code >= 500) {
+            sens = "serveur du fournisseur en panne ou surchargé";
+        } else {
+            sens = "réponse inattendue du serveur";
+        }
+        return "Le serveur IPTV refuse la chaîne (erreur " + code + " : " + sens + ")";
+    }
+
+    private static boolean erreurAudio(PlaybackException error) {
+        int c = error.errorCode;
+        return c == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
+                || c == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
+                || c == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
+                || c == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
+                || c == PlaybackException.ERROR_CODE_DECODING_FAILED
+                || c == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED
+                || c == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES;
+    }
+
     private final Player.Listener playerListener = new Player.Listener() {
+        @Override
+        public void onTracksChanged(Tracks tracks) {
+            verifierSon(tracks);
+        }
+
         @Override
         public void onPlayerError(PlaybackException error) {
             timeoutHandler.removeCallbacks(timeoutRunnable);
@@ -602,7 +733,15 @@ public class NativePlayerActivity extends AppCompatActivity {
                 reconnectNow();
                 return;
             }
-            scheduleReconnect("Lecture interrompue (" + error.getErrorCodeName() + ")");
+            // Décodeur ou sortie audio en échec : on retente une fois avec le
+            // son décodé par l'appli plutôt que de reconnecter à l'identique.
+            if (erreurAudio(error) && !autoAudioTente && !audioCompat()
+                    && playerView.getPlayer() == localPlayer) {
+                autoAudioTente = true;
+                setAudioCompat(true, true);
+                return;
+            }
+            scheduleReconnect(causeLisible(error));
         }
 
         @Override
@@ -778,25 +917,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         playerView = findViewById(R.id.playerView);
         applyTvOverscanSafeMargin();
 
-        // ON (pas PREFER) : priorité au décodeur de la plateforme pour
-        // l'audio AC3/E-AC3/DTS/TrueHD. Sur un boîtier/TV relié en HDMI
-        // ARC/eARC à un ampli ou une barre de son compatible, la plateforme
-        // relaie le flux original en passthrough (bitstream) au lieu de le
-        // décoder — la meilleure qualité possible, sans repasser par une
-        // conversion côté appli. L'extension FFmpeg (native/decoder-ffmpeg)
-        // ne prend le relais qu'en dernier recours, sur les appareils qui ne
-        // savent faire ni décoder ni passthrough ces formats nativement.
-        DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(this)
-                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
-
-        // Tampon plus généreux qu'en réglages par défaut : priorité à la
-        // stabilité sur un débit faible/instable plutôt qu'au démarrage
-        // rapide. La sélection adaptative de piste (ABR) reste celle
-        // d'ExoPlayer par défaut pour les sources HLS/DASH multi-débits.
-        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(30000, 90000, 2500, 10000)
-                .build();
-        localPlayer = new ExoPlayer.Builder(this, renderersFactory).setLoadControl(loadControl).build();
+        localPlayer = buildLocalPlayer();
 
         // Diffusion Chromecast : CastPlayer implémente la même interface
         // Player qu'ExoPlayer, donc PlayerView continue de fonctionner à
@@ -1580,6 +1701,16 @@ public class NativePlayerActivity extends AppCompatActivity {
                 });
             }
         }
+
+        final boolean compat = audioCompat();
+        labels.add(compat ? "🔈 Mode audio compatible ✓ (toucher pour revenir au mode normal)"
+                : "🔈 Pas de son ? Mode audio compatible");
+        actions.add(new Runnable() {
+            @Override
+            public void run() {
+                setAudioCompat(!compat, false);
+            }
+        });
 
         boolean subtitlesDisabled = localPlayer.getTrackSelectionParameters().disabledTrackTypes.contains(C.TRACK_TYPE_TEXT);
         labels.add("💬 Sous-titres : désactivés" + (subtitlesDisabled ? " ✓" : ""));
