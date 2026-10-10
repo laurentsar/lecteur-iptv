@@ -594,6 +594,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         secondesSansImage = 0;
         long maintenant = android.os.SystemClock.elapsedRealtime();
         gelsImage.add(maintenant);
+        totalGelsImage++;
         while (!gelsImage.isEmpty() && maintenant - gelsImage.peekFirst() > 180000) {
             gelsImage.poll();
         }
@@ -615,6 +616,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         long maintenant = android.os.SystemClock.elapsedRealtime();
         gelsRecents.add(maintenant);
+        totalGelsReseau++;
         while (!gelsRecents.isEmpty() && maintenant - gelsRecents.peekFirst() > FENETRE_GELS_MS) {
             gelsRecents.poll();
         }
@@ -733,11 +735,127 @@ public class NativePlayerActivity extends AppCompatActivity {
         // la lecture. Sans lui, beaucoup de TV et boîtiers mettent leur puce
         // wifi en économie d'énergie quand rien ne touche l'écran : débit en
         // dents de scie, réserve qui fond, image figée.
-        return new ExoPlayer.Builder(this, renderersFactory)
+        ExoPlayer joueur = new ExoPlayer.Builder(this, renderersFactory)
                 .setLoadControl(loadControl)
                 .setMediaSourceFactory(new FabriqueSources(this))
                 .setWakeMode(C.WAKE_MODE_NETWORK)
                 .build();
+        joueur.addAnalyticsListener(new androidx.media3.exoplayer.analytics.AnalyticsListener() {
+            @Override
+            public void onVideoDecoderInitialized(EventTime eventTime, String decoderName,
+                    long initializedTimestampMs, long initializationDurationMs) {
+                decodeurVideo = decoderName;
+            }
+
+            @Override
+            public void onAudioDecoderInitialized(EventTime eventTime, String decoderName,
+                    long initializedTimestampMs, long initializationDurationMs) {
+                decodeurAudio = decoderName;
+            }
+        });
+        return joueur;
+    }
+
+    // ---------- Diagnostic à l'écran (menu ⚙️) ----------
+    // Pour trouver la cause d'une image qui se fige sans questionnaire :
+    // réserve (s'effondre → réseau/serveur), images perdues (montent → la TV
+    // ne suit pas le décodage), débit, formats et décodeurs réellement
+    // utilisés, nombre de gels réseau et image depuis l'ouverture.
+    private String decodeurVideo = "";
+    private String decodeurAudio = "";
+    private int totalGelsReseau = 0;
+    private int totalGelsImage = 0;
+    private TextView diagView;
+    private final Runnable diagRunnable = new Runnable() {
+        @Override
+        public void run() {
+            majDiagnostic();
+            uiHandler.postDelayed(this, 1000);
+        }
+    };
+
+    private boolean diagActif() {
+        return getSharedPreferences("player", MODE_PRIVATE).getBoolean("diag", false);
+    }
+
+    private void setDiagnostic(boolean on) {
+        getSharedPreferences("player", MODE_PRIVATE).edit().putBoolean("diag", on).apply();
+        appliquerDiagnostic();
+    }
+
+    private void appliquerDiagnostic() {
+        uiHandler.removeCallbacks(diagRunnable);
+        if (!diagActif()) {
+            if (diagView != null) {
+                diagView.setVisibility(View.GONE);
+            }
+            return;
+        }
+        if (diagView == null) {
+            android.view.ViewGroup racine = findViewById(R.id.playerRoot);
+            float d = getResources().getDisplayMetrics().density;
+            diagView = new TextView(this);
+            diagView.setTextColor(0xFFFFFFFF);
+            diagView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
+            diagView.setTypeface(android.graphics.Typeface.MONOSPACE);
+            diagView.setBackgroundColor(0xB0000000);
+            int pad = Math.round(8 * d);
+            diagView.setPadding(pad, pad, pad, pad);
+            android.widget.RelativeLayout.LayoutParams lp = new android.widget.RelativeLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_START);
+            lp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP);
+            lp.setMargins(Math.round(32 * d), Math.round(80 * d), 0, 0);
+            racine.addView(diagView, lp);
+        }
+        diagView.setVisibility(View.VISIBLE);
+        majDiagnostic();
+        uiHandler.postDelayed(diagRunnable, 1000);
+    }
+
+    private void majDiagnostic() {
+        if (diagView == null || localPlayer == null) {
+            return;
+        }
+        StringBuilder t = new StringBuilder();
+        java.util.Locale fr = java.util.Locale.FRANCE;
+        Player p = playerView.getPlayer();
+        if (p != localPlayer) {
+            diagView.setText("Diagnostic : lecture sur un autre appareil (Chromecast)");
+            return;
+        }
+        long reserve = Math.max(0, localPlayer.getBufferedPosition() - localPlayer.getCurrentPosition());
+        t.append(String.format(fr, "Réserve      : %.1f s%n", reserve / 1000.0));
+        long debit = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+                .getSingletonInstance(this).getBitrateEstimate();
+        t.append(String.format(fr, "Débit        : %.1f Mb/s%n", debit / 1_000_000.0));
+        Format v = localPlayer.getVideoFormat();
+        if (v != null) {
+            t.append(String.format(fr, "Vidéo        : %dx%d %s %s%n", v.width, v.height,
+                    v.frameRate > 0 ? String.format(fr, "%.0f i/s", v.frameRate) : "",
+                    v.sampleMimeType == null ? "" : v.sampleMimeType.replace("video/", "")));
+            if (v.bitrate > 0) {
+                t.append(String.format(fr, "Débit vidéo  : %.1f Mb/s%n", v.bitrate / 1_000_000.0));
+            }
+        }
+        t.append("Décodeur vid.: ").append(decodeurVideo.isEmpty() ? "—" : decodeurVideo).append('\\n');
+        androidx.media3.exoplayer.DecoderCounters c = localPlayer.getVideoDecoderCounters();
+        if (c != null) {
+            c.ensureUpdated();
+            t.append(String.format(fr, "Images       : %d affichées, %d perdues, %d sautées%n",
+                    c.renderedOutputBufferCount, c.droppedBufferCount, c.skippedOutputBufferCount));
+        }
+        Format a = localPlayer.getAudioFormat();
+        if (a != null) {
+            t.append(String.format(fr, "Audio        : %s %d Hz %d can.%n", nomCodec(a.sampleMimeType),
+                    a.sampleRate, a.channelCount));
+        } else {
+            t.append("Audio        : aucune piste\\n");
+        }
+        t.append("Décodeur aud.: ").append(decodeurAudio.isEmpty() ? "—" : decodeurAudio).append('\\n');
+        t.append(String.format(fr, "Gels         : %d réseau, %d image%n", totalGelsReseau, totalGelsImage));
+        t.append("Source       : ").append(mediaTitle);
+        diagView.setText(t.toString());
     }
 
     // ---------- Flux sans piste audio détectée (Canal+) ----------
@@ -1241,6 +1359,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         localPlayer = buildLocalPlayer();
         uiHandler.postDelayed(surveillanceImage, 1000);
+        appliquerDiagnostic();
         UiModeManager modeTv = (UiModeManager) getSystemService(UI_MODE_SERVICE);
         if (modeTv != null && modeTv.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION
                 && !astuceReglagesMontree) {
@@ -2133,6 +2252,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
             });
         }
+        final boolean diag = diagActif();
+        labels.add(diag ? "🩺 Diagnostic à l'écran ✓ (toucher pour le masquer)" : "🩺 Afficher le diagnostic à l'écran");
+        actions.add(new Runnable() {
+            @Override
+            public void run() {
+                setDiagnostic(!diag);
+            }
+        });
         final boolean compat = audioCompat();
         labels.add(compat ? "🔈 Mode audio compatible ✓ (toucher pour revenir au mode normal)"
                 : "🔈 Pas de son ? Mode audio compatible");
@@ -2237,6 +2364,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         reportProgress();
         uiHandler.removeCallbacks(progressRunnable);
         uiHandler.removeCallbacks(surveillanceImage);
+        uiHandler.removeCallbacks(diagRunnable);
         if (currentInstance == this) {
             currentInstance = null;
             NativePlayerPlugin.notifyClosed();
