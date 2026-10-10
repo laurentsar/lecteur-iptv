@@ -1638,11 +1638,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         super.onStop();
         // Le bouton Accueil (ou tout passage en arrière-plan) ne détruit pas
         // l'activité — seul onStop() est appelé, pas onDestroy() — donc sans
-        // ceci le son continuait à jouer indéfiniment en arrière-plan pour
-        // tout contenu qui ne bascule pas en PiP (VOD, ou direct sur un
-        // appareil sans PiP disponible ; le direct AVEC PiP, lui, doit
-        // continuer à jouer, visiblement, dans la mini-fenêtre — voir
-        // onUserLeaveHint/isInPip).
+        // ceci le son continuait à jouer indéfiniment en arrière-plan. Seule
+        // la mini-fenêtre (PiP, ouverte par son bouton) continue à jouer :
+        // elle met l'activité en pause, pas à l'arrêt.
         Player p = playerView == null ? null : playerView.getPlayer();
         if (isInPip()) {
             // Arrêté alors qu'il est en mini-fenêtre : c'est qu'on vient de
