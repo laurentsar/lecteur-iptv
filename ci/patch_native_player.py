@@ -705,6 +705,27 @@ public class NativePlayerActivity extends AppCompatActivity {
         return "Le serveur IPTV refuse la chaîne (erreur " + code + " : " + sens + ")";
     }
 
+    private static String nomCodec(String mime) {
+        if (mime == null) {
+            return "format inconnu";
+        }
+        switch (mime) {
+            case MimeTypes.AUDIO_AAC: return "AAC";
+            case MimeTypes.AUDIO_MPEG: return "MP3";
+            case MimeTypes.AUDIO_MPEG_L1: return "MP1";
+            case MimeTypes.AUDIO_MPEG_L2: return "MP2";
+            case MimeTypes.AUDIO_AC3: return "Dolby AC3";
+            case MimeTypes.AUDIO_E_AC3: return "Dolby E-AC3";
+            case MimeTypes.AUDIO_E_AC3_JOC: return "Dolby Atmos";
+            case MimeTypes.AUDIO_AC4: return "Dolby AC4";
+            case MimeTypes.AUDIO_DTS: return "DTS";
+            case MimeTypes.AUDIO_DTS_HD: return "DTS-HD";
+            case MimeTypes.AUDIO_TRUEHD: return "TrueHD";
+            case MimeTypes.AUDIO_OPUS: return "Opus";
+            default: return mime.replace("audio/", "");
+        }
+    }
+
     private static boolean erreurAudio(PlaybackException error) {
         int c = error.errorCode;
         return c == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
@@ -1696,13 +1717,24 @@ public class NativePlayerActivity extends AppCompatActivity {
                 continue;
             }
             for (int i = 0; i < group.length; i++) {
-                if (!group.isTrackSupported(i)) {
-                    continue;
-                }
                 Format format = group.getTrackFormat(i);
                 String name = format.label != null ? format.label : (format.language != null ? format.language : "Piste " + (i + 1));
+                // Format affiché (AC3, MP2…) : sans lui, impossible de savoir
+                // pourquoi une chaîne reste muette. Les pistes illisibles sur
+                // cet appareil restent listées, signalées, au lieu de
+                // disparaître sans explication.
+                String codec = nomCodec(format.sampleMimeType);
+                if (!group.isTrackSupported(i)) {
+                    labels.add("🔇 Audio : " + name + " (" + codec + ") — illisible sur cet appareil");
+                    actions.add(new Runnable() {
+                        @Override
+                        public void run() {
+                        }
+                    });
+                    continue;
+                }
                 boolean selected = group.isTrackSelected(i);
-                labels.add("🔊 Audio : " + name + (selected ? " ✓" : ""));
+                labels.add("🔊 Audio : " + name + " (" + codec + ")" + (selected ? " ✓" : ""));
                 final TrackGroup mediaTrackGroup = group.getMediaTrackGroup();
                 final int trackIndex = i;
                 actions.add(new Runnable() {
