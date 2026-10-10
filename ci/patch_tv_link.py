@@ -860,11 +860,11 @@ FOCUS_NEW = ("setupSendToTv();\n"
              "        applyFocusEffect(homeBtn, listBtn, recordBtn, tracksBtn, pipBtn, closeBtn, castBtn,\n"
              "                findViewById(R.id.playerSendBtn));")
 
-DESTROY_OLD = """        uiHandler.removeCallbacks(progressRunnable);
-        if (currentInstance == this) {"""
-DESTROY_NEW = """        uiHandler.removeCallbacks(progressRunnable);
-        stopTvSearch();
-        if (currentInstance == this) {"""
+DESTROY_OLD = """        if (currentInstance == this) {
+            currentInstance = null;"""
+DESTROY_NEW = """        stopTvSearch();
+        if (currentInstance == this) {
+            currentInstance = null;"""
 
 METHODS_ANCHOR = "    // ---------- Enregistrement ----------"
 

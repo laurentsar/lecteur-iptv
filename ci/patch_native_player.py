@@ -552,6 +552,62 @@ public class NativePlayerActivity extends AppCompatActivity {
         return false;
     }
 
+    // ---------- Image figée, son qui continue ----------
+    // Le réseau suit (le son arrive) mais le décodeur vidéo de la TV décroche :
+    // aucune image n'est plus rendue alors que la lecture avance. Rien ne le
+    // signalait — ni erreur, ni chargement. Contrôle chaque seconde du nombre
+    // d'images rendues ; figé 3 s : on relance le décodage sur place (sans
+    // reconnecter). 3 fois en 3 minutes : la TV ne suit pas cette source, on
+    // bascule sur une version plus légère.
+    private long dernierRendu = -1;
+    private int secondesSansImage = 0;
+    private final java.util.ArrayDeque<Long> gelsImage = new java.util.ArrayDeque<>();
+    private final Runnable surveillanceImage = new Runnable() {
+        @Override
+        public void run() {
+            verifierImage();
+            uiHandler.postDelayed(this, 1000);
+        }
+    };
+
+    private void verifierImage() {
+        if (localPlayer == null || playerView.getPlayer() != localPlayer || !localPlayer.isPlaying() || isInPip()) {
+            dernierRendu = -1;
+            secondesSansImage = 0;
+            return;
+        }
+        androidx.media3.exoplayer.DecoderCounters compteurs = localPlayer.getVideoDecoderCounters();
+        if (compteurs == null) {
+            return;   // pas de vidéo (radio) : rien à surveiller
+        }
+        compteurs.ensureUpdated();
+        long rendu = compteurs.renderedOutputBufferCount;
+        if (rendu != dernierRendu) {
+            dernierRendu = rendu;
+            secondesSansImage = 0;
+            return;
+        }
+        if (++secondesSansImage < 3) {
+            return;
+        }
+        dernierRendu = -1;
+        secondesSansImage = 0;
+        long maintenant = android.os.SystemClock.elapsedRealtime();
+        gelsImage.add(maintenant);
+        while (!gelsImage.isEmpty() && maintenant - gelsImage.peekFirst() > 180000) {
+            gelsImage.poll();
+        }
+        if (gelsImage.size() >= 3) {
+            gelsImage.clear();
+            if (basculerSource("L'image se fige (la TV ne suit pas cette source)")) {
+                return;
+            }
+        }
+        // Relance du décodage à la même position : vide les décodeurs, sans
+        // recharger le flux.
+        localPlayer.seekTo(localPlayer.getCurrentPosition());
+    }
+
     // true si les gels répétés ont fait basculer sur une autre source.
     private boolean compterGel() {
         if (versions == null || versions.size() < 2 || playerView.getPlayer() != localPlayer) {
@@ -651,6 +707,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                     }
                 }
                 : new DefaultRenderersFactory(this);
+        // Décodeur matériel qui échoue à s'initialiser : essayer le suivant
+        // (logiciel) plutôt que d'abandonner la lecture.
+        renderersFactory.setEnableDecoderFallback(true);
         renderersFactory.setExtensionRendererMode(compat
                 ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
                 : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
@@ -1147,6 +1206,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         applyTvOverscanSafeMargin();
 
         localPlayer = buildLocalPlayer();
+        uiHandler.postDelayed(surveillanceImage, 1000);
         UiModeManager modeTv = (UiModeManager) getSystemService(UI_MODE_SERVICE);
         if (modeTv != null && modeTv.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION
                 && !astuceReglagesMontree) {
@@ -1594,6 +1654,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         userPaused = false;
         everReady = false;
         gelsRecents.clear();
+        gelsImage.clear();
         sonBasculeTente = false;
         dernierProgramme = "";
         startPositionMs = 0;
@@ -2131,6 +2192,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     protected void onDestroy() {
         reportProgress();
         uiHandler.removeCallbacks(progressRunnable);
+        uiHandler.removeCallbacks(surveillanceImage);
         if (currentInstance == this) {
             currentInstance = null;
             NativePlayerPlugin.notifyClosed();
