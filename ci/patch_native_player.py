@@ -729,9 +729,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                 .setBufferDurationsMs(30000, isLive ? 120000 : 90000, isLive ? 8000 : 2500, 15000)
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
+        // WAKE_MODE_NETWORK : verrou wifi « haute performance » tenu pendant
+        // la lecture. Sans lui, beaucoup de TV et boîtiers mettent leur puce
+        // wifi en économie d'énergie quand rien ne touche l'écran : débit en
+        // dents de scie, réserve qui fond, image figée.
         return new ExoPlayer.Builder(this, renderersFactory)
                 .setLoadControl(loadControl)
                 .setMediaSourceFactory(new FabriqueSources(this))
+                .setWakeMode(C.WAKE_MODE_NETWORK)
                 .build();
     }
 
@@ -810,6 +815,33 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    // Un segment ou une playlist qui échoue est retenté plus souvent et plus
+    // vite qu'avec les réglages par défaut (3 essais, attente croissante
+    // jusqu'à 5 s) : les serveurs IPTV refusent ou perdent ponctuellement une
+    // requête, et chaque échec définitif se payait d'une reconnexion
+    // complète, image figée. 6 essais, 0,5 s puis 1 s, 2 s… plafonné à 3 s.
+    // Les erreurs HTTP « définitives » (404, 403…) restent réessayées : sur
+    // un direct IPTV, un segment absent l'est souvent pour une seconde.
+    private static final class TentativesIptv extends androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy {
+        TentativesIptv() {
+            super(6);
+        }
+
+        @Override
+        public long getRetryDelayMsFor(LoadErrorInfo info) {
+            if (info.errorCount > 6) {
+                return C.TIME_UNSET;
+            }
+            Throwable e = info.exception;
+            if (e instanceof androidx.media3.common.ParserException
+                    || e instanceof java.io.FileNotFoundException
+                    || e instanceof androidx.media3.exoplayer.upstream.Loader.UnexpectedLoaderException) {
+                return C.TIME_UNSET;
+            }
+            return Math.min(500L << Math.min(info.errorCount - 1, 3), 3000L);
+        }
+    }
+
     // HLS par le parseur tolérant ci-dessus, le reste comme avant. Flux TS :
     // pistes DTS « HDMV » (type 0x82) acceptées, ignorées par défaut.
     private static final class FabriqueSources implements androidx.media3.exoplayer.source.MediaSource.Factory {
@@ -834,6 +866,8 @@ public class NativePlayerActivity extends AppCompatActivity {
             defaut = new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(donnees, extracteurs);
             hls = new androidx.media3.exoplayer.hls.HlsMediaSource.Factory(donnees)
                     .setPlaylistParserFactory(new ParseurHlsTolerant());
+            defaut.setLoadErrorHandlingPolicy(new TentativesIptv());
+            hls.setLoadErrorHandlingPolicy(new TentativesIptv());
         }
 
         @Override
@@ -2089,6 +2123,16 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
 
+        long debit = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+                .getSingletonInstance(this).getBitrateEstimate();
+        if (debit > 0) {
+            labels.add(String.format(java.util.Locale.FRANCE, "📶 Débit mesuré : %.1f Mb/s", debit / 1_000_000.0));
+            actions.add(new Runnable() {
+                @Override
+                public void run() {
+                }
+            });
+        }
         final boolean compat = audioCompat();
         labels.add(compat ? "🔈 Mode audio compatible ✓ (toucher pour revenir au mode normal)"
                 : "🔈 Pas de son ? Mode audio compatible");
@@ -2690,6 +2734,8 @@ def patch_manifest_permissions():
         # l'utilisateur — sans ce drapeau, Android exige en plus la
         # localisation précise.
         ('android.permission.NEARBY_WIFI_DEVICES', ' android:usesPermissionFlags="neverForLocation"'),
+        # Verrou wifi pendant la lecture (setWakeMode, voir buildLocalPlayer).
+        ('android.permission.WAKE_LOCK', ''),
     ]
     added = False
     for perm, extra in perms:
