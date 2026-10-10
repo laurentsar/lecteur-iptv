@@ -20,6 +20,19 @@ Idempotent.
 PKG_DIR = "android/app/src/main/java/com/laurent/iptvlecteur"
 
 CALL_ANCHOR = "        applyTvOverscanSafeMargin();\n"
+
+# Zoom aussi depuis le menu ⚙️ : sur TV, pas de double-tap à la télécommande.
+MENU_ANCHOR = "        final boolean compat = audioCompat();\n"
+MENU_NEW = (
+    "        labels.add(zoomImage ? \"🖼 Image : remplir l'écran ✓ (toucher pour l'image entière)\"\n"
+    "                : \"🖼 Image : remplir l'écran (supprime les bandes noires)\");\n"
+    "        actions.add(new Runnable() {\n"
+    "            @Override\n"
+    "            public void run() {\n"
+    "                setZoom(!zoomImage);\n"
+    "            }\n"
+    "        });\n\n"
+) + MENU_ANCHOR
 CALL_NEW = CALL_ANCHOR + "        setupDisplay();\n"
 
 METHODS_ANCHOR = "    // ---------- Enregistrement ----------"
@@ -123,11 +136,12 @@ def main():
     if "private void setupDisplay()" in s:
         print("NativePlayerActivity : plein écran/zoom déjà présents")
         return
-    for anchor, what in ((CALL_ANCHOR, "appel"), (METHODS_ANCHOR, "méthodes")):
+    for anchor, what in ((CALL_ANCHOR, "appel"), (METHODS_ANCHOR, "méthodes"), (MENU_ANCHOR, "menu")):
         if anchor not in s:
             raise SystemExit("NativePlayerActivity (" + what + ") : point d'insertion introuvable")
     s = s.replace(CALL_ANCHOR, CALL_NEW, 1)
     s = s.replace(METHODS_ANCHOR, METHODS + METHODS_ANCHOR, 1)
+    s = s.replace(MENU_ANCHOR, MENU_NEW, 1)
     open(p, "w").write(s)
     print("NativePlayerActivity : plein écran et zoom ajoutés")
 

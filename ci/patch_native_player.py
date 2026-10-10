@@ -783,24 +783,39 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     // Certaines télévisions (notamment plus anciennes) recadrent
     // (« overscan ») quelques pourcents de l'image sur les bords, coupant
-    // aussi bien les informations du contrôleur de lecture intégré
-    // d'ExoPlayer (position/durée en bas de l'écran) que nos propres
-    // bandeaux (titre, zapping, numéro de chaîne, programme en cours) —
-    // constaté en usage réel sur une TV branchée à un boîtier Android TV.
-    // Android ne peut pas savoir si LA TV fait de l'overscan ; on applique
-    // donc, uniquement en mode TV (un téléphone/une tablette n'a jamais ce
-    // problème), une marge de sécurité sur le conteneur racine : tout le
-    // contenu (vidéo comprise, très légèrement réduite plutôt que rognée)
-    // s'en trouve poussé hors de la zone recadrée — les bandeaux alignés
-    // sur les bords du parent (alignParentTop/Start/End/Bottom) respectent
-    // automatiquement son padding.
+    // les informations du contrôleur de lecture intégré d'ExoPlayer
+    // (position/durée en bas de l'écran) et nos propres bandeaux (titre,
+    // zapping, numéro de chaîne, programme en cours) — constaté sur une TV
+    // branchée à un boîtier Android TV. Android ne peut pas savoir si LA TV
+    // fait de l'overscan ; on applique donc, uniquement en mode TV, une marge
+    // de sécurité aux seuls éléments d'habillage. La vidéo, elle, garde tout
+    // l'écran : une marge sur le conteneur racine la réduisait aussi, et
+    // laissait un cadre noir tout autour sur les TV qui ne rognent rien.
     private void applyTvOverscanSafeMargin() {
         UiModeManager uiModeManager = (UiModeManager) getSystemService(UI_MODE_SERVICE);
         if (uiModeManager == null || uiModeManager.getCurrentModeType() != Configuration.UI_MODE_TYPE_TELEVISION) return;
-        View root = findViewById(R.id.playerRoot);
+        android.view.ViewGroup root = findViewById(R.id.playerRoot);
         if (root == null) return;
         int margin = Math.round(24 * getResources().getDisplayMetrics().density);
-        root.setPadding(margin, margin, margin, margin);
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (child == playerView || child.getId() == R.id.playerView) {
+                continue;
+            }
+            if (child.getLayoutParams() instanceof android.view.ViewGroup.MarginLayoutParams) {
+                android.view.ViewGroup.MarginLayoutParams lp =
+                        (android.view.ViewGroup.MarginLayoutParams) child.getLayoutParams();
+                lp.setMargins(lp.leftMargin + margin, lp.topMargin + margin,
+                        lp.rightMargin + margin, lp.bottomMargin + margin);
+                child.setLayoutParams(lp);
+            }
+        }
+        // Barre de lecture intégrée de PlayerView (position/durée) : dans la
+        // vidéo, donc rentrée de la même marge par un padding interne.
+        View controles = playerView == null ? null : playerView.findViewById(androidx.media3.ui.R.id.exo_controller);
+        if (controles != null) {
+            controles.setPadding(margin, margin, margin, margin);
+        }
     }
 
     @Override
