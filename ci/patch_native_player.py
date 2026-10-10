@@ -992,6 +992,13 @@ public class NativePlayerActivity extends AppCompatActivity {
         applyTvOverscanSafeMargin();
 
         localPlayer = buildLocalPlayer();
+        UiModeManager modeTv = (UiModeManager) getSystemService(UI_MODE_SERVICE);
+        if (modeTv != null && modeTv.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION
+                && !astuceReglagesMontree) {
+            astuceReglagesMontree = true;
+            Toast.makeText(this, "Astuce : appui long sur OK (ou touche Menu) → son, qualité, sources",
+                    Toast.LENGTH_LONG).show();
+        }
 
         // Diffusion Chromecast : CastPlayer implémente la même interface
         // Player qu'ExoPlayer, donc PlayerView continue de fonctionner à
@@ -1276,8 +1283,37 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private static boolean isMenuKey(int code) {
-        return code == KeyEvent.KEYCODE_GUIDE || code == KeyEvent.KEYCODE_MENU
-                || code == KeyEvent.KEYCODE_TV_CONTENTS_MENU;
+        return code == KeyEvent.KEYCODE_GUIDE || code == KeyEvent.KEYCODE_TV_CONTENTS_MENU;
+    }
+
+    // ---------- Menu ⚙️ à la télécommande ----------
+    // Sur TV, haut/bas changent de chaîne : impossible de remonter jusqu'au
+    // bouton ⚙️ de la barre du haut. Appui long sur OK, ou touche Menu,
+    // l'ouvrent directement (son, qualité, sources, sous-titres).
+    private boolean appuiLongOk = false;
+    private static boolean astuceReglagesMontree = false;
+
+    private static boolean isOkKey(int code) {
+        return code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
+    }
+
+    private boolean focusDansBarre() {
+        View f = getCurrentFocus();
+        while (f != null) {
+            if (f == topBar) {
+                return true;
+            }
+            f = f.getParent() instanceof View ? (View) f.getParent() : null;
+        }
+        return false;
+    }
+
+    private void ouvrirReglages() {
+        if (playerView.getPlayer() != localPlayer) {
+            return;
+        }
+        showTrackPicker();
     }
 
     private boolean canZap() {
@@ -1291,6 +1327,26 @@ public class NativePlayerActivity extends AppCompatActivity {
         // consomme ici : on réveille donc la barre explicitement.
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             showChrome();
+        }
+        if (code == KeyEvent.KEYCODE_MENU) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                ouvrirReglages();
+            }
+            return true;
+        }
+        // OK maintenu (hors bouton de la barre, où OK doit cliquer).
+        if (isOkKey(code) && (appuiLongOk || !focusDansBarre())) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 1) {
+                appuiLongOk = true;
+                ouvrirReglages();
+                return true;
+            }
+            if (appuiLongOk) {
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    appuiLongOk = false;
+                }
+                return true;
+            }
         }
         boolean mine;
         if (canZap() && (isZapUp(code) || isZapDown(code))) {
@@ -1707,6 +1763,18 @@ public class NativePlayerActivity extends AppCompatActivity {
         Tracks tracks = localPlayer.getCurrentTracks();
         final List<String> labels = new ArrayList<>();
         final List<Runnable> actions = new ArrayList<>();
+
+        // Liste des chaînes en tête : à la télécommande, ce menu s'ouvre par
+        // OK maintenu ou la touche Menu (qui ouvrait la liste auparavant).
+        if (isLive && channels.size() >= 2) {
+            labels.add("📋 Liste des chaînes");
+            actions.add(new Runnable() {
+                @Override
+                public void run() {
+                    showChannelList();
+                }
+            });
+        }
 
         // Sources : autres versions du même contenu (menu « Sources » du
         // lecteur web) — changer de source se fait sur place, sans repasser
