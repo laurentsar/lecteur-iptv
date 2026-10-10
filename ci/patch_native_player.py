@@ -662,7 +662,134 @@ public class NativePlayerActivity extends AppCompatActivity {
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(30000, 90000, 2500, 15000)
                 .build();
-        return new ExoPlayer.Builder(this, renderersFactory).setLoadControl(loadControl).build();
+        return new ExoPlayer.Builder(this, renderersFactory)
+                .setLoadControl(loadControl)
+                .setMediaSourceFactory(new FabriqueSources(this))
+                .build();
+    }
+
+    // ---------- Flux sans piste audio détectée (Canal+) ----------
+    // Certains serveurs IPTV décrivent leurs flux HLS en ne déclarant que le
+    // codec vidéo (CODECS="avc1…") alors que le son est bien dans les
+    // segments. ExoPlayer les croit sur parole et n'expose aucune piste audio
+    // (image sans son, menu ⚙️ sans ligne « Audio ») ; hls.js, lui, joue le
+    // son. On retire cette déclaration incomplète : ExoPlayer découvre alors
+    // les pistes dans les segments eux-mêmes.
+    private static final class ParseurHlsTolerant
+            implements androidx.media3.exoplayer.hls.playlist.HlsPlaylistParserFactory {
+        private final androidx.media3.exoplayer.hls.playlist.HlsPlaylistParserFactory base =
+                new androidx.media3.exoplayer.hls.playlist.DefaultHlsPlaylistParserFactory();
+
+        @Override
+        public androidx.media3.exoplayer.upstream.ParsingLoadable.Parser<
+                androidx.media3.exoplayer.hls.playlist.HlsPlaylist> createPlaylistParser() {
+            return corrigeant(base.createPlaylistParser());
+        }
+
+        @Override
+        public androidx.media3.exoplayer.upstream.ParsingLoadable.Parser<
+                androidx.media3.exoplayer.hls.playlist.HlsPlaylist> createPlaylistParser(
+                androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist multivariantPlaylist,
+                @androidx.annotation.Nullable androidx.media3.exoplayer.hls.playlist.HlsMediaPlaylist previousMediaPlaylist) {
+            return corrigeant(base.createPlaylistParser(multivariantPlaylist, previousMediaPlaylist));
+        }
+
+        private static androidx.media3.exoplayer.upstream.ParsingLoadable.Parser<
+                androidx.media3.exoplayer.hls.playlist.HlsPlaylist> corrigeant(
+                final androidx.media3.exoplayer.upstream.ParsingLoadable.Parser<
+                        androidx.media3.exoplayer.hls.playlist.HlsPlaylist> parser) {
+            return new androidx.media3.exoplayer.upstream.ParsingLoadable.Parser<
+                    androidx.media3.exoplayer.hls.playlist.HlsPlaylist>() {
+                @Override
+                public androidx.media3.exoplayer.hls.playlist.HlsPlaylist parse(
+                        android.net.Uri uri, java.io.InputStream inputStream) throws java.io.IOException {
+                    return sansCodecsIncomplets(parser.parse(uri, inputStream));
+                }
+            };
+        }
+
+        private static androidx.media3.exoplayer.hls.playlist.HlsPlaylist sansCodecsIncomplets(
+                androidx.media3.exoplayer.hls.playlist.HlsPlaylist playlist) {
+            if (!(playlist instanceof androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist)) {
+                return playlist;
+            }
+            androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist mv =
+                    (androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist) playlist;
+            // Son déclaré à part (pistes audio alternatives) : rien à corriger.
+            if (!mv.audios.isEmpty()) {
+                return playlist;
+            }
+            boolean modifie = false;
+            List<androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist.Variant> variantes = new ArrayList<>();
+            for (androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist.Variant v : mv.variants) {
+                String codecs = v.format.codecs;
+                if (codecs != null
+                        && androidx.media3.common.util.Util.getCodecCountOfType(codecs, C.TRACK_TYPE_AUDIO) == 0) {
+                    variantes.add(new androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist.Variant(
+                            v.url, v.format.buildUpon().setCodecs(null).build(),
+                            v.videoGroupId, v.audioGroupId, v.subtitleGroupId, v.captionGroupId));
+                    modifie = true;
+                } else {
+                    variantes.add(v);
+                }
+            }
+            if (!modifie) {
+                return playlist;
+            }
+            return new androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist(
+                    mv.baseUri, mv.tags, variantes, mv.videos, mv.audios, mv.subtitles,
+                    mv.closedCaptions, mv.muxedAudioFormat, mv.muxedCaptionFormats,
+                    mv.hasIndependentSegments, mv.variableDefinitions, mv.sessionKeyDrmInitData);
+        }
+    }
+
+    // HLS par le parseur tolérant ci-dessus, le reste comme avant. Flux TS :
+    // pistes DTS « HDMV » (type 0x82) acceptées, ignorées par défaut.
+    private static final class FabriqueSources implements androidx.media3.exoplayer.source.MediaSource.Factory {
+        private final androidx.media3.exoplayer.source.DefaultMediaSourceFactory defaut;
+        private final androidx.media3.exoplayer.hls.HlsMediaSource.Factory hls;
+
+        FabriqueSources(android.content.Context context) {
+            androidx.media3.datasource.DataSource.Factory donnees =
+                    new androidx.media3.datasource.DefaultDataSource.Factory(context);
+            androidx.media3.extractor.DefaultExtractorsFactory extracteurs =
+                    new androidx.media3.extractor.DefaultExtractorsFactory().setTsExtractorFlags(
+                            androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS);
+            defaut = new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(donnees, extracteurs);
+            hls = new androidx.media3.exoplayer.hls.HlsMediaSource.Factory(donnees)
+                    .setPlaylistParserFactory(new ParseurHlsTolerant());
+        }
+
+        @Override
+        public androidx.media3.exoplayer.source.MediaSource.Factory setDrmSessionManagerProvider(
+                androidx.media3.exoplayer.drm.DrmSessionManagerProvider provider) {
+            defaut.setDrmSessionManagerProvider(provider);
+            hls.setDrmSessionManagerProvider(provider);
+            return this;
+        }
+
+        @Override
+        public androidx.media3.exoplayer.source.MediaSource.Factory setLoadErrorHandlingPolicy(
+                androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy policy) {
+            defaut.setLoadErrorHandlingPolicy(policy);
+            hls.setLoadErrorHandlingPolicy(policy);
+            return this;
+        }
+
+        @Override
+        public int[] getSupportedTypes() {
+            return defaut.getSupportedTypes();
+        }
+
+        @Override
+        public androidx.media3.exoplayer.source.MediaSource createMediaSource(MediaItem mediaItem) {
+            MediaItem.LocalConfiguration local = mediaItem.localConfiguration;
+            if (local != null && androidx.media3.common.util.Util.inferContentTypeForUriAndMimeType(
+                    local.uri, local.mimeType) == C.CONTENT_TYPE_HLS) {
+                return hls.createMediaSource(mediaItem);
+            }
+            return defaut.createMediaSource(mediaItem);
+        }
     }
 
     // Reconstruit le lecteur local avec le nouveau mode, sur la même chaîne.
