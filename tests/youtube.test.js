@@ -42,5 +42,30 @@ console.log('\n— Classement mensuel par audience (calculé dans l\'appli) —'
   verifie('sans audience -> ordre d\'origine', Y.trierParAudience(ch, null).map(x => x.id).join('') === 'abcde');
 }
 
-console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
-process.exit(ko ? 1 : 0);
+// Régression v2.71 → v2.76 : dès que le classement mensuel était en cache,
+// l'affichage plantait après avoir vidé la rangée des catégories (le fichier
+// entier était pris pour la liste). On rejoue l'onglet avec ce cache.
+(async () => {
+  console.log('\n— Onglet affiché avec le classement mensuel en cache —');
+  const { JSDOM } = require('jsdom');
+  const fs = require('fs');
+  const dom = new JSDOM('<section class="panel active" id="tab-youtube"><div id="ytCategories"></div><div id="ytChaines"></div></section>',
+    { runScripts: 'outside-only' });
+  const w = dom.window;
+  const kv = { 'yt-top': { t: Date.now(), data: fichier }, 'yt-audience-v2': { t: Date.now(), audiences: {} } };
+  w.Store = { kvGet: k => Promise.resolve(kv[k] || null), kvSet: () => Promise.resolve() };
+  w.Net = { fetchText: () => Promise.reject(new Error('hors ligne')), note() {} };
+  const erreurs = [];
+  w.addEventListener('error', e => erreurs.push(e.message));
+  w.eval(fs.readFileSync(__dirname + '/../www/youtube.js', 'utf8'));
+  w.YouTubeTab.render();
+  await new Promise(r => setTimeout(r, 200));
+  let plantage = null;
+  try { w.YouTubeTab.render(); } catch (e) { plantage = e.message; }
+  const n = w.document.getElementById('ytCategories').children.length;
+  verifie('rendu avec le cache : aucune erreur', !plantage && !erreurs.length, plantage || erreurs.join(' ; '));
+  verifie('les ' + fichier.categories.length + ' catégories restent affichées', n === fichier.categories.length, 'catégories=' + n);
+
+  console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
+  process.exit(ko ? 1 : 0);
+})();

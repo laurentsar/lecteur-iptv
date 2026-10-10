@@ -267,7 +267,11 @@
     });
   }
 
-  function categories() { return distantes || CATEGORIES; }
+  // `distantes` est le FICHIER entier ({ maj, regle, categories: [...] }), pas
+  // la liste : le prendre pour la liste faisait planter l'affichage juste
+  // après avoir vidé la rangée des catégories (v2.71 → v2.76, onglets de
+  // catégories disparus dès que le classement mensuel était en cache).
+  function categories() { return (distantes && distantes.categories) || CATEGORIES; }
 
   function chargerDistant(apres) {
     var St = global.Store, Net = global.Net;
