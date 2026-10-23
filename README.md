@@ -73,6 +73,15 @@ Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
   téléphone/tablette non conçue pour la VR) : lecture, navigation tactile
   virtuelle et Cast fonctionnent normalement dans ce panneau.
 
+## TV Samsung (Tizen)
+
+Les TV Samsung n'exécutent pas d'APK : une **application Tizen** dédiée
+emballe la même page `www/` (dossier `tizen/`, construite à chaque
+modification de `main` et publiée en pré-version `tizen-v<version>`). Sur la
+TV, `www/tizen-tv.js` lit les chaînes avec **AVPlay**, le lecteur intégré
+(TS et HLS en http://, son Dolby et MP2), et gère la télécommande. Installation
+(mode développeur + certificat Samsung) : voir `tizen/README.md`.
+
 ## Compatibilité navigateur Tesla
 
 La **version web** (PWA, https://laurentsar.github.io/lecteur-iptv/) est

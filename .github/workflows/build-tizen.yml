@@ -1,0 +1,40 @@
+name: Build Tizen (TV Samsung)
+
+# Application Samsung : la page www/ emballée par tizen/build.sh. Publiée en
+# PRÉ-version (tizen-v<version>) : la release « latest », que l'APK consulte
+# pour ses mises à jour, reste celle de l'APK.
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'www/**', 'tizen/**', '.github/workflows/build-tizen.yml' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construire le .wgt
+        id: wgt
+        run: |
+          chemin=$(tizen/build.sh | tail -1)
+          echo "chemin=$chemin" >> "$GITHUB_OUTPUT"
+          echo "version=$(python3 -c "import json; print(json.load(open('www/version.json'))['version'])")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lecteur-iptv-tizen
+          path: ${{ steps.wgt.outputs.chemin }}
+      - name: Publier en pré-version
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tizen-v${{ steps.wgt.outputs.version }}
+          name: Lecteur IPTV pour TV Samsung v${{ steps.wgt.outputs.version }}
+          prerelease: true
+          make_latest: false
+          files: ${{ steps.wgt.outputs.chemin }}
+          body: |
+            Application pour TV Samsung (Tizen), non signée : voir tizen/README.md pour l'installer.

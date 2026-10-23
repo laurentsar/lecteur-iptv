@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Application Samsung (Tizen) de Lecteur IPTV : la page www/ telle quelle,
+     emballée par tizen/build.sh. La version est recopiée de www/version.json
+     à la construction (VERSION ci-dessous). -->
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="https://github.com/laurentsar/lecteur-iptv" version="VERSION" viewmodes="maximized">
+    <tizen:application id="LectIPTV01.LecteurIPTV" package="LectIPTV01" required_version="2.3"/>
+    <content src="index.html"/>
+    <icon src="icon.png"/>
+    <name>Lecteur IPTV</name>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <!-- Serveurs IPTV, EPG, logos : n'importe quel domaine, en http comme en https. -->
+    <access origin="*" subdomains="true"/>
+    <tizen:allow-navigation>*</tizen:allow-navigation>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
+    <tizen:profile name="tv-samsung"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
+                   encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>

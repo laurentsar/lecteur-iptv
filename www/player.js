@@ -790,8 +790,9 @@
     document.addEventListener('keydown', function (e) {
       if (!isOpen() || !currentIsLive) return;
       var delta = 0;
-      if (e.key === 'ChannelUp' || e.key === 'PageUp' || e.key === 'MediaTrackNext' || e.keyCode === 166) delta = 1;
-      else if (e.key === 'ChannelDown' || e.key === 'PageDown' || e.key === 'MediaTrackPrevious' || e.keyCode === 167) delta = -1;
+      // 427/428 : CHAÎNE +/− des télécommandes Samsung (Tizen, tizen-tv.js).
+      if (e.key === 'ChannelUp' || e.key === 'PageUp' || e.key === 'MediaTrackNext' || e.keyCode === 166 || e.keyCode === 427) delta = 1;
+      else if (e.key === 'ChannelDown' || e.key === 'PageDown' || e.key === 'MediaTrackPrevious' || e.keyCode === 167 || e.keyCode === 428) delta = -1;
       else return;
       e.preventDefault();
       zapStep(delta);
@@ -1430,6 +1431,36 @@
     }
   }
 
+  function startAvplay(url, title) {
+    armLoadTimeout();
+    destroyPlayers();
+    tracksBtn.style.display = 'none';
+    tracksMenu.style.display = 'none';
+    video.pause();
+    video.removeAttribute('src');
+    currentEngine = 'AVPlay (TV Samsung)';
+    setStatus('Connexion au flux…');
+    TizenTV.lire(url, {
+      pret: function () {
+        clearLoadTimeout();
+        cancelRecovery();
+        recoverCount = 0;
+        everPlayed = true;
+        setStatus('');
+      },
+      chargement: function (enCours) { setStatus(enCours ? 'Chargement…' : ''); },
+      erreur: function (type) {
+        var cause = 'Lecture impossible (' + type + ')';
+        if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
+        setStatus(cause);
+      },
+      fin: function () {
+        if (!currentIsLive) return;
+        tryRecover('Flux terminé par la source', function () { startPlayback(currentUrl, currentTitle); });
+      }
+    });
+  }
+
   function destroyPlayers() {
     if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
     if (mpegtsPlayer) { try { mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
@@ -1954,6 +1985,14 @@
 
     if (isCasting()) { castCurrentMedia(); return; }
 
+    // TV Samsung (application Tizen, voir tizen-tv.js) : le lecteur intégré
+    // de la TV lit le TS/HLS des fournisseurs en http://, avec le son Dolby
+    // et MP2, là où les moteurs web échouent ou restent muets.
+    if (global.TizenTV && TizenTV.actif && TizenTV.lecteurDisponible()) {
+      startAvplay(url, title);
+      return;
+    }
+
     // Lecteur natif par défaut dans l'APK (réglage « Lecteur vidéo natif »,
     // décochable) : hors WebView, il décode ce que celle-ci refuse (HEVC,
     // audio AC3/E-AC3/DTS) et tient mieux la charge sur un boîtier TV. La
@@ -2107,6 +2146,7 @@
     saveProgress(true);
     if (document.pictureInPictureElement === video) { document.exitPictureInPicture().catch(function () {}); }
     destroyPlayers();
+    if (global.TizenTV && TizenTV.arreter) TizenTV.arreter();
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
     if (tracksMenu) tracksMenu.style.display = 'none';
     if (remotePanel) closeRemote();

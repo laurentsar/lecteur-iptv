@@ -589,7 +589,10 @@
     if (activeTab && activeTab.dataset.tab === 'direct' && (state.directView === 'liste' || state.directView === '3d')) { switchDirectView('bouquets'); return; }
     if (activeTab && activeTab.dataset.tab !== 'accueil') { goTab('accueil'); return; }
     if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App && Capacitor.Plugins.App.exitApp) Capacitor.Plugins.App.exitApp();
+    else if (window.TizenTV && TizenTV.actif) TizenTV.quitter();
   }
+  // Touche Retour de la télécommande Samsung (voir tizen-tv.js).
+  window.AppNav.back = goBack;
   if (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.Plugins && Capacitor.Plugins.App) {
     Capacitor.Plugins.App.addListener('backButton', goBack);
   }

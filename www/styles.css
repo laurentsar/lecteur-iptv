@@ -609,6 +609,15 @@ body.filtre-nuit::after {
 .remote-panel-card .hint { font-size: 11px; }
 .version-item.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
 
+/* ---------- TV Samsung : lecture par AVPlay (tizen-tv.js) ----------
+   AVPlay dessine la vidéo sur un plan SOUS la page : tout pixel opaque de
+   la page la masque. Pendant la lecture, fonds transparents et page
+   masquée, seuls restent les commandes et bandeaux du lecteur. */
+html.avplay-actif, html.avplay-actif body,
+html.avplay-actif .player-overlay, html.avplay-actif #playerVideo { background: transparent !important; }
+html.avplay-actif body > *:not(.player-overlay):not(#avplayer) { visibility: hidden; }
+html.avplay-actif #playerVideo { visibility: hidden; }
+
 /* ---------- envoyer sur la Fire TV (tvlink.js) ---------- */
 /* Au-dessus du lecteur plein écran (.player-overlay, z-index 999). */
 .tvlink-fond {
