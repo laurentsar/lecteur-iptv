@@ -7,6 +7,17 @@ ajoute la lecture par **AVPlay** (le lecteur intégré de la TV : TS et HLS en
 http://, son Dolby et MP2), la télécommande (Retour, chaînes +/−,
 lecture/pause, chiffres) et l'affichage TV.
 
+Mêmes fonctions que l'APK : playlists, favoris, guide, zapping et numéros de
+chaîne, sources multiples avec bascule automatique (panne, gels répétés,
+source sans son), menu ⚙️ (sources, pistes audio avec leur format,
+sous-titres, image plein écran, diagnostic à l'écran), réserve d'images
+contre les gels, pause en arrière-plan.
+
+Propre à Android, absent ici : enregistrement, Chromecast, mini-fenêtre,
+réception « 📲 Envoyer sur la TV » (une application web Tizen ne peut pas
+écouter le réseau), mise à jour automatique (chaque version doit être
+re-signée avec le certificat de la TV).
+
 ## Construire
 
 ```bash

@@ -44,8 +44,17 @@ w.webapis = {
     pause: () => { journal.etat = 'PAUSED'; },
     stop: () => { journal.arrets++; journal.etat = 'IDLE'; },
     close() {}, getState: () => journal.etat,
-    getTotalTrackInfo: () => [{ index: 1, type: 'AUDIO', extra_info: '{"language":"fra","fourCC":"AC3"}' }],
-    setSelectTrack() {}, suspend() {}, restore() {}
+    getTotalTrackInfo: () => [
+      { index: 0, type: 'VIDEO', extra_info: '{"Width":"1920","Height":"1080","fourCC":"H264"}' },
+      { index: 1, type: 'AUDIO', extra_info: '{"language":"fra","fourCC":"AC3"}' },
+      { index: 2, type: 'TEXT', extra_info: '{"track_lang":"fra"}' }],
+    getCurrentStreamInfo: () => [
+      { index: 0, type: 'VIDEO', extra_info: '{"Width":"1920","Height":"1080","fourCC":"H264"}' },
+      { index: 1, type: 'AUDIO', extra_info: '{"language":"fra","fourCC":"AC3","sample_rate":"48000","channels":"2"}' },
+      { index: 2, type: 'TEXT', extra_info: '{}' }],
+    getStreamingProperty: () => '6500000',
+    setSelectTrack: (t, i) => { journal.choix = t + i; }, setSilentSubtitle: m => { journal.muet = m; },
+    suspend() {}, restore() {}
   }
 };
 const erreurs = [];
@@ -68,8 +77,37 @@ w.addEventListener('error', e => erreurs.push(e.message));
   verifie('zone vidéo AVPlay créée', !!w.document.querySelector('object[type="application/avplayer"]'));
   verifie('pistes audio lues', w.TizenTV.pistesAudio()[0].codec === 'AC3');
 
+  const menu = () => w.document.getElementById('playerTracksMenu');
+  w.Player.open('http://srv/live/u/p/1.ts', 'Canal+', { live: true });
+  await attendre(20);
+  w.document.getElementById('playerTracks').click();
+  await attendre(10);
+  verifie('bouton ⚙️ visible avec AVPlay', w.document.getElementById('playerTracks').style.display !== 'none');
+  verifie('piste audio avec son format dans le menu', /fra \(Dolby AC3\)/.test(menu().textContent), menu().textContent.slice(0, 200));
+  const boutonTexte = t => Array.from(menu().querySelectorAll('button')).find(b => b.textContent.includes(t));
+  boutonTexte('fra').click();
+  boutonTexte('Image plein écran').click();
+  verifie('image plein écran mémorisée', w.TizenTV.remplit());
+  boutonTexte('Diagnostic').click();
+  await attendre(10);
+  const diag = w.document.getElementById('avDiag');
+  verifie('diagnostic affiché (débit, vidéo, audio)', diag.style.display !== 'none' && /6,5 Mb\/s/.test(diag.textContent) && /1920x1080/.test(diag.textContent) && /Dolby AC3/.test(diag.textContent), diag.textContent);
+  boutonTexte('Diagnostic').click();
+  const sous = Array.from(w.document.querySelectorAll('#tracksSubList button')).find(b => b.textContent.includes('fra'));
+  sous.click();
+  verifie('sous-titres activés', journal.choix === 'TEXT2' && journal.muet === false);
+  journal.ecouteur.onsubtitlechange(2000, 'Bonjour');
+  verifie('sous-titre affiché', w.document.getElementById('avSousTitre').textContent === 'Bonjour');
+
   w.document.dispatchEvent(new w.KeyboardEvent('keydown', { keyCode: 10252, bubbles: true }));
   verifie('lecture/pause', journal.etat === 'PAUSED');
+
+  w.Player.open('http://srv/live/fhd.ts', 'CANAL+ FHD', { live: true, versions: [
+    { url: 'http://srv/live/fhd.ts', name: 'CANAL+ FHD' }, { url: 'http://srv/live/hd.ts', name: 'CANAL+ HD' }] });
+  await attendre(20);
+  for (let i = 0; i < 4; i++) journal.ecouteur.onbufferingstart();
+  await attendre(20);
+  verifie('4 gels → version plus légère', journal.ouvert === 'http://srv/live/hd.ts', journal.ouvert);
 
   w.document.dispatchEvent(new w.KeyboardEvent('keydown', { keyCode: 10009, bubbles: true }));
   await attendre(10);

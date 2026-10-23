@@ -77,6 +77,7 @@
   var objet = null;       // <object type="application/avplayer"> : zone vidéo
   var rappels = {};
   var enCours = false;
+  var gels = 0;          // passages en chargement depuis l'ouverture (diagnostic)
 
   function zoneVideo() {
     if (objet) return objet;
@@ -90,10 +91,21 @@
 
   // Coordonnées d'affichage d'AVPlay : celles de la résolution de
   // l'application (1920×1080), pas celles de la fenêtre en pixels CSS.
+  // Image entière (bandes noires si le format diffère) ou plein écran
+  // (étirée) : réglage mémorisé, comme le zoom de l'APK.
+  var CLE_REMPLIR = 'iptv:tv:remplir';
+  function remplir() { try { return localStorage.getItem(CLE_REMPLIR) === '1'; } catch (e) { return false; } }
   function plein() {
     try { av().setDisplayRect(0, 0, 1920, 1080); } catch (e) {}
-    try { av().setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX'); } catch (e) {}
+    try {
+      av().setDisplayMethod(remplir() ? 'PLAYER_DISPLAY_MODE_FULL_SCREEN' : 'PLAYER_DISPLAY_MODE_LETTER_BOX');
+    } catch (e) {}
   }
+  TizenTV.remplit = remplir;
+  TizenTV.setRemplir = function (on) {
+    try { localStorage.setItem(CLE_REMPLIR, on ? '1' : '0'); } catch (e) {}
+    if (enCours) plein();
+  };
 
   function fermer() {
     try { av().stop(); } catch (e) {}
@@ -110,6 +122,8 @@
     fermer();
     rappels = r || {};
     enCours = true;
+    gels = 0;
+    sousTitresActifs = false;
     zoneVideo();
     document.documentElement.classList.add('avplay-actif');
     try {
@@ -120,10 +134,11 @@
       try { p.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_SECOND', 8); } catch (e) {}
       try { p.setBufferingParam('PLAYER_BUFFER_FOR_RESUME', 'PLAYER_BUFFER_SIZE_IN_SECOND', 15); } catch (e) {}
       p.setListener({
-        onbufferingstart: function () { if (rappels.chargement) rappels.chargement(true); },
+        onbufferingstart: function () { gels++; if (rappels.chargement) rappels.chargement(true); },
         onbufferingcomplete: function () { if (rappels.chargement) rappels.chargement(false); },
         onstreamcompleted: function () { if (rappels.fin) rappels.fin(); },
         onerror: function (type) { if (rappels.erreur) rappels.erreur(String(type)); },
+        onsubtitlechange: function (duree, texte) { if (rappels.sousTitre) rappels.sousTitre(String(texte || ''), Number(duree) || 0); },
         onevent: function () {},
         oncurrentplaytime: function () {}
       });
@@ -159,16 +174,73 @@
   };
 
   // Pistes audio : [{ index, langue, codec }]
-  TizenTV.pistesAudio = function () {
+  TizenTV.pistesAudio = function () { return pistes('AUDIO'); };
+
+  function pistes(type) {
     var p = av();
     if (!p || !enCours) return [];
     try {
-      return p.getTotalTrackInfo().filter(function (t) { return t.type === 'AUDIO'; }).map(function (t) {
+      return p.getTotalTrackInfo().filter(function (t) { return t.type === type; }).map(function (t) {
         var info = {};
         try { info = JSON.parse(t.extra_info || '{}'); } catch (e) {}
-        return { index: t.index, langue: info.language || '', codec: info.fourCC || '' };
+        return { index: t.index, langue: info.language || info.track_lang || '', codec: info.fourCC || '', info: info };
       });
     } catch (e) { return []; }
+  }
+
+  function courante(type) {
+    var p = av();
+    if (!p || !enCours) return null;
+    try {
+      var c = p.getCurrentStreamInfo().filter(function (t) { return t.type === type; })[0];
+      if (!c) return null;
+      var info = {};
+      try { info = JSON.parse(c.extra_info || '{}'); } catch (e) {}
+      return { index: c.index, info: info };
+    } catch (e) { return null; }
+  }
+
+  TizenTV.pisteAudioCourante = function () { var c = courante('AUDIO'); return c ? c.index : -1; };
+  TizenTV.pistesSousTitres = function () { return pistes('TEXT'); };
+  var sousTitresActifs = false;
+  TizenTV.sousTitreCourant = function () {
+    if (!sousTitresActifs) return -1;
+    var c = courante('TEXT');
+    return c ? c.index : -1;
+  };
+  TizenTV.choisirSousTitres = function (index) {
+    var p = av();
+    if (!p || !enCours) return;
+    sousTitresActifs = index !== -1;
+    try {
+      if (index !== -1) p.setSelectTrack('TEXT', index);
+      p.setSilentSubtitle(index === -1);
+    } catch (e) {}
+  };
+
+  // Mesures pour le diagnostic à l'écran.
+  TizenTV.mesures = function () {
+    var p = av();
+    var m = { gels: gels };
+    if (!p || !enCours) return m;
+    try { m.etat = p.getState(); } catch (e) {}
+    try { m.debit = Number(p.getStreamingProperty('CURRENT_BANDWIDTH')) || 0; } catch (e) {}
+    var v = courante('VIDEO');
+    if (v) {
+      m.largeur = Number(v.info.Width) || 0;
+      m.hauteur = Number(v.info.Height) || 0;
+      m.codecVideo = v.info.fourCC || '';
+      m.debitVideo = Number(v.info.Bit_rate) || 0;
+      m.images = v.info.framerate || '';
+    }
+    var a = courante('AUDIO');
+    if (a) {
+      m.codecAudio = a.info.fourCC || '';
+      m.langueAudio = a.info.language || '';
+      m.frequence = a.info.sample_rate || '';
+      m.canaux = a.info.channels || '';
+    }
+    return m;
   };
 
   TizenTV.choisirAudio = function (index) {

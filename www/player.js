@@ -164,7 +164,10 @@
       '  <div id="tracksAudioFix"></div>' +
       '  <div class="tracks-title">Sous-titres</div>' +
       '  <div id="tracksSubList"></div>' +
+      '  <div id="tracksTv"></div>' +
       '</div>' +
+      '<div id="avSousTitre" class="av-sous-titre" style="display:none"></div>' +
+      '<pre id="avDiag" class="av-diag" style="display:none"></pre>' +
       '<div id="playerVideoWrap" class="player-video-wrap">' +
       '  <video id="playerVideo" playsinline controls autoplay></video>' +
       '  <div id="radioCover" class="radio-cover" style="display:none">' +
@@ -1005,7 +1008,21 @@
   // flux mpeg-ts bruts (mpegts.js) ni la lecture directe (mp4/mkv) : ces
   // moteurs n'exposent pas de pistes alternatives navigables côté web — le
   // lecteur natif Android (ExoPlayer) prend le relais pour ces cas.
+  function avplayActif() { return !!(global.TizenTV && TizenTV.lit && TizenTV.lit()); }
+
+  function nomCodecTv(c) {
+    var n = { mp4a: 'AAC', 'ac-3': 'Dolby AC3', ac3: 'Dolby AC3', 'ec-3': 'Dolby E-AC3', eac3: 'Dolby E-AC3', mpga: 'MP2', mp2: 'MP2', mp3: 'MP3', dts: 'DTS' };
+    var k = String(c || '').toLowerCase();
+    return n[k] || c || '';
+  }
+
   function getAudioTracks() {
+    if (avplayActif()) {
+      return TizenTV.pistesAudio().map(function (t, i) {
+        var nom = t.langue || ('Piste ' + (i + 1));
+        return { id: t.index, label: nom + (t.codec ? ' (' + nomCodecTv(t.codec) + ')' : '') };
+      });
+    }
     if (hls) return hls.audioTracks.map(function (t, i) { return { id: i, label: t.name || t.lang || ('Piste ' + (i + 1)) }; });
     if (video.audioTracks && video.audioTracks.length > 1) {
       return Array.prototype.map.call(video.audioTracks, function (t, i) { return { id: i, label: t.label || t.language || ('Piste ' + (i + 1)) }; });
@@ -1014,6 +1031,7 @@
   }
 
   function getCurrentAudioTrack() {
+    if (avplayActif()) return TizenTV.pisteAudioCourante();
     if (hls) return hls.audioTrack;
     if (video.audioTracks) {
       for (var i = 0; i < video.audioTracks.length; i++) if (video.audioTracks[i].enabled) return i;
@@ -1022,6 +1040,7 @@
   }
 
   function setAudioTrack(id) {
+    if (avplayActif()) { TizenTV.choisirAudio(id); setTimeout(renderTracksMenu, 300); return; }
     if (hls) { hls.audioTrack = id; renderTracksMenu(); return; }
     if (video.audioTracks) {
       for (var i = 0; i < video.audioTracks.length; i++) video.audioTracks[i].enabled = (i === id);
@@ -1030,6 +1049,9 @@
   }
 
   function getSubtitleTracks() {
+    if (avplayActif()) {
+      return TizenTV.pistesSousTitres().map(function (t, i) { return { id: t.index, label: t.langue || ('Piste ' + (i + 1)) }; });
+    }
     if (hls) return hls.subtitleTracks.map(function (t, i) { return { id: i, label: t.name || t.lang || ('Piste ' + (i + 1)) }; });
     if (video.textTracks && video.textTracks.length) {
       return Array.prototype.filter.call(video.textTracks, function (t) { return t.kind === 'subtitles' || t.kind === 'captions'; })
@@ -1039,6 +1061,7 @@
   }
 
   function getCurrentSubtitleTrack() {
+    if (avplayActif()) return TizenTV.sousTitreCourant();
     if (hls) return hls.subtitleDisplay ? hls.subtitleTrack : -1;
     if (video.textTracks) {
       for (var i = 0; i < video.textTracks.length; i++) if (video.textTracks[i].mode === 'showing') return i;
@@ -1047,6 +1070,12 @@
   }
 
   function setSubtitleTrack(id) {
+    if (avplayActif()) {
+      TizenTV.choisirSousTitres(id);
+      if (id === -1) afficherSousTitre('', 0);
+      setTimeout(renderTracksMenu, 300);
+      return;
+    }
     if (hls) {
       if (id === -1) { hls.subtitleDisplay = false; } else { hls.subtitleTrack = id; hls.subtitleDisplay = true; }
       renderTracksMenu();
@@ -1105,7 +1134,7 @@
     // Le lecteur natif étant proposé dans ce menu, le bouton reste visible dès
     // que ce lecteur existe : sans ça, une chaîne sans piste alternative (donc
     // sans « choix ») cachait le seul moyen de récupérer le son.
-    var hasChoice = !!nativePlayerPlugin() ||
+    var hasChoice = !!nativePlayerPlugin() || avplayActif() ||
       getAudioTracks().length > 1 || getSubtitleTracks().length > 0 || getQualityLevels().length > 1 || getSourceVersions().length > 1;
     tracksBtn.style.display = hasChoice ? '' : 'none';
     if (!hasChoice) tracksMenu.style.display = 'none';
@@ -1166,6 +1195,66 @@
     tracksMenuList(overlay.querySelector('#tracksAudioList'), getAudioTracks(), getCurrentAudioTrack(), false, setAudioTrack);
     renderAudioFix();
     tracksMenuList(overlay.querySelector('#tracksSubList'), getSubtitleTracks(), getCurrentSubtitleTrack(), true, setSubtitleTrack);
+    renderTracksTv();
+  }
+
+  // ---------- TV Samsung : réglages propres à AVPlay ----------
+  // Mêmes réglages que le menu ⚙️ de l'APK : image plein écran et diagnostic.
+  function renderTracksTv() {
+    var box = overlay.querySelector('#tracksTv');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!avplayActif()) return;
+    box.appendChild(el('div', 'tracks-title', 'Affichage'));
+    function bouton(texte, actif, action) {
+      var b = document.createElement('button');
+      b.className = 'tracks-item' + (actif ? ' active' : '');
+      b.textContent = (actif ? '✓ ' : '') + texte;
+      b.addEventListener('click', function () { action(); renderTracksMenu(); });
+      box.appendChild(b);
+    }
+    bouton('🖼 Image plein écran (étirée)', TizenTV.remplit(), function () { TizenTV.setRemplir(!TizenTV.remplit()); });
+    bouton('🩺 Diagnostic à l\'écran', diagTvActif(), function () { setDiagTv(!diagTvActif()); });
+  }
+
+  var sousTitreTimer = null;
+  function afficherSousTitre(texte, dureeMs) {
+    var box = overlay && overlay.querySelector('#avSousTitre');
+    if (!box) return;
+    clearTimeout(sousTitreTimer);
+    box.textContent = texte;
+    box.style.display = texte ? '' : 'none';
+    if (texte && dureeMs > 0) sousTitreTimer = setTimeout(function () { box.style.display = 'none'; }, dureeMs);
+  }
+
+  var CLE_DIAG_TV = 'iptv:tv:diag';
+  var diagTvTimer = null;
+  function diagTvActif() { try { return localStorage.getItem(CLE_DIAG_TV) === '1'; } catch (e) { return false; } }
+  function setDiagTv(on) {
+    try { localStorage.setItem(CLE_DIAG_TV, on ? '1' : '0'); } catch (e) {}
+    appliquerDiagTv();
+  }
+  function appliquerDiagTv() {
+    var box = overlay && overlay.querySelector('#avDiag');
+    clearInterval(diagTvTimer);
+    if (!box) return;
+    if (!diagTvActif() || !avplayActif()) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    function maj() {
+      if (!avplayActif()) { box.style.display = 'none'; clearInterval(diagTvTimer); return; }
+      var m = TizenTV.mesures();
+      var l = [];
+      l.push('Lecteur      : AVPlay (TV Samsung) — ' + (m.etat || '?'));
+      l.push('Débit        : ' + (m.debit ? (m.debit / 1e6).toFixed(1).replace('.', ',') + ' Mb/s' : '—'));
+      if (m.largeur) l.push('Vidéo        : ' + m.largeur + 'x' + m.hauteur + ' ' + (m.codecVideo || '') + (m.images ? ' ' + m.images + ' i/s' : ''));
+      if (m.debitVideo) l.push('Débit vidéo  : ' + (m.debitVideo / 1e6).toFixed(1).replace('.', ',') + ' Mb/s');
+      l.push('Audio        : ' + (m.codecAudio ? nomCodecTv(m.codecAudio) + (m.frequence ? ' ' + m.frequence + ' Hz' : '') + (m.canaux ? ' ' + m.canaux + ' can.' : '') : 'aucune piste'));
+      l.push('Gels         : ' + (m.gels || 0) + ' depuis l\'ouverture');
+      l.push('Source       : ' + (originalTitle || ''));
+      box.textContent = l.join('\n');
+    }
+    maj();
+    diagTvTimer = setInterval(maj, 1000);
   }
 
   function setupTracks() {
@@ -1440,15 +1529,35 @@
     video.removeAttribute('src');
     currentEngine = 'AVPlay (TV Samsung)';
     setStatus('Connexion au flux…');
+    var gelsRecents = [];
+    var pretUneFois = false;
     TizenTV.lire(url, {
       pret: function () {
         clearLoadTimeout();
         cancelRecovery();
         recoverCount = 0;
         everPlayed = true;
+        pretUneFois = true;
         setStatus('');
+        updateTracksVisibility();
+        appliquerDiagTv();
+        // Image sans aucune piste son (constaté : Canal+ FHD chez un
+        // fournisseur, la HD a du son) : source suivante, comme l'APK.
+        setTimeout(function () {
+          if (avplayActif() && currentIsLive && !currentIsRadio && TizenTV.pistesAudio().length === 0) basculerSource();
+        }, 3000);
       },
-      chargement: function (enCours) { setStatus(enCours ? 'Chargement…' : ''); },
+      sousTitre: afficherSousTitre,
+      chargement: function (enCours) {
+        setStatus(enCours ? 'Chargement…' : '');
+        // Gels répétés (4 en 2 minutes après le démarrage) : version plus
+        // légère de la chaîne, comme l'APK.
+        if (!enCours || !pretUneFois) return;
+        var maintenant = Date.now();
+        gelsRecents.push(maintenant);
+        gelsRecents = gelsRecents.filter(function (t) { return maintenant - t < 120000; });
+        if (gelsRecents.length >= 4) { gelsRecents = []; basculerSource(); }
+      },
       erreur: function (type) {
         var cause = 'Lecture impossible (' + type + ')';
         if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
@@ -2147,6 +2256,8 @@
     if (document.pictureInPictureElement === video) { document.exitPictureInPicture().catch(function () {}); }
     destroyPlayers();
     if (global.TizenTV && TizenTV.arreter) TizenTV.arreter();
+    afficherSousTitre('', 0);
+    appliquerDiagTv();
     if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
     if (tracksMenu) tracksMenu.style.display = 'none';
     if (remotePanel) closeRemote();
