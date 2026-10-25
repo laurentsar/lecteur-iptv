@@ -1,4 +1,5 @@
-/* tvlink.js — « Envoyer sur la Fire TV ».
+/* tvlink.js — « Envoyer sur la Fire TV » : une chaîne, ou toute la
+ * configuration (playlists, favoris, clé TMDB) depuis Réglages.
  *
  * La Fire TV ne sait pas faire Chromecast : elle n'apparaît jamais dans le
  * sélecteur Cast. L'APK, lui, tourne dessus. Le plugin natif TvLink (voir
@@ -65,18 +66,47 @@
   function choisir(media, onSent) {
     var P = plugin();
     if (!P || !media || !media.url) return;
+    return fenetre({
+      titre: '📲 Diffuser sur la TV',
+      partage: true,
+      envoi: function (host, port) {
+        return P.send({
+          host: host, port: port, url: media.url, title: media.title || '',
+          live: media.live !== false, logo: media.logo || '', epgKey: media.epgKey || ''
+        });
+      },
+      onSent: onSent
+    });
+  }
+
+  // Envoi de la configuration (playlists, favoris, clé TMDB) à la TV : rien
+  // à retaper à la télécommande. config = texte JSON de Store.exportConfig.
+  function envoyerConfig(config, onSent) {
+    var P = plugin();
+    if (!P || !config) return;
+    return fenetre({
+      titre: '📲 Envoyer la configuration à la TV',
+      envoi: function (host, port) { return P.sendConfig({ host: host, port: port, config: config }); },
+      onSent: onSent
+    });
+  }
+
+  // o = { titre, partage (bouton « Partage d'écran »), envoi(host, port) →
+  // promesse, onSent(nom) }
+  function fenetre(o) {
+    var P = plugin();
     var handles = [];
     var fond = el('div', 'tvlink-fond');
     var carte = el('div', 'remote-panel-card tvlink-carte');
     carte.setAttribute('role', 'dialog');
-    carte.setAttribute('aria-label', 'Diffuser sur la TV');
-    carte.appendChild(el('div', 'tracks-title', '📲 Diffuser sur la TV'));
+    carte.setAttribute('aria-label', o.titre.replace(/^\S+\s/, ''));
+    carte.appendChild(el('div', 'tracks-title', o.titre));
     // Partage d'écran du téléphone (panneau « Diffuser » d'Android) : seule
     // voie vers une Fire TV sous Vega OS, où Lecteur IPTV ne s'installe pas.
     var partage = el('button', 'version-item tvlink-partage', '🖥 Partage d\'écran (Diffuser)');
     partage.style.display = 'block';
     partage.style.width = '100%';
-    carte.appendChild(partage);
+    if (o.partage) carte.appendChild(partage);
     var statut = el('p', 'hint', 'Recherche des TV équipées de Lecteur IPTV sur le wifi…');
     carte.appendChild(statut);
     var liste = el('div');
@@ -109,12 +139,9 @@
 
     function envoyer(host, port, nom) {
       statut.textContent = 'Envoi vers ' + nom + '…';
-      P.send({
-        host: host, port: port, url: media.url, title: media.title || '',
-        live: media.live !== false, logo: media.logo || '', epgKey: media.epgKey || ''
-      }).then(function () {
+      o.envoi(host, port).then(function () {
         fermer();
-        if (onSent) onSent(nom);
+        if (o.onSent) o.onSent(nom);
       }).catch(function (e) {
         statut.textContent = 'Envoi impossible : ' + ((e && e.message) || e);
       });
@@ -158,8 +185,10 @@
 
     var minuteur = setTimeout(function () {
       if (!Object.keys(trouvees).length) {
-        statut.textContent = 'Aucune TV équipée de Lecteur IPTV trouvée : utilise le partage d\'écran. ' +
-          '(Appli ouverte sur la TV mais invisible ? Tape son adresse IP, affichée sur la TV dans Réglages → Infos.)';
+        statut.textContent = o.partage
+          ? 'Aucune TV équipée de Lecteur IPTV trouvée : utilise le partage d\'écran. ' +
+            '(Appli ouverte sur la TV mais invisible ? Tape son adresse IP, affichée sur la TV dans Réglages → Infos.)'
+          : 'Aucune TV trouvée. Ouvre Lecteur IPTV sur la TV, ou tape son adresse IP, affichée sur la TV dans Réglages → Infos.';
       }
     }, 8000);
 
@@ -170,14 +199,27 @@
     }).catch(function () {
       statut.textContent = 'Recherche automatique impossible : tape l\'adresse IP de la TV.';
     });
-    partage.focus();
+    (o.partage ? partage : champ).focus();
     return { fermer: fermer };
   }
 
   // ---------- côté TV : réception ----------
+  // Configuration reçue du téléphone : gardée jusqu'à ce que l'appli
+  // (app.js) s'abonne, elle demande alors confirmation avant d'importer.
+  var configRecue = null;
+  var surConfig = null;
+  function onConfig(cb) {
+    surConfig = cb;
+    if (configRecue) { var c = configRecue; configRecue = null; cb(c); }
+  }
+
   function initReception() {
     var P = plugin();
     if (!P) return;
+    P.addListener('config', function (c) {
+      if (!c || !c.config) return;
+      if (surConfig) surConfig(c); else configRecue = c;
+    });
     P.addListener('play', function (m) {
       if (!m || !m.url || !global.Player) return;
       global.Player.open(m.url, m.title || '', { live: m.live !== false, logo: m.logo || '', epgKey: m.epgKey || '' });
@@ -187,7 +229,8 @@
       if (!box || !i || !i.tv) return;
       var txt = document.getElementById('tvLinkInfoTxt');
       if (i.receiving) {
-        txt.textContent = 'Cette TV s\'appelle « ' + i.name + ' » sur le réseau. Depuis le téléphone, bouton 📲 du lecteur' +
+        txt.textContent = 'Cette TV s\'appelle « ' + i.name + ' » sur le réseau. Depuis le téléphone : bouton 📲 du lecteur ' +
+          'pour une chaîne, Réglages → « 📲 Envoyer à la TV » pour les playlists' +
           (i.ip ? ' — ou adresse IP à saisir : ' + i.ip + (i.port !== PORT ? ':' + i.port : '') : '') + '.';
       } else {
         txt.textContent = 'Réception indisponible (port réseau occupé ?). Relance l\'appli.';
@@ -198,5 +241,5 @@
 
   initReception();
 
-  global.TvLinkUI = { whenSender: whenSender, choisir: choisir, parseAdresse: parseAdresse };
+  global.TvLinkUI = { whenSender: whenSender, choisir: choisir, envoyerConfig: envoyerConfig, onConfig: onConfig, parseAdresse: parseAdresse };
 })(window);

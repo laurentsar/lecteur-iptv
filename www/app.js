@@ -1187,6 +1187,40 @@
     else toast('Sélectionne le code et copie-le manuellement');
   });
 
+  // Envoi de la configuration à la TV par le wifi (tvlink.js) : bouton
+  // visible seulement sur un téléphone/tablette avec l'APK.
+  if (window.TvLinkUI) {
+    TvLinkUI.whenSender(function () {
+      $id('envoiTvLigne').style.display = '';
+      $id('envoiTvAide').style.display = '';
+    });
+    $id('btnEnvoyerTv').addEventListener('click', function () {
+      var cfg = Store.exportConfig({ favoris: true, tmdbKey: true });
+      if (!cfg.playlists.length && !cfg.tmdbKey) { toast('Rien à envoyer : aucune playlist.'); return; }
+      TvLinkUI.envoyerConfig(JSON.stringify(cfg), function (nom) {
+        toast('Envoyé à ' + nom + ' — accepte sur la TV');
+      });
+    });
+    // Côté TV : configuration reçue d'un téléphone, importée après accord.
+    TvLinkUI.onConfig(function (c) {
+      var cfg;
+      try { cfg = JSON.parse(c.config); } catch (e) { toast('Configuration reçue illisible'); return; }
+      if (!cfg || typeof cfg !== 'object') return;
+      var nbPl = (cfg.playlists || []).length, nbFav = (cfg.favoris || []).length;
+      var quoi = [nbPl + ' playlist(s)', nbFav + ' favori(s)'];
+      if (cfg.tmdbKey) quoi.push('la clé TMDB');
+      askConfirm((c.from ? '« ' + c.from + ' »' : 'Un téléphone') + ' t\'envoie ' + quoi.join(', ') +
+        '. Les ajouter à cette TV ?', '📲 Configuration reçue').then(function (ok) {
+        if (!ok) return;
+        var added = Store.importConfig(cfg);
+        toast('Ajouté : ' + added.playlists + ' playlist(s), ' + added.favoris + ' favori(s)' +
+          (added.tmdbKey ? ', clé TMDB' : ''));
+        renderPlaylists();
+        activerPremierePlaylist();
+      });
+    });
+  }
+
   function openImportModal(prefill) {
     $id('importCode').value = prefill || '';
     $id('importPassphrase').value = '';
