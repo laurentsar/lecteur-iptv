@@ -563,6 +563,7 @@
   // pour rester correct même si plusieurs éléments se retrouvaient
   // ouverts en même temps.
   function goBack() {
+    if (window.ClavierEcran && ClavierEcran.estOuvert()) { ClavierEcran.fermer(false); return; }
     var confirmModal = $id('confirmModal');
     if (confirmModal && confirmModal.style.display !== 'none') { closeConfirmModal(false); return; }
     var pinModal = $id('pinModal');

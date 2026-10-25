@@ -139,7 +139,10 @@
 
   function candidats(exclu) {
     var out = [];
-    var nodes = document.querySelectorAll(FOCUSABLE_SELECTOR);
+    // Fenêtre qui garde le focus (clavier à l'écran) : les flèches ne
+    // doivent pas s'échapper vers la page en dessous.
+    var piege = document.querySelector('[data-dpad-piege]');
+    var nodes = (piege || document).querySelectorAll(FOCUSABLE_SELECTOR);
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
       if (n === exclu) continue;
@@ -221,6 +224,30 @@
   // s'ouvrir sur OK.
   function surTizen() { return !!(global.TizenTV && global.TizenTV.actif); }
 
+  /* Clavier de l'appareil. Ailleurs que sur la Samsung, blur puis focus
+   * dans la même tâche : la WebView ne voit aucun changement et n'ouvre pas
+   * le clavier (constaté sur la TCL). Le refocus décalé est vu comme un
+   * nouveau focus, fait dans la foulée d'un geste : le clavier s'ouvre. Sur
+   * la Samsung, le champ est marqué pour que le prochain OK l'ouvre. */
+  function clavierAppareil(el) {
+    el.setAttribute('data-clav-natif', '');
+    var fin = function () {
+      el.removeAttribute('data-clav-natif');
+      el.removeEventListener('blur', fin);
+    };
+    if (surTizen()) {
+      el.focus({ preventScroll: true });
+      el.addEventListener('blur', fin);
+      return;
+    }
+    rendreClavier(el);
+    el.blur();
+    setTimeout(function () {
+      el.focus({ preventScroll: true });
+      el.addEventListener('blur', fin);
+    }, 60);
+  }
+
   function focusSansClavier(el) {
     if (estChampTexte(el) && !el.hasAttribute('data-dpad-im') && !surTizen()) {
       el.setAttribute('data-dpad-im', el.hasAttribute('inputmode') ? el.getAttribute('inputmode') : SANS_ATTR);
@@ -292,24 +319,19 @@
     var el = document.activeElement;
     if (!el || e.defaultPrevented) return;
 
-    // TV Samsung : c'est l'action par défaut de OK sur le champ qui ouvre le
-    // clavier de la TV. L'annuler (et refaire le focus plus tard, hors du
-    // geste) le laissait fermé : impossible de saisir l'adresse d'une
-    // playlist ou un code (constaté sur la Samsung, v2.94).
-    if (e.key !== ' ' && estChampTexte(el) && surTizen()) {
-      rendreClavier(el);
-      return;
-    }
-    // OK sur un champ sélectionné à la flèche : ouvrir le clavier maintenant.
-    if (e.key !== ' ' && estChampTexte(el) && el.hasAttribute('data-dpad-im')) {
+    // OK sur un champ sélectionné à la flèche : clavier à l'écran
+    // (clavier-ecran.js). Celui de l'appareil ne s'ouvrait pas sur la Fire
+    // TV ni sur la Samsung — impossible de saisir l'adresse d'une playlist.
+    // Il reste accessible par le bouton « Clavier de l'appareil ».
+    // Champ où l'on a déjà tapé, ou touché du doigt : le clavier de
+    // l'appareil marche, OK garde son rôle (valider une recherche…).
+    if (e.key !== ' ' && estChampTexte(el) && !el.hasAttribute('data-clav-saisi')) {
+      // Clavier de l'appareil demandé : sur la Samsung, c'est l'action par
+      // défaut de OK qui l'ouvre — on la laisse faire.
+      if (el.hasAttribute('data-clav-natif')) return;
       e.preventDefault();
-      rendreClavier(el);
-      // blur puis focus dans la même tâche : la WebView ne voit aucun
-      // changement et n'ouvre pas le clavier (constaté sur la TCL). Le
-      // refocus décalé est vu comme un nouveau focus, fait dans la foulée
-      // d'un geste de l'utilisateur : le clavier s'ouvre.
-      el.blur();
-      setTimeout(function () { el.focus({ preventScroll: true }); }, 60);
+      if (global.ClavierEcran) global.ClavierEcran.ouvrir(el, clavierAppareil);
+      else clavierAppareil(el);
       return;
     }
     if (el.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) {
@@ -384,6 +406,14 @@
   }
 
   if (typeof document !== 'undefined') {
+    // Repérage des champs où le clavier de l'appareil a servi (voir surEntree).
+    // Remis à zéro à chaque arrivée dans le champ.
+    var marquer = function (e) { if (estChampTexte(e.target)) e.target.setAttribute('data-clav-saisi', ''); };
+    document.addEventListener('input', function (e) { if (e.isTrusted) marquer(e); }, true);
+    document.addEventListener('pointerdown', marquer, true);
+    document.addEventListener('focusin', function (e) {
+      if (e.target && e.target.removeAttribute) e.target.removeAttribute('data-clav-saisi');
+    }, true);
     document.addEventListener('keydown', onKeydown);
     document.addEventListener('keydown', surEntree);
   }
