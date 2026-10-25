@@ -59,7 +59,7 @@ w.webapis = {
 };
 const erreurs = [];
 w.addEventListener('error', e => erreurs.push(e.message));
-['net.js', 'serveurs.js', 'hls-native-loader.js', 'source-quality.js', 'store.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'player.js', 'recorder.js', 'tvlink.js', 'tizen-tv.js', 'dpad-nav.js', 'app.js'].forEach(f => {
+['net.js', 'serveurs.js', 'hls-native-loader.js', 'source-quality.js', 'store.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'player.js', 'recorder.js', 'tvlink.js', 'tizen-tv.js', 'clavier-ecran.js', 'dpad-nav.js', 'app.js'].forEach(f => {
   try { vm.runInContext(fs.readFileSync(WWW + '/' + f, 'utf8'), dom.getInternalVMContext(), { filename: f }); }
   catch (e) { erreurs.push(f + ' : ' + e.message); }
 });

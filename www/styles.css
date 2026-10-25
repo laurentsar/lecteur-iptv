@@ -851,3 +851,34 @@ body.tv .app-header .sub { font-size: 13px; }
 body.tv .tabs { padding: 3px 1vw calc(3px + env(safe-area-inset-bottom)); }
 body.tv .tab { flex-direction: row; justify-content: center; gap: 6px; padding: 7px 4px; }
 body.tv .tab-ic { font-size: 18px; }
+
+/* ---------- clavier à l'écran (clavier-ecran.js) ---------- */
+/* Au-dessus de tout, fenêtres et lecteur compris. */
+.clav-fond {
+  position: fixed; inset: 0; z-index: 10000; background: rgba(6,10,16,.78);
+  display: flex; align-items: flex-end; justify-content: center; padding: 16px;
+}
+.clav-carte {
+  width: 100%; max-width: 980px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; padding: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.6);
+}
+.clav-titre { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
+.clav-apercu {
+  min-height: 46px; padding: 10px 12px; margin-bottom: 10px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--accent); color: var(--text);
+  font-size: 20px; word-break: break-all;
+}
+.clav-apercu::after { content: '▏'; color: var(--accent); }
+.clav-apercu.vide { color: var(--muted); }
+.clav-rang { display: flex; gap: 6px; margin-top: 6px; }
+.clav-touche {
+  flex: 1 1 0; min-width: 0; padding: 10px 4px; font-size: 20px; border-radius: 8px;
+  background: var(--card2); color: var(--text); border: 2px solid var(--line); cursor: pointer;
+}
+.clav-touche:focus { outline: none; border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+.clav-large { flex: 1.6 1 0; font-size: 16px; }
+.clav-espace { flex: 4 1 0; font-size: 16px; }
+.clav-raccourci { font-size: 14px; }
+.clav-maj.on { color: var(--accent); }
+.clav-actions .clav-touche { font-size: 16px; }
+.clav-valider { background: var(--accent-dim); color: #fff; }
