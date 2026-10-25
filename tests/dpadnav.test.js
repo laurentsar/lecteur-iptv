@@ -131,5 +131,18 @@ console.log('\n— Champ texte atteint à la flèche : clavier retenu, OK l\'ouv
   verifie('au toucher : inputmode d\'origine rendu', b.getAttribute('inputmode') === 'url');
 }
 
+console.log('\n— TV Samsung : OK laisse la TV ouvrir son clavier —');
+{
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM('<input id="a" type="text">');
+  const w = dom.window, doc = w.document;
+  const a = doc.getElementById('a');
+  const avant = global.TizenTV;
+  global.TizenTV = { actif: true };
+  D.focusSansClavier(a);
+  verifie('focus posé sans inputmode=none', doc.activeElement === a && !a.hasAttribute('inputmode'));
+  global.TizenTV = avant;
+}
+
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);

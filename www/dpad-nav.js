@@ -216,8 +216,13 @@
     if (avant === SANS_ATTR) el.removeAttribute('inputmode'); else el.setAttribute('inputmode', avant);
   }
 
+  // Sur TV Samsung, le clavier ne s'ouvre jamais tout seul au focus : pas
+  // besoin de le retenir, et inputmode="none" l'empêchait ensuite de
+  // s'ouvrir sur OK.
+  function surTizen() { return !!(global.TizenTV && global.TizenTV.actif); }
+
   function focusSansClavier(el) {
-    if (estChampTexte(el) && !el.hasAttribute('data-dpad-im')) {
+    if (estChampTexte(el) && !el.hasAttribute('data-dpad-im') && !surTizen()) {
       el.setAttribute('data-dpad-im', el.hasAttribute('inputmode') ? el.getAttribute('inputmode') : SANS_ATTR);
       el.setAttribute('inputmode', 'none');
       var fin = function () {
@@ -287,6 +292,14 @@
     var el = document.activeElement;
     if (!el || e.defaultPrevented) return;
 
+    // TV Samsung : c'est l'action par défaut de OK sur le champ qui ouvre le
+    // clavier de la TV. L'annuler (et refaire le focus plus tard, hors du
+    // geste) le laissait fermé : impossible de saisir l'adresse d'une
+    // playlist ou un code (constaté sur la Samsung, v2.94).
+    if (e.key !== ' ' && estChampTexte(el) && surTizen()) {
+      rendreClavier(el);
+      return;
+    }
     // OK sur un champ sélectionné à la flèche : ouvrir le clavier maintenant.
     if (e.key !== ' ' && estChampTexte(el) && el.hasAttribute('data-dpad-im')) {
       e.preventDefault();
