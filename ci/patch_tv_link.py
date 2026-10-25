@@ -77,9 +77,14 @@ final class TvLink {
     static final int PORT = 47800;
     static final String HEADER = "X-Lecteur-IPTV";
     private static final int MAX_BODY = 64 * 1024;
+    // Configuration envoyée depuis le téléphone (playlists, favoris…) :
+    // plus grosse qu'une chaîne, favoris compris.
+    private static final int MAX_CONFIG = 4 * 1024 * 1024;
 
     interface Receiver {
         void onPlay(JSONObject media);
+
+        void onConfig(String from, String config);
     }
 
     interface Discovery {
@@ -334,7 +339,8 @@ final class TvLink {
                 respond(out, 200, info.toString());
                 return;
             }
-            if (!method.equals("POST") || !path.equals("/play")) {
+            boolean config = path.equals("/config");
+            if (!method.equals("POST") || !(path.equals("/play") || config)) {
                 respond(out, 404, "{\\"error\\":\\"introuvable\\"}");
                 return;
             }
@@ -342,7 +348,7 @@ final class TvLink {
                 respond(out, 403, "{\\"error\\":\\"en-tete manquant\\"}");
                 return;
             }
-            if (length <= 0 || length > MAX_BODY) {
+            if (length <= 0 || length > (config ? MAX_CONFIG : MAX_BODY)) {
                 respond(out, 413, "{\\"error\\":\\"taille\\"}");
                 return;
             }
@@ -354,6 +360,19 @@ final class TvLink {
                     break;
                 }
                 read += n;
+            }
+            if (config) {
+                // { from: "Téléphone de …", config: "<JSON de Store.exportConfig>" }
+                // La page demande confirmation sur la TV avant d'importer.
+                JSONObject envoi = new JSONObject(new String(body, 0, read, StandardCharsets.UTF_8));
+                String contenu = envoi.optString("config", "");
+                if (contenu.isEmpty()) {
+                    respond(out, 400, "{\\"error\\":\\"configuration vide\\"}");
+                    return;
+                }
+                respond(out, 200, "{\\"ok\\":true}");
+                receiver.onConfig(envoi.optString("from", ""), contenu);
+                return;
             }
             JSONObject media = new JSONObject(new String(body, 0, read, StandardCharsets.UTF_8));
             if (!acceptable(media.optString("url", ""))) {
@@ -609,6 +628,11 @@ final class TvLink {
     }
 
     static void send(final String host, final int port, final JSONObject media, final Result result) {
+        send(host, port, "/play", media, result);
+    }
+
+    static void send(final String host, final int port, final String path, final JSONObject media,
+            final Result result) {
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -619,7 +643,7 @@ final class TvLink {
                         continue;
                     }
                     essais += (essais.isEmpty() ? "" : ", ") + h + ":" + port;
-                    if (tryOne(h, port, media, result)) {
+                    if (tryOne(h, port, path, media, result)) {
                         return;
                     }
                 }
@@ -633,14 +657,14 @@ final class TvLink {
 
     // true si la TV a répondu (succès ou refus, déjà signalé) ; false si
     // elle est injoignable à cette adresse, pour passer à la suivante.
-    private static boolean tryOne(String host, int port, JSONObject media, Result result) {
+    private static boolean tryOne(String host, int port, String path, JSONObject media, Result result) {
                 HttpURLConnection conn = null;
                 try {
                     String h = host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host;
-                    URL url = new URL("http", h, port, "/play");
+                    URL url = new URL("http", h, port, path);
                     conn = (HttpURLConnection) url.openConnection();
                     conn.setConnectTimeout(4000);
-                    conn.setReadTimeout(6000);
+                    conn.setReadTimeout(15000);
                     conn.setRequestMethod("POST");
                     conn.setDoOutput(true);
                     conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -654,7 +678,9 @@ final class TvLink {
                     if (code == 200) {
                         result.onDone(true, "");
                     } else if (code == 400) {
-                        result.onDone(false, "la TV refuse ce type de lien");
+                        result.onDone(false, "la TV refuse cet envoi");
+                    } else if (code == 404) {
+                        result.onDone(false, "mets à jour Lecteur IPTV sur la TV");
                     } else {
                         result.onDone(false, "réponse inattendue de la TV (" + code + ")");
                     }
@@ -693,6 +719,15 @@ public class TvLinkPlugin extends Plugin {
                 @Override
                 public void onPlay(JSONObject media) {
                     received(media);
+                }
+
+                @Override
+                public void onConfig(String from, String config) {
+                    JSObject data = new JSObject();
+                    data.put("from", from);
+                    data.put("config", config);
+                    // Conservé si la page n'écoute pas encore.
+                    notifyListeners("config", data, true);
                 }
             });
         }
@@ -796,6 +831,34 @@ public class TvLinkPlugin extends Plugin {
         JSONObject media = TvLink.media(url, call.getString("title", ""), call.getBoolean("live", true),
                 call.getString("logo", ""), call.getString("epgKey", ""));
         TvLink.send(host, call.getInt("port", TvLink.PORT), media, new TvLink.Result() {
+            @Override
+            public void onDone(boolean ok, String message) {
+                if (ok) {
+                    call.resolve();
+                } else {
+                    call.reject(message);
+                }
+            }
+        });
+    }
+
+    @PluginMethod
+    public void sendConfig(final PluginCall call) {
+        String host = call.getString("host", "");
+        String config = call.getString("config", "");
+        if (host.isEmpty() || config.isEmpty()) {
+            call.reject("adresse ou configuration manquante");
+            return;
+        }
+        JSONObject envoi = new JSONObject();
+        try {
+            envoi.put("from", TvLink.deviceName(getContext()));
+            envoi.put("config", config);
+        } catch (org.json.JSONException e) {
+            call.reject("configuration illisible");
+            return;
+        }
+        TvLink.send(host, call.getInt("port", TvLink.PORT), "/config", envoi, new TvLink.Result() {
             @Override
             public void onDone(boolean ok, String message) {
                 if (ok) {

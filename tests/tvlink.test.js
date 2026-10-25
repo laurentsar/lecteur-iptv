@@ -27,6 +27,7 @@ function page(infoTv, avecPlugin = true) {
           startDiscovery: () => { journal.recherche++; return Promise.resolve(); },
           stopDiscovery: () => { journal.arret++; return Promise.resolve(); },
           openScreenCast: () => { journal.partage = (journal.partage || 0) + 1; return Promise.resolve(); },
+          sendConfig: (o) => { journal.configs = (journal.configs || []).concat([o]); return Promise.resolve(); },
           send: (o) => { journal.envois.push(o); return o.host === '10.0.0.99' ? Promise.reject(new Error('TV injoignable')) : Promise.resolve(); }
         }
       }
@@ -65,6 +66,33 @@ function page(infoTv, avecPlugin = true) {
     const e = journal.envois[0] || {};
     verifie('chaîne envoyée à la bonne TV', e.host === '192.168.1.30' && e.port === 47800 && e.url === 'http://srv/live/1.ts' && e.title === 'TF1' && e.epgKey === 'tf1');
     verifie('fenêtre refermée, recherche arrêtée, rappel fait', !w.document.querySelector('.tvlink-fond') && journal.arret === 1 && envoyeA === 'Fire TV du salon');
+  }
+
+  console.log('Téléphone : envoi de la configuration');
+  {
+    const { w, journal } = page({ tv: false });
+    let envoyeA = null;
+    w.TvLinkUI.envoyerConfig('{"v":1,"playlists":[{"nom":"Std"}]}', nom => { envoyeA = nom; });
+    await attendre(10);
+    verifie('pas de « Partage d\'écran » pour la configuration', !w.document.querySelector('.tvlink-carte .tvlink-partage'));
+    journal.ecouteurs.device({ name: 'Fire TV du salon', host: '192.168.1.30', port: 47800 });
+    w.document.querySelector('.tvlink-carte .version-item').click();
+    await attendre(10);
+    const c = (journal.configs || [])[0] || {};
+    verifie('configuration envoyée à la TV choisie', c.host === '192.168.1.30' && c.port === 47800 && /"Std"/.test(c.config));
+    verifie('fenêtre refermée, rappel fait', !w.document.querySelector('.tvlink-fond') && envoyeA === 'Fire TV du salon');
+  }
+
+  console.log('TV : configuration reçue');
+  {
+    const { w, journal } = page({ tv: true, receiving: true, name: 'Fire TV', ip: '192.168.1.30', port: 47800 });
+    await attendre(10);
+    journal.ecouteurs.config({ from: 'Téléphone de L', config: '{"v":1}' });
+    let recue = null;
+    w.TvLinkUI.onConfig(c => { recue = c; });
+    verifie('reçue avant l\'abonnement de l\'appli : transmise ensuite', recue && recue.from === 'Téléphone de L');
+    journal.ecouteurs.config({ from: 'B', config: '{}' });
+    verifie('reçue après : transmise aussitôt', recue.from === 'B');
   }
 
   console.log('Téléphone : partage d\'écran (Fire TV sous Vega OS)');
