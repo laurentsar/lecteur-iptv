@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Relaie les touches CHAÎNE +/− de la télécommande à la page (android/ est
+"""Relaie les touches CHAÎNE +/− et OK de la télécommande à la page (android/ est
 régénéré à chaque build, donc ce script tourne à chaque fois).
 
 Sur une télé Android, KEYCODE_CHANNEL_UP/CHANNEL_DOWN sont consommées par le
@@ -33,10 +33,22 @@ METHOD = """
             }
             return true;
         }
+        // Bouton OK : la WebView le garde parfois pour elle quand le focus
+        // est dans un champ texte, et la page ne voit alors jamais son
+        // « Entrée » (Fire TV). On lui signale chaque appui à part, par un
+        // évènement `tvok` qui ouvre le clavier à l'écran (voir
+        // www/dpad-nav.js). La touche n'est pas consommée.
+        if (code == android.view.KeyEvent.KEYCODE_DPAD_CENTER && event.getAction() == android.view.KeyEvent.ACTION_UP) {
+            sendJs("window.dispatchEvent(new Event('tvok'))");
+        }
         return super.dispatchKeyEvent(event);
     }
 
     private void sendChannelStep(final int delta) {
+        sendJs("window.dispatchEvent(new CustomEvent('tvchannel',{detail:" + delta + "}))");
+    }
+
+    private void sendJs(final String js) {
         final com.getcapacitor.Bridge bridge = getBridge();
         if (bridge == null || bridge.getWebView() == null) return;
         // evaluateJavascript exige le thread de l'interface.
@@ -44,8 +56,7 @@ METHOD = """
             @Override
             public void run() {
                 if (bridge.getWebView() == null) return;
-                bridge.getWebView().evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('tvchannel',{detail:" + delta + "}))", null);
+                bridge.getWebView().evaluateJavascript(js, null);
             }
         });
     }

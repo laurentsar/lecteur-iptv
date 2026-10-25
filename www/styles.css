@@ -882,3 +882,15 @@ body.tv .tab-ic { font-size: 18px; }
 .clav-maj.on { color: var(--accent); }
 .clav-actions .clav-touche { font-size: 16px; }
 .clav-valider { background: var(--accent-dim); color: #fff; }
+
+/* Bouton ⌨️ des champs : seulement quand la page est pilotée aux flèches. */
+.clav-champ { display: contents; }
+.clav-ouvrir { display: none; }
+html.telecommande .clav-champ { display: flex; gap: 6px; align-items: stretch; width: 100%; }
+html.telecommande .clav-champ > input, html.telecommande .clav-champ > .champ-rech,
+html.telecommande .clav-champ > textarea { flex: 1 1 auto; min-width: 0; }
+html.telecommande .clav-ouvrir {
+  display: block; flex: 0 0 auto; padding: 0 12px; font-size: 20px; border-radius: 10px;
+  background: var(--card2); border: 2px solid var(--line); color: var(--text); cursor: pointer;
+}
+html.telecommande .clav-ouvrir:focus { outline: none; border-color: var(--accent); background: var(--accent-dim); }
