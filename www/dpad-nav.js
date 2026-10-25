@@ -314,21 +314,31 @@
    * pas la liste d'un <select> de façon utilisable dans une WebView de
    * téléviseur. Les deux se règlent ici.
    */
+  /* Champ qui attend le clavier à l'écran (clavier-ecran.js) sur OK.
+   * Celui de l'appareil ne s'ouvrait pas sur la Fire TV ni sur la Samsung —
+   * impossible de saisir l'adresse d'une playlist. Il reste accessible par
+   * le bouton « Clavier de l'appareil ». Exclus : un champ où l'on a déjà
+   * tapé ou touché du doigt (le clavier de l'appareil y marche, OK garde son
+   * rôle : valider une recherche…), et un champ pour lequel on a demandé le
+   * clavier de l'appareil (sur la Samsung, l'action par défaut de OK
+   * l'ouvre : on la laisse faire). */
+  function attendClavier(el) {
+    return estChampTexte(el) && !el.hasAttribute('data-clav-saisi') && !el.hasAttribute('data-clav-natif');
+  }
+
+  function ouvrirSurOk() {
+    var el = document.activeElement;
+    if (!attendClavier(el) || !global.ClavierEcran || global.ClavierEcran.estOuvert()) return;
+    global.ClavierEcran.ouvrir(el, clavierAppareil);
+  }
+
   function surEntree(e) {
-    if (e.key !== 'Enter' && e.key !== ' ' && e.keyCode !== 13) return;
+    // 23 : bouton central (DPAD_CENTER) tel que certaines WebView le livrent.
+    if (e.key !== 'Enter' && e.key !== ' ' && e.keyCode !== 13 && e.keyCode !== 23) return;
     var el = document.activeElement;
     if (!el || e.defaultPrevented) return;
 
-    // OK sur un champ sélectionné à la flèche : clavier à l'écran
-    // (clavier-ecran.js). Celui de l'appareil ne s'ouvrait pas sur la Fire
-    // TV ni sur la Samsung — impossible de saisir l'adresse d'une playlist.
-    // Il reste accessible par le bouton « Clavier de l'appareil ».
-    // Champ où l'on a déjà tapé, ou touché du doigt : le clavier de
-    // l'appareil marche, OK garde son rôle (valider une recherche…).
-    if (e.key !== ' ' && estChampTexte(el) && !el.hasAttribute('data-clav-saisi')) {
-      // Clavier de l'appareil demandé : sur la Samsung, c'est l'action par
-      // défaut de OK qui l'ouvre — on la laisse faire.
-      if (el.hasAttribute('data-clav-natif')) return;
+    if (e.key !== ' ' && attendClavier(el)) {
       e.preventDefault();
       if (global.ClavierEcran) global.ClavierEcran.ouvrir(el, clavierAppareil);
       else clavierAppareil(el);
@@ -410,7 +420,20 @@
     // Remis à zéro à chaque arrivée dans le champ.
     var marquer = function (e) { if (estChampTexte(e.target)) e.target.setAttribute('data-clav-saisi', ''); };
     document.addEventListener('input', function (e) { if (e.isTrusted) marquer(e); }, true);
-    document.addEventListener('pointerdown', marquer, true);
+    // Seulement un vrai doigt (ou stylet) : la WebView d'une TV peut
+    // changer le bouton OK en « clic » de souris sur le champ, qui ne doit
+    // pas compter comme un toucher.
+    document.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') marquer(e);
+    }, true);
+    // Filets pour le bouton OK, quand la WebView le garde pour elle et que
+    // la page ne voit jamais son « Entrée » (Fire TV) : le relâchement de la
+    // touche, et l'évènement `tvok` que l'activité Android envoie elle-même
+    // pour chaque appui sur OK (ci/patch_tv_keys.py).
+    document.addEventListener('keyup', function (e) {
+      if (e.key === 'Enter' || e.keyCode === 13 || e.keyCode === 23) ouvrirSurOk();
+    });
+    global.addEventListener('tvok', ouvrirSurOk);
     document.addEventListener('focusin', function (e) {
       if (e.target && e.target.removeAttribute) e.target.removeAttribute('data-clav-saisi');
     }, true);
@@ -418,7 +441,7 @@
     document.addEventListener('keydown', surEntree);
   }
 
-  global.DpadNav = { pickCandidate: pickCandidate, rankCandidates: rankCandidates, estNavigable: estNavigable, focusSansClavier: focusSansClavier, FOCUSABLE_SELECTOR: FOCUSABLE_SELECTOR };
+  global.DpadNav = { pickCandidate: pickCandidate, rankCandidates: rankCandidates, estNavigable: estNavigable, focusSansClavier: focusSansClavier, clavierAppareil: clavierAppareil, FOCUSABLE_SELECTOR: FOCUSABLE_SELECTOR };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 if (typeof module !== 'undefined' && module.exports) module.exports = globalThis.DpadNav;

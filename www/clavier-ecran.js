@@ -4,8 +4,9 @@
  * 7) comme sur la TV Samsung, OK sur l'URL de la playlist ne faisait rien
  * apparaître — impossible d'ajouter une playlist sans clavier physique. Ce
  * clavier-ci est fait de simples boutons de la page : il marche donc partout
- * où la navigation D-pad marche (voir dpad-nav.js, qui l'ouvre sur OK dans
- * un champ texte atteint à la flèche).
+ * où la navigation D-pad marche. Il s'ouvre sur OK dans un champ texte
+ * (dpad-nav.js), et par le bouton ⌨️ ajouté à côté de chaque champ dès que
+ * la page est pilotée aux flèches.
  *
  * Disposition AZERTY, plus les morceaux qui reviennent dans une adresse de
  * playlist (http://, :8080, .m3u…) pour épargner des dizaines d'appuis. Le
@@ -153,5 +154,46 @@
     if (premier) premier.focus();
   }
 
-  global.ClavierEcran = { ouvrir: ouvrir, fermer: fermer, estOuvert: estOuvert };
+  /* Bouton ⌨️ à côté de chaque champ, dès que la page est pilotée aux
+   * flèches. Le bouton OK d'une télécommande marche toujours sur un bouton
+   * (c'est avec lui qu'on valide tout le reste) : c'est la voie qui ne
+   * dépend pas de la façon dont la WebView traite OK dans un champ texte. */
+  var CHAMP = 'input[type="text"], input[type="url"], input[type="search"], input[type="password"], input[type="email"], input[type="tel"], input[type="number"], input:not([type]), textarea';
+
+  function equiper() {
+    var champs = document.querySelectorAll(CHAMP);
+    for (var i = 0; i < champs.length; i++) {
+      var input = champs[i];
+      if (input.hasAttribute('data-clav-equipe') || input === document.activeElement) continue;
+      if (input.closest && input.closest('#clavierEcran')) continue;
+      if (input.readOnly || input.disabled) continue;
+      input.setAttribute('data-clav-equipe', '');
+      // Champ de recherche : déjà enveloppé avec sa croix d'effacement.
+      var cible = input.parentNode && input.parentNode.classList &&
+        input.parentNode.classList.contains('champ-rech') ? input.parentNode : input;
+      if (!cible.parentNode) continue;
+      var wrap = el('span', 'clav-champ');
+      cible.parentNode.insertBefore(wrap, cible);
+      wrap.appendChild(cible);
+      var b = el('button', 'clav-ouvrir', '⌨️');
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Clavier à l\'écran');
+      (function (input) {
+        b.addEventListener('click', function () {
+          ouvrir(input, global.DpadNav && global.DpadNav.clavierAppareil);
+        });
+      })(input);
+      wrap.appendChild(b);
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('keydown', function (e) {
+      if (!/^Arrow/.test(e.key || '')) return;
+      document.documentElement.classList.add('telecommande');
+      equiper();
+    }, true);
+  }
+
+  global.ClavierEcran = { equiper: equiper, ouvrir: ouvrir, fermer: fermer, estOuvert: estOuvert };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -89,9 +89,46 @@ w.ClavierEcran.fermer(false);
 console.log('\n— Champ touché du doigt : pas de clavier à l\'écran —');
 doc.getElementById('autre').focus();
 url.focus();
-url.dispatchEvent(new w.Event('pointerdown', { bubbles: true }));
+const souris = new w.Event('pointerdown', { bubbles: true });
+souris.pointerType = 'mouse';
+url.dispatchEvent(souris);
+ok_();
+verifie('« clic » de souris venu du bouton OK : clavier ouvert quand même', !!doc.getElementById('clavierEcran'));
+w.ClavierEcran.fermer(false);
+const doigt = new w.Event('pointerdown', { bubbles: true });
+doigt.pointerType = 'touch';
+url.dispatchEvent(doigt);
 ok_();
 verifie('rien ne s\'ouvre', !doc.getElementById('clavierEcran'));
+
+console.log('\n— OK que la page ne voit pas en keydown (Fire TV) —');
+doc.getElementById('autre').focus();
+w.DpadNav.focusSansClavier(url);
+w.dispatchEvent(new w.Event('tvok'));
+verifie('évènement natif tvok -> clavier ouvert', !!doc.getElementById('clavierEcran'));
+const touche1 = doc.activeElement;
+w.dispatchEvent(new w.Event('tvok'));
+verifie('second tvok : rien ne bouge', doc.activeElement === touche1 && doc.querySelectorAll('#clavierEcran').length === 1);
+w.ClavierEcran.fermer(false);
+url.dispatchEvent(new w.KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+verifie('relâchement de OK seul -> clavier ouvert', !!doc.getElementById('clavierEcran'));
+w.ClavierEcran.fermer(false);
+url.dispatchEvent(new w.KeyboardEvent('keydown', { keyCode: 23, bubbles: true, cancelable: true }));
+verifie('keydown DPAD_CENTER (23) -> clavier ouvert', !!doc.getElementById('clavierEcran'));
+w.ClavierEcran.fermer(false);
+
+console.log('\n— Bouton ⌨️ à côté des champs, dès qu\'on pilote aux flèches —');
+doc.getElementById('autre').focus();
+doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+verifie('page marquée « télécommande »', doc.documentElement.classList.contains('telecommande'));
+const bouton = url.parentNode.querySelector('.clav-ouvrir');
+verifie('bouton ⌨️ ajouté à côté du champ', !!bouton && url.parentNode.classList.contains('clav-champ'));
+verifie('un seul bouton par champ', (doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })),
+  doc.querySelectorAll('.clav-ouvrir').length === 2), doc.querySelectorAll('.clav-ouvrir').length);
+bouton.click();
+verifie('⌨️ ouvre le clavier pour ce champ', !!doc.getElementById('clavierEcran'));
+appuie('Tout effacer'); appuie('1'); appuie('✔ Valider');
+verifie('valeur écrite', url.value === '1', url.value);
 
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);
