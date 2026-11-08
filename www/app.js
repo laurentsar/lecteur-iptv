@@ -592,21 +592,12 @@
     quitterAppli();
   }
 
-  // Quitter ferme l'appli pour de bon : processus, radio en arrière-plan et
-  // enregistrement en cours compris, rien ne reste derrière (voir
-  // ci/patch_exit.py côté Android). Un enregistrement en cours serait
-  // coupé : on demande d'abord. Les enregistrements programmés, eux,
-  // repartent seuls à l'heure dite.
+  // Quitter ferme l'appli pour de bon : processus et radio en arrière-plan
+  // compris, rien ne reste derrière (voir ci/patch_exit.py côté Android).
+  // Un enregistrement en cours, lui, continue jusqu'au bout.
   function quitterAppli() {
     if (window.TizenTV && TizenTV.actif) { TizenTV.quitter(); return; }
-    if (!(window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App && Capacitor.Plugins.App.exitApp)) return;
-    var sortir = function () { Capacitor.Plugins.App.exitApp(); };
-    if (!(window.Recorder && Recorder.isAvailable())) { sortir(); return; }
-    Recorder.isRecording().then(function (r) {
-      if (!r || !r.recording) { sortir(); return; }
-      askConfirm('Un enregistrement est en cours : quitter l\'appli l\'arrête. Quitter quand même ?', 'Quitter')
-        .then(function (ok) { if (ok) sortir(); });
-    }).catch(sortir);
+    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App && Capacitor.Plugins.App.exitApp) Capacitor.Plugins.App.exitApp();
   }
   // Touche Retour de la télécommande Samsung (voir tizen-tv.js).
   window.AppNav.back = goBack;
