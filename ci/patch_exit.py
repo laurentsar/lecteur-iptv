@@ -11,10 +11,11 @@ carte dans les applis récentes, et le service de radio en arrière-plan
 restait ainsi « ouvert » derrière les autres applis.
 
 Ici, la dernière activité qui se termine retire aussi sa tâche des récents
-(finishAndRemoveTask), arrête radio et enregistrement en cours (la page
-demande confirmation avant, voir goBack dans app.js), puis termine le
-processus. Les enregistrements PROGRAMMÉS ne sont pas touchés : leur alarme
-(AlarmManager) relance l'appli à l'heure dite.
+(finishAndRemoveTask), arrête la radio, puis termine le processus. Seule
+exception : un enregistrement en cours continue jusqu'au bout (le processus
+reste alors en vie pour lui seul). Les enregistrements PROGRAMMÉS ne sont
+pas touchés non plus : leur alarme (AlarmManager) relance l'appli à l'heure
+dite.
 
 Idempotent.
 """
@@ -47,10 +48,11 @@ METHOD = """
         } catch (Exception e) {
             // pas lancé
         }
-        try {
-            stopService(new android.content.Intent(this, RecordingService.class));
-        } catch (Exception e) {
-            // pas lancé
+        // Enregistrement en cours : il continue jusqu'au bout (service au
+        // premier plan, avec sa notification). Le processus reste donc en
+        // vie pour lui ; le service s'arrête de lui-même à la fin.
+        if (RecordingService.isRunning()) {
+            return;
         }
         // Court délai : laisse le système enregistrer l'arrêt des services,
         // sinon un service START_STICKY serait relancé après la fin forcée.
