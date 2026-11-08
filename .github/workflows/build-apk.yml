@@ -66,6 +66,7 @@ jobs:
         ci/patch_player_display.py
         ci/patch_tv_keys.py
         ci/patch_tv_focus.py
+        ci/patch_exit.py
         ci/patch_abi.py
         ci/set_version.py
         ci/set_icons.py
