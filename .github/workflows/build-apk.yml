@@ -46,7 +46,7 @@ jobs:
     # vraisemblablement une règle de protection des tags) — à remplacer par
     # @v2 une fois ce tag créé (README d'app-kit : v1 reste immuable, tout
     # changement de comportement se publie en v2).
-    uses: laurentsar/app-kit/.github/workflows/build-apk.yml@57a5df8c62ecbd78c1ae89849c4398c0b7a2b408
+    uses: laurentsar/app-kit/.github/workflows/build-apk.yml@5bee0332a83002425afa69d11a89b8ec2363d11d
     with:
       apk_name: lecteur-iptv
       release_name: Lecteur IPTV
