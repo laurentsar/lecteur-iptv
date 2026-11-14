@@ -203,6 +203,57 @@
     return { fermer: fermer };
   }
 
+  // ---------- côté TV : saisie par QR code ----------
+  // La TV sert elle-même une page de formulaire (ci/patch_tv_link.py,
+  // /saisie) : le téléphone la scanne et l'ouvre dans son navigateur, sans
+  // appli à installer. Code à usage unique dans l'adresse ; la playlist
+  // reçue passe par la même confirmation que l'envoi depuis l'appli.
+  var fenetreQr = null;
+
+  function fermerQr() {
+    var P = plugin();
+    if (P && P.oublierSaisie) P.oublierSaisie().catch(function () {});
+    if (fenetreQr && fenetreQr.parentNode) fenetreQr.parentNode.removeChild(fenetreQr);
+    fenetreQr = null;
+  }
+
+  function saisieQr() {
+    var P = plugin();
+    if (!P || !P.saisieUrl || fenetreQr) return;
+    P.saisieUrl().then(function (r) {
+      var fond = el('div', 'tvlink-fond');
+      var carte = el('div', 'remote-panel-card tvlink-carte qr-carte');
+      carte.setAttribute('role', 'dialog');
+      carte.appendChild(el('div', 'tracks-title', '📱 Saisir depuis le téléphone'));
+      carte.appendChild(el('p', 'hint', 'Scanne ce code avec l\'appareil photo du téléphone (même wifi que la TV), ' +
+        'remplis la page qui s\'ouvre, puis accepte sur la TV.'));
+      var zone = el('div', 'qr-zone');
+      if (global.qrcode) {
+        var qr = global.qrcode(0, 'M');
+        qr.addData(r.url);
+        qr.make();
+        zone.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 3, scalable: true });
+      }
+      carte.appendChild(zone);
+      carte.appendChild(el('p', 'hint qr-url', 'Ou tape cette adresse dans le navigateur : ' + r.url));
+      var fermer = el('button', 'ghost', 'Fermer');
+      fermer.addEventListener('click', fermerQr);
+      carte.appendChild(fermer);
+      fond.appendChild(carte);
+      fond.addEventListener('click', function (e) { if (e.target === fond) fermerQr(); });
+      document.body.appendChild(fond);
+      fenetreQr = fond;
+      fermer.focus();
+    }).catch(function (e) {
+      if (global.AppToast) global.AppToast('QR code indisponible : ' + ((e && e.message) || e));
+    });
+  }
+
+  // Le bouton n'a de sens que sur la TV qui reçoit (appli ouverte, wifi).
+  function whenReceiver(cb) {
+    info().then(function (i) { if (i && i.tv && i.receiving) cb(); });
+  }
+
   // ---------- côté TV : réception ----------
   // Configuration reçue du téléphone : gardée jusqu'à ce que l'appli
   // (app.js) s'abonne, elle demande alors confirmation avant d'importer.
@@ -218,6 +269,7 @@
     if (!P) return;
     P.addListener('config', function (c) {
       if (!c || !c.config) return;
+      fermerQr();
       if (surConfig) surConfig(c); else configRecue = c;
     });
     P.addListener('play', function (m) {
@@ -241,5 +293,6 @@
 
   initReception();
 
-  global.TvLinkUI = { whenSender: whenSender, choisir: choisir, envoyerConfig: envoyerConfig, onConfig: onConfig, parseAdresse: parseAdresse };
+  global.TvLinkUI = { whenSender: whenSender, choisir: choisir, envoyerConfig: envoyerConfig, onConfig: onConfig,
+    saisieQr: saisieQr, fermerQr: fermerQr, qrOuvert: function () { return !!fenetreQr; }, whenReceiver: whenReceiver, parseAdresse: parseAdresse };
 })(window);

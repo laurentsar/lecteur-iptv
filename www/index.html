@@ -265,6 +265,9 @@
           </div>
           <div class="card">
             <h2 id="formPlaylistTitre">Ajouter une playlist</h2>
+            <div class="row qr-saisie-ligne" style="display:none; margin-bottom:8px">
+              <button class="primary btn-qr-saisie">📱 Saisir depuis le téléphone (QR code)</button>
+            </div>
             <div class="grid2">
               <label>Nom
                 <input type="text" id="pl_nom" placeholder="Mon fournisseur IPTV" />
@@ -503,7 +506,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '3.04';
+    window.APP_VERSION = '3.05';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans
@@ -534,6 +537,7 @@
   <script src="erreurs.js"></script>
   <script src="player.js"></script>
   <script src="recorder.js"></script>
+  <script src="vendor/qrcode.js"></script>
   <script src="tvlink.js"></script>
   <script src="tizen-tv.js"></script>
   <script src="clavier-ecran.js"></script>

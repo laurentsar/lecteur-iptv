@@ -27,6 +27,8 @@ function page(infoTv, avecPlugin = true) {
           startDiscovery: () => { journal.recherche++; return Promise.resolve(); },
           stopDiscovery: () => { journal.arret++; return Promise.resolve(); },
           openScreenCast: () => { journal.partage = (journal.partage || 0) + 1; return Promise.resolve(); },
+          saisieUrl: () => Promise.resolve({ url: 'http://192.168.1.30:47800/saisie?c=abcdefgh' }),
+          oublierSaisie: () => { journal.oubli = (journal.oubli || 0) + 1; return Promise.resolve(); },
           sendConfig: (o) => { journal.configs = (journal.configs || []).concat([o]); return Promise.resolve(); },
           send: (o) => { journal.envois.push(o); return o.host === '10.0.0.99' ? Promise.reject(new Error('TV injoignable')) : Promise.resolve(); }
         }
@@ -34,6 +36,7 @@ function page(infoTv, avecPlugin = true) {
     };
   }
   w.Player = { open: (url, titre, opts) => journal.ouverts.push({ url, titre, opts }) };
+  require('vm').runInContext(fs.readFileSync(require('path').join(__dirname, '..', 'www', 'vendor', 'qrcode.js'), 'utf8'), dom.getInternalVMContext(), { filename: 'qrcode.js' });
   require('vm').runInContext(CODE, dom.getInternalVMContext(), { filename: 'tvlink.js' });
   return { w, journal };
 }
@@ -93,6 +96,29 @@ function page(infoTv, avecPlugin = true) {
     verifie('reçue avant l\'abonnement de l\'appli : transmise ensuite', recue && recue.from === 'Téléphone de L');
     journal.ecouteurs.config({ from: 'B', config: '{}' });
     verifie('reçue après : transmise aussitôt', recue.from === 'B');
+  }
+
+  console.log('TV : saisie par QR code');
+  {
+    const { w, journal } = page({ tv: true, receiving: true, name: 'Fire TV', ip: '192.168.1.30', port: 47800 });
+    let recepteur = false;
+    w.TvLinkUI.whenReceiver(() => { recepteur = true; });
+    await attendre(10);
+    verifie('bouton QR proposé sur la TV qui reçoit', recepteur);
+    w.TvLinkUI.saisieQr();
+    await attendre(10);
+    const carte = w.document.querySelector('.qr-carte');
+    verifie('QR code affiché', !!carte && !!carte.querySelector('.qr-zone svg'));
+    verifie('adresse lisible affichée', carte && /192\.168\.1\.30:47800\/saisie\?c=abcdefgh/.test(carte.textContent));
+    journal.ecouteurs.config({ from: 'Téléphone (QR code)', config: '{"v":1}' });
+    verifie('playlist reçue : fenêtre QR refermée, code oublié', !w.TvLinkUI.qrOuvert() && journal.oubli === 1);
+  }
+  {
+    const { w } = page({ tv: false });
+    let recepteur = false;
+    w.TvLinkUI.whenReceiver(() => { recepteur = true; });
+    await attendre(10);
+    verifie('pas de bouton QR sur un téléphone', !recepteur);
   }
 
   console.log('Téléphone : partage d\'écran (Fire TV sous Vega OS)');
