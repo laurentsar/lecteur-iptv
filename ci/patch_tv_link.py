@@ -339,6 +339,19 @@ final class TvLink {
                 respond(out, 200, info.toString());
                 return;
             }
+            // Saisie depuis le navigateur d'un téléphone (QR code affiché sur
+            // la TV) : page de formulaire, puis envoi. Protégée par un code à
+            // usage unique contenu dans le QR code, et confirmée sur la TV.
+            String chemin = path, requete = "";
+            int interro = path.indexOf('?');
+            if (interro >= 0) {
+                chemin = path.substring(0, interro);
+                requete = path.substring(interro + 1);
+            }
+            if (chemin.equals("/saisie")) {
+                saisie(method, requete, in, length, out, receiver);
+                return;
+            }
             boolean config = path.equals("/config");
             if (!method.equals("POST") || !(path.equals("/play") || config)) {
                 respond(out, 404, "{\\"error\\":\\"introuvable\\"}");
@@ -390,6 +403,171 @@ final class TvLink {
                 // rien à faire
             }
         }
+    }
+
+    // ---------- saisie par QR code ----------
+
+    private static volatile String codeSaisie = "";
+
+    // Nouveau code à chaque affichage du QR code ; l'ancien ne vaut plus.
+    static String nouveauCodeSaisie() {
+        java.security.SecureRandom alea = new java.security.SecureRandom();
+        StringBuilder c = new StringBuilder();
+        for (int i = 0; i < 8; i++) {
+            c.append((char) ('a' + alea.nextInt(26)));
+        }
+        codeSaisie = c.toString();
+        return codeSaisie;
+    }
+
+    static void oublierCodeSaisie() {
+        codeSaisie = "";
+    }
+
+    private static java.util.Map<String, String> champs(String encode) {
+        java.util.Map<String, String> m = new java.util.HashMap<>();
+        if (encode == null || encode.isEmpty()) {
+            return m;
+        }
+        for (String paire : encode.split("&")) {
+            int egal = paire.indexOf('=');
+            String k = egal < 0 ? paire : paire.substring(0, egal);
+            String v = egal < 0 ? "" : paire.substring(egal + 1);
+            try {
+                m.put(java.net.URLDecoder.decode(k, "UTF-8"), java.net.URLDecoder.decode(v, "UTF-8").trim());
+            } catch (Exception e) {
+                // paire illisible : ignorée
+            }
+        }
+        return m;
+    }
+
+    private static boolean codeValide(String c) {
+        String attendu = codeSaisie;
+        return !attendu.isEmpty() && attendu.equals(c);
+    }
+
+    private static void saisie(String method, String requete, InputStream in, int length, OutputStream out,
+            Receiver receiver) throws Exception {
+        if (method.equals("GET")) {
+            String c = champs(requete).get("c");
+            if (!codeValide(c)) {
+                respondHtml(out, 403, page("Code expiré",
+                        "<p>Ce lien n'est plus valable. Affiche à nouveau le QR code sur la TV "
+                        + "(Réglages → Playlists → Saisir depuis le téléphone) et rescanne-le.</p>"));
+                return;
+            }
+            respondHtml(out, 200, formulaire(c));
+            return;
+        }
+        if (!method.equals("POST") || length <= 0 || length > 16384) {
+            respondHtml(out, 400, page("Envoi refusé", "<p>Requête invalide.</p>"));
+            return;
+        }
+        byte[] body = new byte[length];
+        int read = 0;
+        while (read < length) {
+            int n = in.read(body, read, length - read);
+            if (n < 0) {
+                break;
+            }
+            read += n;
+        }
+        java.util.Map<String, String> f = champs(new String(body, 0, read, StandardCharsets.UTF_8));
+        if (!codeValide(f.get("c"))) {
+            respondHtml(out, 403, page("Code expiré",
+                    "<p>Ce lien n'est plus valable : rescanne le QR code affiché sur la TV.</p>"));
+            return;
+        }
+        JSONObject pl = new JSONObject();
+        String nom = f.containsKey("nom") && !f.get("nom").isEmpty() ? f.get("nom") : "Ma playlist";
+        pl.put("nom", nom);
+        if ("xtream".equals(f.get("type"))) {
+            if (empty(f.get("serveur")) || empty(f.get("utilisateur")) || empty(f.get("motDePasse"))) {
+                respondHtml(out, 400, page("Champs manquants",
+                        "<p>Serveur, identifiant et mot de passe sont nécessaires. Reviens en arrière pour compléter.</p>"));
+                return;
+            }
+            pl.put("type", "xtream");
+            pl.put("serveur", f.get("serveur"));
+            pl.put("utilisateur", f.get("utilisateur"));
+            pl.put("motDePasse", f.get("motDePasse"));
+        } else {
+            if (empty(f.get("m3uUrl"))) {
+                respondHtml(out, 400, page("Champ manquant",
+                        "<p>L'adresse de la playlist est nécessaire. Reviens en arrière pour la saisir.</p>"));
+                return;
+            }
+            pl.put("type", "m3u");
+            pl.put("m3uUrl", f.get("m3uUrl"));
+            if (!empty(f.get("epgUrl"))) {
+                pl.put("epgUrl", f.get("epgUrl"));
+            }
+        }
+        JSONObject cfg = new JSONObject();
+        cfg.put("v", 1);
+        cfg.put("playlists", new org.json.JSONArray().put(pl));
+        codeSaisie = "";   // usage unique
+        respondHtml(out, 200, page("Envoyé ✔",
+                "<p>« " + html(nom) + " » est arrivée sur la TV. Accepte-la à l'écran avec la télécommande.</p>"));
+        receiver.onConfig("Téléphone (QR code)", cfg.toString());
+    }
+
+    private static boolean empty(String s) {
+        return s == null || s.isEmpty();
+    }
+
+    private static String html(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&#39;");
+    }
+
+    private static String page(String titre, String corps) {
+        return "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
+                + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                + "<title>Lecteur IPTV</title><style>"
+                + "body{font-family:system-ui,sans-serif;background:#0b1420;color:#e7eef7;margin:0;padding:20px;line-height:1.45}"
+                + "h1{font-size:20px;color:#3fc7c7}label{display:block;margin:14px 0 4px;color:#92a5ba;font-size:14px}"
+                + "input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border-radius:10px;"
+                + "border:1px solid #223447;background:#101c2b;color:#e7eef7}"
+                + ".types{display:flex;gap:8px;margin-top:8px}.types label{flex:1;margin:0;padding:10px;border:1px solid #223447;"
+                + "border-radius:10px;text-align:center;color:#e7eef7}.types input{width:auto}"
+                + "button{margin-top:20px;width:100%;padding:14px;font-size:17px;border:0;border-radius:10px;"
+                + "background:#3fc7c7;color:#0b1420;font-weight:700}.hint{color:#92a5ba;font-size:13px}"
+                + "</style></head><body><h1>" + titre + "</h1>" + corps + "</body></html>";
+    }
+
+    private static String formulaire(String code) {
+        return page("📺 Ajouter une playlist à la TV",
+                "<form method='post' action='/saisie'>"
+                + "<input type='hidden' name='c' value='" + html(code) + "'>"
+                + "<label>Nom</label><input name='nom' placeholder='Mon fournisseur IPTV'>"
+                + "<div class='types'><label><input type='radio' name='type' value='m3u' checked onclick='voir()'> Playlist M3U</label>"
+                + "<label><input type='radio' name='type' value='xtream' onclick='voir()'> Compte Xtream</label></div>"
+                + "<div id='m3u'><label>URL de la playlist</label>"
+                + "<input name='m3uUrl' type='url' inputmode='url' autocapitalize='off' autocorrect='off' placeholder='https://…/get.php?username=…'>"
+                + "<label>URL EPG (programme TV, facultatif)</label>"
+                + "<input name='epgUrl' type='url' inputmode='url' autocapitalize='off' autocorrect='off' placeholder='https://…/xmltv.php?…'></div>"
+                + "<div id='xt' style='display:none'><label>Serveur</label>"
+                + "<input name='serveur' inputmode='url' autocapitalize='off' autocorrect='off' placeholder='http://serveur:8080'>"
+                + "<label>Identifiant</label><input name='utilisateur' autocapitalize='off' autocorrect='off'>"
+                + "<label>Mot de passe</label><input name='motDePasse' type='password'></div>"
+                + "<button type='submit'>Envoyer à la TV</button>"
+                + "<p class='hint'>Ce que tu saisis part directement à la TV, sur ton wifi — rien ne passe par internet.</p>"
+                + "</form><script>function voir(){var x=document.querySelector('input[value=xtream]').checked;"
+                + "document.getElementById('m3u').style.display=x?'none':'';"
+                + "document.getElementById('xt').style.display=x?'':'none';}</script>");
+    }
+
+    private static void respondHtml(OutputStream out, int code, String html) throws IOException {
+        byte[] body = html.getBytes(StandardCharsets.UTF_8);
+        String head = "HTTP/1.1 " + code + (code == 200 ? " OK" : " Error") + "\\r\\n"
+                + "Content-Type: text/html; charset=utf-8\\r\\n"
+                + "Cache-Control: no-store\\r\\n"
+                + "Content-Length: " + body.length + "\\r\\n"
+                + "Connection: close\\r\\n\\r\\n";
+        out.write(head.getBytes(StandardCharsets.US_ASCII));
+        out.write(body);
+        out.flush();
     }
 
     private static final Set<String> SCHEMES = new HashSet<>(
@@ -776,6 +954,26 @@ public class TvLinkPlugin extends Plugin {
         r.put("name", TvLink.deviceName(getContext()));
         r.put("ip", TvLink.localIp());
         call.resolve(r);
+    }
+
+    // QR code de saisie : adresse de la page servie par la TV elle-même, avec
+    // un code à usage unique (voir TvLink.saisie).
+    @PluginMethod
+    public void saisieUrl(PluginCall call) {
+        String ip = TvLink.localIp();
+        if (TvLink.port() <= 0 || ip.isEmpty()) {
+            call.reject("réception indisponible (pas de wifi, ou port occupé)");
+            return;
+        }
+        JSObject r = new JSObject();
+        r.put("url", "http://" + ip + ":" + TvLink.port() + "/saisie?c=" + TvLink.nouveauCodeSaisie());
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void oublierSaisie(PluginCall call) {
+        TvLink.oublierCodeSaisie();
+        call.resolve();
     }
 
     @PluginMethod

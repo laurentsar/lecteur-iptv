@@ -894,3 +894,10 @@ html.telecommande .clav-ouvrir {
   background: var(--card2); border: 2px solid var(--line); color: var(--text); cursor: pointer;
 }
 html.telecommande .clav-ouvrir:focus { outline: none; border-color: var(--accent); background: var(--accent-dim); }
+
+/* QR code de saisie (tvlink.js) : fond blanc, assez grand pour un scan à
+   quelques mètres de la TV. */
+.qr-carte { width: 420px; max-height: 90vh; }
+.qr-zone { background: #fff; border-radius: 12px; padding: 8px; margin: 10px auto; width: 260px; height: 260px; }
+.qr-zone svg { width: 100%; height: 100%; display: block; }
+.qr-url { word-break: break-all; }

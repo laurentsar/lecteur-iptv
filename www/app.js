@@ -564,6 +564,7 @@
   // ouverts en même temps.
   function goBack() {
     if (window.ClavierEcran && ClavierEcran.estOuvert()) { ClavierEcran.fermer(false); return; }
+    if (window.TvLinkUI && TvLinkUI.qrOuvert && TvLinkUI.qrOuvert()) { TvLinkUI.fermerQr(); return; }
     var confirmModal = $id('confirmModal');
     if (confirmModal && confirmModal.style.display !== 'none') { closeConfirmModal(false); return; }
     var pinModal = $id('pinModal');
@@ -1232,6 +1233,15 @@
   // Envoi de la configuration à la TV par le wifi (tvlink.js) : bouton
   // visible seulement sur un téléphone/tablette avec l'APK.
   if (window.TvLinkUI) {
+    // TV : saisie de la playlist depuis n'importe quel téléphone (QR code).
+    TvLinkUI.whenReceiver(function () {
+      state.qrSaisie = true;
+      Array.prototype.forEach.call(document.querySelectorAll('.qr-saisie-ligne'), function (l) { l.style.display = ''; });
+      if (isTabActive('accueil')) renderAccueil();
+    });
+    document.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('.btn-qr-saisie')) TvLinkUI.saisieQr();
+    });
     TvLinkUI.whenSender(function () {
       $id('envoiTvLigne').style.display = '';
       $id('envoiTvAide').style.display = '';
@@ -2982,7 +2992,12 @@
       var c = el('div', 'card');
       c.appendChild(el('h2', null, 'Bienvenue'));
       c.appendChild(el('p', 'hint', 'Ajoute une playlist M3U ou un compte Xtream Codes pour commencer.'));
-      var btn = el('button', 'primary', '🗂️ Ajouter une playlist');
+      if (state.qrSaisie) {
+        var qrBtn = el('button', 'primary btn-qr-saisie', '📱 Saisir depuis le téléphone (QR code)');
+        qrBtn.style.marginBottom = '8px';
+        c.appendChild(qrBtn);
+      }
+      var btn = el('button', state.qrSaisie ? 'ghost' : 'primary', '🗂️ Ajouter une playlist');
       btn.addEventListener('click', function () { goTab('reglages'); });
       c.appendChild(btn);
       container.appendChild(c);
