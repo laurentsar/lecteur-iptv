@@ -195,5 +195,23 @@
     }, true);
   }
 
-  global.ClavierEcran = { equiper: equiper, ouvrir: ouvrir, fermer: fermer, estOuvert: estOuvert };
+  // Texte tapé sur le téléphone (télécommande, tvlink.js) : ajouté au
+  // clavier ouvert, sinon au champ texte qui a le focus.
+  function texteRecu(t) {
+    if (!t) return;
+    if (fond) { ajouter(t); return; }
+    var ae = document.activeElement;
+    if (!ae || !(ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && /^(text|search|url|tel|email|password|number|)$/.test(ae.type || '')))) {
+      if (global.AppToast) global.AppToast('Sélectionne d’abord un champ sur la TV');
+      return;
+    }
+    ae.value = (ae.value || '') + t;
+    ae.dispatchEvent(new Event('input', { bubbles: true }));
+    ae.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  if (typeof global.addEventListener === 'function') {
+    global.addEventListener('tvtexte', function (e) { texteRecu(e && e.detail); });
+  }
+
+  global.ClavierEcran = { texteRecu: texteRecu, equiper: equiper, ouvrir: ouvrir, fermer: fermer, estOuvert: estOuvert };
 })(typeof window !== 'undefined' ? window : globalThis);

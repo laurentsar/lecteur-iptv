@@ -901,3 +901,12 @@ html.telecommande .clav-ouvrir:focus { outline: none; border-color: var(--accent
 .qr-zone { background: #fff; border-radius: 12px; padding: 8px; margin: 10px auto; width: 260px; height: 260px; }
 .qr-zone svg { width: 100%; height: 100%; display: block; }
 .qr-url { word-break: break-all; }
+
+/* Télécommande de la TV sur le téléphone (tvlink.js). */
+.pave-carte { width: 340px; }
+.pave-grille { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.pave-touche { padding: 14px 0; font-size: 18px; border-radius: 12px; background: var(--card2); color: var(--text); border: 1px solid var(--line); }
+.pave-touche:active { background: var(--accent-dim); }
+.pave-ok { background: var(--accent-dim); color: #fff; font-weight: 700; }
+.pave-ligne { display: flex; gap: 8px; margin-top: 8px; }
+.pave-ligne .pave-touche { flex: 1; font-size: 15px; }
