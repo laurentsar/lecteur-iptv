@@ -72,6 +72,49 @@
   var EPG_DESC_MS = 48 * 60 * 60 * 1000;
   var DESC_MAX = 600; // un résumé plus long ne tient de toute façon pas à l'écran
 
+  // APPAREIL À PETITE MÉMOIRE (Fire TV Stick : 1 Go pour tout le système) :
+  // fenêtre resserrée à aujourd'hui et demain. Le guide de huit jours d'un
+  // gros fournisseur y faisait ramer la WebView, voire fermer l'appli.
+  var LEGER_PASSE_MS = 6 * 60 * 60 * 1000;
+  var LEGER_DESC_MS = 24 * 60 * 60 * 1000;
+
+  function appareilLeger() {
+    var nav = global.navigator || {};
+    if (typeof nav.deviceMemory === 'number') return nav.deviceMemory <= 2;
+    return /\bAFT[A-Z0-9]/.test(nav.userAgent || '');   // Fire TV (AFTSSS, AFTKA…)
+  }
+
+  // Fin de la fenêtre resserrée : demain à minuit, pour que « Demain » dans
+  // le Guide reste complet.
+  function finLegere(maintenant) {
+    var d = new Date(maintenant);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() + 2 * 24 * 60 * 60 * 1000;
+  }
+
+  /* Chaînes de la playlist, pour ne garder que leurs programmes : un XMLTV
+   * de fournisseur couvre souvent des milliers de chaînes du monde entier,
+   * dont l'abonné n'a qu'une partie. items = [{ epgKey, name }].
+   * Rend { ids, noms, signature } ou null (rien à filtrer). */
+  function chainesVoulues(items) {
+    if (!items || !items.length) return null;
+    var ids = {}, noms = {}, cles = [];
+    items.forEach(function (it) {
+      if (!it) return;
+      [it.epgKey, it.epgId].forEach(function (id) {
+        if (id && !ids[id]) { ids[id] = true; cles.push('i' + id); }
+      });
+      var n = normalizeChanName(it.name);
+      if (n && !noms[n]) { noms[n] = true; cles.push('n' + n); }
+    });
+    if (!cles.length) return null;
+    cles.sort();
+    var h = 5381;
+    var tout = cles.join('|');
+    for (var i = 0; i < tout.length; i++) h = ((h << 5) + h + tout.charCodeAt(i)) | 0;
+    return { ids: ids, noms: noms, signature: cles.length + '-' + (h >>> 0).toString(36) };
+  }
+
   function decodeEntities(text) {
     var s = text.replace(RE_CDATA, '$1');
     if (s.indexOf('&') === -1) return s.trim();
@@ -88,12 +131,44 @@
     }).trim();
   }
 
-  function parseXmltvText(text) {
+  // Identifiants XMLTV des chaînes voulues, d'après leur identifiant ou un
+  // de leurs noms d'affichage. null : aucun ne correspond (identifiants et
+  // noms sans rapport avec la playlist) — mieux vaut alors tout garder que
+  // rendre un guide vide.
+  function idsAGarder(text, voulues) {
+    if (!voulues) return null;
+    var garder = {}, n = 0, m;
+    RE_CHANNEL.lastIndex = 0;
+    while ((m = RE_CHANNEL.exec(text)) !== null) {
+      var id = RE_ATTR_ID.exec(m[1]);
+      if (!id || !id[1]) continue;
+      var ok = voulues.ids[id[1]] || voulues.noms[normalizeChanName(id[1])];
+      if (!ok) {
+        var nom;
+        RE_DISPLAY.lastIndex = 0;
+        while ((nom = RE_DISPLAY.exec(m[2])) !== null) {
+          if (voulues.noms[normalizeChanName(decodeEntities(nom[1]))]) { ok = true; break; }
+        }
+      }
+      if (ok && !garder[id[1]]) { garder[id[1]] = true; n++; }
+    }
+    // Les identifiants de la playlist valent aussi pour un XMLTV sans
+    // section <channel>.
+    Object.keys(voulues.ids).forEach(function (id) { garder[id] = true; });
+    return n ? garder : null;
+  }
+
+  // opts = { voulues (voir chainesVoulues), leger (fenêtre resserrée) }
+  function parseXmltvText(text, opts) {
+    opts = opts || {};
     if (text.indexOf('<programme') === -1 && text.indexOf('<tv') === -1) {
       throw new Error('XMLTV invalide (ou EPG compressé .gz non pris en charge)');
     }
     var maintenant = Date.now();
-    var min = maintenant - EPG_PASSE_MS, max = maintenant + EPG_FUTUR_MS;
+    var min = maintenant - (opts.leger ? LEGER_PASSE_MS : EPG_PASSE_MS);
+    var max = opts.leger ? finLegere(maintenant) : maintenant + EPG_FUTUR_MS;
+    var descMs = opts.leger ? LEGER_DESC_MS : EPG_DESC_MS;
+    var garder = idsAGarder(text, opts.voulues);
     var byChannel = {};
     var m;
     RE_PROGRAMME.lastIndex = 0;
@@ -101,6 +176,7 @@
       var attrs = m[1];
       var chan = RE_ATTR_CHANNEL.exec(attrs);
       if (!chan || !chan[1]) continue;
+      if (garder && !garder[chan[1]]) continue;
       var debut = RE_ATTR_START.exec(attrs), fin = RE_ATTR_STOP.exec(attrs);
       var start = debut ? parseXmltvDate(debut[1]) : null;
       var stop = fin ? parseXmltvDate(fin[1]) : null;
@@ -108,7 +184,7 @@
       var corps = m[2];
       var titre = RE_TITLE.exec(corps);
       var prog = { start: start, stop: stop, titre: titre ? decodeEntities(titre[1]) : '' };
-      if (start <= maintenant + EPG_DESC_MS) {
+      if (start <= maintenant + descMs) {
         var resume = RE_DESC.exec(corps);
         if (resume) {
           var texte = decodeEntities(resume[1]);
@@ -189,7 +265,7 @@
   // texte — sur l'APK Android, on passe par le réseau natif (Net) pour
   // éviter les blocages CORS des panels IPTV, comme pour les playlists et
   // l'API Xtream.
-  function fetchXmltv(url) {
+  function fetchXmltv(url, opts) {
     var bytesPromise = (global.Net && global.Net.isNative())
       ? global.Net.fetchBytes(url)
       : fetch(url).then(function (r) {
@@ -198,7 +274,7 @@
         });
     return bytesPromise.then(function (buf) {
       return looksGzip(buf) ? gunzipToText(buf) : new TextDecoder('utf-8').decode(buf);
-    }).then(parseXmltvText);
+    }).then(function (text) { return parseXmltvText(text, opts); });
   }
 
   function nowNext(byChannel, channelId, name, at) {
@@ -214,5 +290,7 @@
     return (now || next) ? { now: now, next: next } : null;
   }
 
-  global.Epg = { fetchXmltv: fetchXmltv, nowNext: nowNext, parseXmltvDate: parseXmltvDate, progsFor: progsFor, normalizeChanName: normalizeChanName };
+  global.Epg = { fetchXmltv: fetchXmltv, nowNext: nowNext, parseXmltvDate: parseXmltvDate, progsFor: progsFor,
+    normalizeChanName: normalizeChanName, chainesVoulues: chainesVoulues, appareilLeger: appareilLeger,
+    finLegere: finLegere, parseXmltvText: parseXmltvText };
 })(window);
