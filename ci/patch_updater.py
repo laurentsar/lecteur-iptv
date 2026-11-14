@@ -65,6 +65,18 @@ public class UpdatePlugin extends Plugin {
         final Context ctx = getContext();
         final File apkFile = new File(ctx.getCacheDir(), "lecteur-iptv-update.apk");
 
+        // Android 8+ (Fire OS 7 compris) : sans l'autorisation « installer des
+        // applis inconnues » accordée à CETTE appli, l'installateur ne
+        // s'affiche pas (ou se ferme aussitôt sur la Fire TV) et la bannière
+        // restait bloquée sur « Installation… ». On ouvre l'écran qui
+        // l'accorde, et la page explique quoi activer.
+        if (android.os.Build.VERSION.SDK_INT >= 26
+                && !ctx.getPackageManager().canRequestPackageInstalls()) {
+            ouvrirReglageSourcesInconnues(ctx);
+            call.reject("REQUEST_INSTALL_PACKAGES : autorisation « applis inconnues » manquante");
+            return;
+        }
+
         // Hors du thread principal : le téléchargement peut durer plusieurs
         // dizaines de secondes sur une connexion de boîtier TV.
         new Thread(new Runnable() {
@@ -185,6 +197,24 @@ public class UpdatePlugin extends Plugin {
             if (in != null) try { in.close(); } catch (IOException ignored) {}
             if (out != null) try { out.close(); } catch (IOException ignored) {}
             conn.disconnect();
+        }
+    }
+
+    private void ouvrirReglageSourcesInconnues(Context ctx) {
+        Intent[] essais = new Intent[] {
+            new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + ctx.getPackageName())),
+            new Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS),
+            new Intent(android.provider.Settings.ACTION_SETTINGS)
+        };
+        for (Intent i : essais) {
+            try {
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(i);
+                return;
+            } catch (Exception e) {
+                // écran absent sur cet appareil : suivant
+            }
         }
     }
 

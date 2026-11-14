@@ -137,11 +137,28 @@
     return r.width > 0 && r.height > 0;
   }
 
+  /* Fenêtre ouverte par-dessus la page (confirmation, code PIN, clavier à
+   * l'écran, choix d'une TV…) : les flèches restent dedans. Sans ça, le
+   * focus restait sur la page en dessous — sur la Fire TV, « Confirmer » la
+   * suppression d'un enregistrement était inatteignable à la télécommande.
+   * La plus récente (dernière dans la page) l'emporte. */
+  var FENETRES = '[data-dpad-piege], .version-picker, #dpadListe, .tvlink-fond';
+
+  function fenetreOuverte() {
+    var liste = document.querySelectorAll(FENETRES);
+    for (var i = liste.length - 1; i >= 0; i--) {
+      var f = liste[i];
+      if (f.style.display === 'none') continue;
+      if (f.getClientRects && !f.getClientRects().length && typeof window !== 'undefined' &&
+          window.getComputedStyle && window.getComputedStyle(f).display === 'none') continue;
+      return f;
+    }
+    return null;
+  }
+
   function candidats(exclu) {
     var out = [];
-    // Fenêtre qui garde le focus (clavier à l'écran) : les flèches ne
-    // doivent pas s'échapper vers la page en dessous.
-    var piege = document.querySelector('[data-dpad-piege]');
+    var piege = fenetreOuverte();
     var nodes = (piege || document).querySelectorAll(FOCUSABLE_SELECTOR);
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
@@ -270,6 +287,18 @@
     var ae = document.activeElement;
     if (ae && ae.isContentEditable) return;
     if (rendLaFleche(ae, direction)) return;
+
+    // Focus resté sur la page alors qu'une fenêtre est ouverte : on le
+    // ramène dans la fenêtre.
+    var fen = fenetreOuverte();
+    if (fen && ae && ae !== document.body && !fen.contains(ae)) {
+      var dedans = candidats(null);
+      if (dedans.length) {
+        e.preventDefault();
+        focusSansClavier(dedans[0]);
+        return;
+      }
+    }
 
     /* Aucun focus courant : on en pose un, au lieu de ne rien faire.
      *
@@ -439,6 +468,29 @@
     }, true);
     document.addEventListener('keydown', onKeydown);
     document.addEventListener('keydown', surEntree);
+
+    // Une fenêtre s'ouvre (style display changé, ou ajoutée à la page) : le
+    // focus y entre tout de suite, sinon OK agirait encore sur l'élément en
+    // dessous (un deuxième « Supprimer »…).
+    if (typeof MutationObserver !== 'undefined') {
+      var entrer = function () {
+        var fen = fenetreOuverte();
+        var ae = document.activeElement;
+        if (!fen || (ae && fen.contains(ae))) return;
+        var dedans = candidats(null);
+        if (dedans.length) focusSansClavier(dedans[0]);
+      };
+      new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var t = muts[i].target;
+          if (muts[i].type === 'childList' || (t.matches && t.matches(FENETRES))) {
+            // Après le code qui ouvre la fenêtre : il peut viser un champ précis.
+            setTimeout(entrer, 0);
+            return;
+          }
+        }
+      }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] });
+    }
   }
 
   global.DpadNav = { pickCandidate: pickCandidate, rankCandidates: rankCandidates, estNavigable: estNavigable, focusSansClavier: focusSansClavier, clavierAppareil: clavierAppareil, FOCUSABLE_SELECTOR: FOCUSABLE_SELECTOR };
