@@ -1222,6 +1222,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                 // lâché. Un film, si — celui-là on le laisse finir.
                 if (isLiveStream()) {
                     scheduleReconnect("Flux terminé par la source");
+                } else if (channelIndex >= 0 && channelIndex + 1 < channels.size()) {
+                    // Série : la page envoie la liste des épisodes (channels,
+                    // inutilisée pour zapper hors direct). Épisode suivant
+                    // après un court décompte, annulable par Retour.
+                    statusView.setText("Épisode suivant dans 5 s : " + channels.get(channelIndex + 1).name);
+                    statusView.setVisibility(View.VISIBLE);
+                    uiHandler.removeCallbacks(episodeSuivantRunnable);
+                    uiHandler.postDelayed(episodeSuivantRunnable, 5000);
                 }
             }
         }
@@ -1789,6 +1797,17 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private int previousChannelIndex = -1;
+
+    private final Runnable episodeSuivantRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isFinishing() || channelIndex < 0 || channelIndex + 1 >= channels.size()) {
+                return;
+            }
+            statusView.setVisibility(View.GONE);
+            playChannel(channelIndex + 1);
+        }
+    };
 
     private void zap(int delta) {
         int size = channels.size();
