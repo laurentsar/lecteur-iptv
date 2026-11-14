@@ -253,6 +253,19 @@
       if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
       attemptFallbackOrFail(cause);
     });
+    // Fin d'un épisode : le suivant de la série, après un court décompte.
+    video.addEventListener('ended', function () {
+      if (currentIsLive || !currentEpisodes) return;
+      var suivant = episodeSuivant();
+      if (!suivant) return;
+      setStatus('Épisode suivant dans 5 s : ' + suivant.title);
+      clearTimeout(episodeTimer);
+      var urlFinie = originalUrl;
+      episodeTimer = setTimeout(function () {
+        if (!overlay || !overlay.classList.contains('show') || originalUrl !== urlFinie) return;
+        open(suivant.url, suivant.title, { episodes: currentEpisodes });
+      }, 5000);
+    });
     video.addEventListener('playing', function () {
       clearLoadTimeout();
       cancelRecovery();
@@ -1928,7 +1941,11 @@
   // liste des chaînes) doit être rejoué côté natif — ce qui suppose de lui
   // transmettre le bouquet en cours. Voir ci/patch_native_player.py.
   function nativeZapPayload(url) {
-    var list = (currentIsLive && global.AppZap && global.AppZap.list()) || [];
+    // Série : la liste des épisodes tient lieu de liste de chaînes — le
+    // lecteur natif enchaîne alors l'épisode suivant à la fin (il ne zappe
+    // jamais hors direct).
+    var list = currentIsLive ? ((global.AppZap && global.AppZap.list()) || [])
+      : (currentEpisodes || []).map(function (e) { return { name: e.title, url: e.url }; });
     var channels = [], index = -1;
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
@@ -1966,6 +1983,15 @@
 
   // Chaîne en direct ouverte (ou zappée dans l'écran natif) : retenue pour
   // la rouvrir au prochain démarrage (option Réglages → Lecture).
+  var currentEpisodes = null, episodeTimer = null;
+  function episodeSuivant() {
+    if (!currentEpisodes) return null;
+    for (var i = 0; i < currentEpisodes.length - 1; i++) {
+      if (vivante(currentEpisodes[i].url) === originalUrl || currentEpisodes[i].url === originalUrl) return currentEpisodes[i + 1];
+    }
+    return null;
+  }
+
   function memoriserChaine(url, title, opts) {
     if (!opts || !opts.live || opts.radio || !global.Store || !global.Store.setDerniereChaine) return;
     try {
@@ -2262,6 +2288,7 @@
     currentLogo = (opts && opts.logo) || '';
     currentEpgKey = (opts && opts.epgKey) || '';
     currentVersions = (opts && opts.versions) || null;
+    currentEpisodes = (opts && opts.episodes) || null;
     triedNativeFallback = false;
     triedM3u8Fallback = false;
     triedAudioFallback = false;

@@ -421,7 +421,7 @@
     else if (name === 'radio') renderRadio();
     else if (name === 'youtube') { if (window.YouTubeTab) YouTubeTab.render(); }
     else if (name === 'maliste') { renderFavoris(); renderEnregistrements(); }
-    else if (name === 'reglages') { afficherJournal(); renderPlaylists(); if (window.HaSync) HaSync.mount($id('haSyncPanel')); }
+    else if (name === 'reglages') { afficherJournal(); renderPlaylists(); renderGroupesPerso(); if (window.HaSync) HaSync.mount($id('haSyncPanel')); }
     scheduleStartFocus();
   }
   // Télécommande TV : livré à lui-même, le WebView place le curseur dans le
@@ -1099,14 +1099,23 @@
   var ADULT_GROUP_RE = /adult|adulte|xxx|18\+|porn/i;
   function isAdultGroup(name) { return ADULT_GROUP_RE.test(name || ''); }
 
+  // Masqués (retirés de partout) et verrouillés par l'utilisateur (appui
+  // long sur un bouquet), en plus de la détection « adulte » par le nom.
+  function groupesPerso() {
+    return state.playlist ? Store.groupesDe(state.playlist.id) : { masques: {}, verrouilles: {} };
+  }
+
   function filterAdultLocked(items) {
     var pin = Store.getParentalPin();
-    if (!pin) return { visible: items, locked: {} };
+    var perso = groupesPerso();
+    var aMasquer = Object.keys(perso.masques).length > 0;
+    if (!pin && !aMasquer) return { visible: items, locked: {} };
     var visible = [], locked = {};
     items.forEach(function (it) {
       var groupName = (it.group || it.groupTitle || '').trim();
       var key = groupName.toLowerCase();
-      if (groupName && isAdultGroup(groupName) && !state.unlockedAdult[key]) {
+      if (groupName && perso.masques[key]) return;
+      if (pin && groupName && (isAdultGroup(groupName) || perso.verrouilles[key]) && !state.unlockedAdult[key]) {
         if (!locked[key]) locked[key] = { label: groupName, count: 0 };
         locked[key].count++;
       } else {
@@ -1504,6 +1513,8 @@
       });
       card.appendChild(star);
       setLongPress(card, toggleFavori);
+    } else if (opts.onLongPress) {
+      setLongPress(card, function () { opts.onLongPress(item); });
     }
 
     // item.kind vaut 'direct' (Xtream) ou 'live' (M3U, voir m3u.js
@@ -1937,7 +1948,57 @@
     scheduleStartFocus();
   }
 
+  /* Appui long sur un bouquet : le masquer (il disparaît des listes, du
+   * Guide et du zapping), ou le verrouiller par code PIN. Annulable dans
+   * Réglages → Infos → Code PIN. */
+  function menuBouquet(g) {
+    var pl = state.playlist;
+    if (!pl) return;
+    var key = g.label.trim().toLowerCase();
+    var verrouille = !!groupesPerso().verrouilles[key];
+    var fond = el('div', 'version-picker');
+    var carte = el('div', 'version-picker-card');
+    carte.appendChild(el('h3', null, g.label));
+    function fermer() { if (fond.parentNode) fond.parentNode.removeChild(fond); }
+    function bouton(texte, action) {
+      var b = el('button', 'version-item', texte);
+      b.style.display = 'block'; b.style.width = '100%';
+      b.addEventListener('click', function () { fermer(); action(); });
+      carte.appendChild(b);
+    }
+    bouton('🙈 Masquer ce bouquet', function () {
+      Store.setGroupe(pl.id, 'masques', g.label, true);
+      toast('« ' + g.label + ' » masqué — à réafficher dans Réglages → Infos → Code PIN');
+      renderBouquets();
+    });
+    bouton(verrouille ? '🔓 Retirer le code PIN' : '🔒 Verrouiller par code PIN', function () {
+      if (!verrouille && !Store.getParentalPin()) {
+        askConfirm('Définis d’abord un code PIN dans Réglages → Infos → Code PIN, puis recommence.', 'Code PIN')
+          .then(function (ok) { if (ok) goTab('reglages'); });
+        return;
+      }
+      Store.setGroupe(pl.id, 'verrouilles', g.label, !verrouille);
+      if (verrouille) delete state.unlockedAdult[key];
+      toast(verrouille ? '« ' + g.label + ' » n’est plus verrouillé' : '🔒 « ' + g.label + ' » verrouillé par code PIN');
+      renderBouquets();
+    });
+    var annuler = el('button', 'ghost', 'Annuler');
+    annuler.style.marginTop = '8px';
+    annuler.addEventListener('click', fermer);
+    carte.appendChild(annuler);
+    fond.appendChild(carte);
+    fond.addEventListener('click', function (e) { if (e.target === fond) fermer(); });
+    document.body.appendChild(fond);
+  }
+
   function renderBouquetTiles(container, moreBtn, groups, q) {
+    var perso = groupesPerso();
+    var nbMasques = 0;
+    groups = groups.filter(function (g) {
+      var masque = !!perso.masques[g.label.trim().toLowerCase()];
+      if (masque) nbMasques++;
+      return !masque;
+    });
     var filtered = groups.filter(function (g) { return !q || g.label.toLowerCase().indexOf(q) !== -1; });
     // Par défaut (pas de recherche en cours), on n'affiche que les bouquets
     // français pour éviter une liste de centaines de bouquets étrangers —
@@ -1953,8 +2014,25 @@
     filtered.forEach(function (g) {
       var item = { key: 'bouquet:' + g.id, kind: 'bouquet', name: g.label, logo: g.logo, icon: iconForBouquet(g.label),
         group: g.count + ' chaîne' + (g.count > 1 ? 's' : '') };
-      container.appendChild(card(item, { onOpen: function () { openBouquet(g); } }));
+      var verrouille = !!perso.verrouilles[g.label.trim().toLowerCase()] && !!Store.getParentalPin();
+      if (verrouille) item.group += ' · 🔒';
+      container.appendChild(card(item, {
+        onOpen: function () {
+          var key = g.label.trim().toLowerCase();
+          if (verrouille && !state.unlockedAdult[key]) {
+            askPin('Code PIN pour « ' + g.label + ' »').then(function (ok) {
+              if (ok) { state.unlockedAdult[key] = true; openBouquet(g); }
+            });
+            return;
+          }
+          openBouquet(g);
+        },
+        onLongPress: function () { menuBouquet(g); }
+      }));
     });
+    if (nbMasques) {
+      container.appendChild(el('div', 'hint', '🙈 ' + nbMasques + ' bouquet(s) masqué(s) — Réglages → Infos → Code PIN pour les réafficher. Appui long sur un bouquet pour le masquer ou le verrouiller.'));
+    }
     if (hiddenOthers > 0) {
       moreBtn.textContent = 'Charger plus (' + hiddenOthers + ' autres bouquets)';
       moreBtn.style.display = '';
@@ -2596,12 +2674,19 @@
 
   function openSerieM3u(serie) {
     showSerieShell(serie.name, serie.logo, function (body) {
+      // Tous les épisodes dans l'ordre : le lecteur enchaîne le suivant.
+      var suite = [];
+      Object.keys(serie.saisons).sort(function (a, b) { return a - b; }).forEach(function (n) {
+        serie.saisons[n].slice().sort(function (a, b) { return a.episode - b.episode; }).forEach(function (ep) {
+          suite.push({ url: ep.url, title: serie.name + ' · S' + n + 'E' + ep.episode });
+        });
+      });
       Object.keys(serie.saisons).sort(function (a, b) { return a - b; }).forEach(function (n) {
         var episodes = serie.saisons[n].sort(function (a, b) { return a.episode - b.episode; });
         var sec = seasonSection('Saison ' + n + ' · ' + episodes.length + ' épisode' + (episodes.length > 1 ? 's' : ''));
         episodes.forEach(function (ep) {
           sec.wrap.appendChild(episodeRow('Épisode ' + ep.episode + (ep.name && ep.name !== serie.name ? ' — ' + ep.name : ''), function () {
-            Player.open(ep.url, serie.name + ' · S' + n + 'E' + ep.episode);
+            Player.open(ep.url, serie.name + ' · S' + n + 'E' + ep.episode, { episodes: suite });
           }));
         });
         body.appendChild(sec.det);
@@ -2618,13 +2703,20 @@
         var episodes = (info && info.episodes) || {};
         var seasons = Object.keys(episodes).sort(function (a, b) { return a - b; });
         if (!seasons.length) { body.appendChild(el('div', 'hint', 'Aucun épisode disponible.')); return; }
+        var suite = [];
+        seasons.forEach(function (n) {
+          (episodes[n] || []).forEach(function (ep) {
+            suite.push({ url: Xtream.streamUrl(cfg, 'series', ep.id, ep.container_extension || 'mp4'),
+              title: serie.name + ' · S' + n + 'E' + (ep.episode_num || '?') });
+          });
+        });
         seasons.forEach(function (n) {
           var eps = episodes[n];
           var sec = seasonSection('Saison ' + n + ' · ' + eps.length + ' épisode' + (eps.length > 1 ? 's' : ''));
           eps.forEach(function (ep) {
             var url = Xtream.streamUrl(cfg, 'series', ep.id, ep.container_extension || 'mp4');
             sec.wrap.appendChild(episodeRow('Épisode ' + (ep.episode_num || '?') + (ep.title ? ' — ' + ep.title : ''), function () {
-              Player.open(url, serie.name + ' · S' + n + 'E' + (ep.episode_num || '?'));
+              Player.open(url, serie.name + ' · S' + n + 'E' + (ep.episode_num || '?'), { episodes: suite });
             }));
           });
           body.appendChild(sec.det);
@@ -3434,6 +3526,37 @@
     box.addEventListener('change', function () {
       Store.setGuideAvecProgramme(box.checked);
       renderGuide(true);
+    });
+  }
+
+  // Réglages : bouquets masqués et verrouillés de la playlist active, avec de
+  // quoi annuler (appui long sur un bouquet pour en ajouter).
+  function renderGroupesPerso() {
+    var box = $id('groupesPerso');
+    if (!box) return;
+    box.innerHTML = '';
+    var pl = state.playlist;
+    var perso = groupesPerso();
+    var lignes = [];
+    Object.keys(perso.masques).forEach(function (k) { lignes.push({ sorte: 'masques', label: perso.masques[k], ico: '🙈', action: 'Réafficher' }); });
+    Object.keys(perso.verrouilles).forEach(function (k) { lignes.push({ sorte: 'verrouilles', label: perso.verrouilles[k], ico: '🔒', action: 'Déverrouiller' }); });
+    if (!pl || !lignes.length) {
+      box.appendChild(el('p', 'hint', 'Aucun bouquet masqué ou verrouillé. Dans Direct → Bouquets, un appui long sur un bouquet permet de le masquer ou de le protéger par code PIN.'));
+      return;
+    }
+    lignes.forEach(function (l) {
+      var row = el('div', 'row');
+      row.appendChild(el('span', null, l.ico + ' ' + l.label));
+      var b = el('button', 'ghost', l.action);
+      b.style.flex = '0 0 auto';
+      b.addEventListener('click', function () {
+        Store.setGroupe(pl.id, l.sorte, l.label, false);
+        delete state.unlockedAdult[l.label.trim().toLowerCase()];
+        renderGroupesPerso();
+        toast('« ' + l.label + ' » : ' + l.action.toLowerCase());
+      });
+      row.appendChild(b);
+      box.appendChild(row);
     });
   }
 

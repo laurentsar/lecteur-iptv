@@ -159,6 +159,26 @@
   // Code PIN local (contrôle parental, catégories « adulte ») — stocké tel
   // quel comme le reste des réglages (rien n'est envoyé nulle part) ;
   // facultatif, aucune catégorie n'est masquée tant qu'il n'est pas défini.
+  // Bouquets/catégories masqués ou verrouillés par code PIN, par playlist :
+  // { <playlistId>: { masques: { <clé>: libellé }, verrouilles: { … } } }.
+  // Clé = libellé en minuscules, comme state.unlockedAdult dans app.js.
+  var K_GROUPES = 'iptv:groupesPerso';
+  function groupesDe(playlistId) {
+    var tout = lsGet(K_GROUPES, {}) || {};
+    var g = tout[playlistId] || {};
+    return { masques: g.masques || {}, verrouilles: g.verrouilles || {} };
+  }
+  function setGroupe(playlistId, sorte, libelle, actif) {
+    if (!playlistId || !libelle) return;
+    var tout = lsGet(K_GROUPES, {}) || {};
+    var g = tout[playlistId] || { masques: {}, verrouilles: {} };
+    g[sorte] = g[sorte] || {};
+    var cle = String(libelle).trim().toLowerCase();
+    if (actif) g[sorte][cle] = String(libelle).trim(); else delete g[sorte][cle];
+    tout[playlistId] = g;
+    lsSet(K_GROUPES, tout);
+  }
+
   function getParentalPin() { return lsGet(K_PIN, null); }
   function setParentalPin(pin) { return lsSet(K_PIN, pin || null); }
 
@@ -356,6 +376,7 @@
     getActivePlaylistId: getActivePlaylistId, setActivePlaylistId: setActivePlaylistId,
     getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
     getParentalPin: getParentalPin, setParentalPin: setParentalPin,
+    groupesDe: groupesDe, setGroupe: setGroupe,
     getLecteurNatif: getLecteurNatif, setLecteurNatif: setLecteurNatif,
     getDerniereChaine: getDerniereChaine, setDerniereChaine: setDerniereChaine,
     getReprendreChaine: getReprendreChaine, setReprendreChaine: setReprendreChaine,
