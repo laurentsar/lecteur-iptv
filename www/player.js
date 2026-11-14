@@ -819,9 +819,9 @@
     clearTimeout(zapBannerTimer);
     zapBannerName.textContent = name || '';
     var info = (global.AppZap && global.AppZap.epgNow) ? global.AppZap.epgNow(epgKey, name) : null;
-    // Seulement l'émission en cours : la suivante est affichée dans le Guide
-    // (ligne « Ensuite »), elle n'a pas sa place dans un bandeau fugace.
-    zapBannerProg.textContent = info && info.now ? '▶ ' + info.now.titre : '';
+    // Émission en cours avec ses horaires, et la suivante.
+    zapBannerProg.textContent = texteMaintenantEnsuite(info);
+    zapBannerProg.style.whiteSpace = 'pre-line';
     // Barre de progression + résumé, comme l'écran de zapping d'un
     // décodeur TV classique : proportion écoulée de l'émission en cours
     // (start/stop en ms, voir epg.js), calculée à chaque affichage plutôt
@@ -1964,6 +1964,34 @@
   // connaît (l'EPG vit ici, pas dans le lecteur natif).
   var nativeZapBound = false, nativeInfoTimer = 0, skipNativeDefault = false;
 
+  // Chaîne en direct ouverte (ou zappée dans l'écran natif) : retenue pour
+  // la rouvrir au prochain démarrage (option Réglages → Lecture).
+  function memoriserChaine(url, title, opts) {
+    if (!opts || !opts.live || opts.radio || !global.Store || !global.Store.setDerniereChaine) return;
+    try {
+      global.Store.setDerniereChaine({
+        playlistId: global.Store.getActivePlaylistId(), url: url, name: title || '',
+        epgKey: opts.epgKey || '', logo: opts.logo || ''
+      });
+    } catch (e) {}
+  }
+
+  function heure(ms) {
+    var d = new Date(ms);
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  // « ▶ JT (20:00–20:45) · Ensuite 20:45 Météo » : texte fixe pour une
+  // même émission (pas de « encore 12 min »), sinon le bandeau natif
+  // ressurgirait à chaque rafraîchissement.
+  function texteMaintenantEnsuite(epg) {
+    if (!epg || !epg.now) return '';
+    var t = '▶ ' + epg.now.titre;
+    if (epg.now.start != null && epg.now.stop != null) t += ' (' + heure(epg.now.start) + '–' + heure(epg.now.stop) + ')';
+    if (epg.next && epg.next.titre) t += '\nEnsuite ' + (epg.next.start != null ? heure(epg.next.start) + ' ' : '') + epg.next.titre;
+    return t;
+  }
+
   function nativeProgramText(url) {
     var list = (global.AppZap && global.AppZap.list()) || [];
     var item = null;
@@ -1972,7 +2000,7 @@
     }
     var epg = (item && global.AppZap && global.AppZap.epgNow)
       ? global.AppZap.epgNow(item.epgKey, item.name) : null;
-    return epg && epg.now ? '▶ ' + epg.now.titre : '';
+    return texteMaintenantEnsuite(epg);
   }
 
   function pushNativeInfo(plugin) {
@@ -2004,6 +2032,7 @@
         if (list[i].url === info.url) { item = list[i]; break; }
       }
       currentLogo = (item && item.logo) || '';
+      memoriserChaine(info.url, originalTitle, { live: true, epgKey: item && item.epgKey, logo: currentLogo });
       pushNativeInfo(plugin);
     });
     plugin.addListener('closed', function () {
@@ -2251,6 +2280,7 @@
     updateRecordVisibility();
     updateRemoteVisibility();
     updateInfoVisibility();
+    memoriserChaine(url, title, opts);
     startPlayback(url, title);
     syncRecordButtonState();
     updateTracksVisibility();

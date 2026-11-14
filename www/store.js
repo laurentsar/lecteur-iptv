@@ -164,6 +164,18 @@
 
   // Par défaut à vrai : le lecteur natif décode ce que la WebView refuse
   // (HEVC, audio AC3/E-AC3/DTS) et tient mieux la charge sur un boîtier TV.
+  // Dernière chaîne regardée (par playlist), rouverte au démarrage si
+  // l'option est cochée — comme une TV qui se rallume sur sa chaîne.
+  var K_DERNIERE = 'iptv:derniereChaine';
+  var K_REPRENDRE = 'iptv:reprendreChaine';
+  function getDerniereChaine(playlistId) {
+    var d = lsGet(K_DERNIERE, null);
+    return d && d.url && (!playlistId || d.playlistId === playlistId) ? d : null;
+  }
+  function setDerniereChaine(d) { return lsSet(K_DERNIERE, d); }
+  function getReprendreChaine() { return lsGet(K_REPRENDRE, false) === true; }
+  function setReprendreChaine(actif) { return lsSet(K_REPRENDRE, !!actif); }
+
   function getLecteurNatif() { return lsGet(K_NATIF, true) !== false; }
   function setLecteurNatif(actif) { return lsSet(K_NATIF, !!actif); }
 
@@ -345,6 +357,8 @@
     getTmdbKey: getTmdbKey, setTmdbKey: setTmdbKey,
     getParentalPin: getParentalPin, setParentalPin: setParentalPin,
     getLecteurNatif: getLecteurNatif, setLecteurNatif: setLecteurNatif,
+    getDerniereChaine: getDerniereChaine, setDerniereChaine: setDerniereChaine,
+    getReprendreChaine: getReprendreChaine, setReprendreChaine: setReprendreChaine,
     getGuideAvecProgramme: getGuideAvecProgramme, setGuideAvecProgramme: setGuideAvecProgramme,
     getModeTv: getModeTv, setModeTv: setModeTv,
     getFiltreNuit: getFiltreNuit, setFiltreNuit: setFiltreNuit,

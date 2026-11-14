@@ -88,6 +88,22 @@
   // .../xmltv.php avec les mêmes identifiants. Beaucoup de panels ne
   // déclarent pas d'url-tvg en tête de M3U — le guide paraissait alors
   // inexistant alors qu'il suffisait de le demander à la bonne adresse.
+  // Compte Xtream caché derrière une playlist M3U « get.php?username=…
+  // &password=… » : mêmes identifiants pour player_api.php (expiration…).
+  function cfgFromM3uUrl(m3uUrl) {
+    if (!m3uUrl) return null;
+    try {
+      var u = new URL(m3uUrl);
+      if (!/\/get\.php$/i.test(u.pathname)) return null;
+      var utilisateur = u.searchParams.get('username');
+      var motDePasse = u.searchParams.get('password');
+      if (!utilisateur || !motDePasse) return null;
+      return { serveur: u.origin + u.pathname.replace(/\/get\.php$/i, ''), utilisateur: utilisateur, motDePasse: motDePasse };
+    } catch (e) {
+      return null;
+    }
+  }
+
   function xmltvFromM3uUrl(m3uUrl) {
     if (!m3uUrl) return null;
     try {
@@ -121,7 +137,7 @@
     liveCategories: liveCategories, liveStreams: liveStreams,
     vodCategories: vodCategories, vodStreams: vodStreams,
     seriesCategories: seriesCategories, seriesList: seriesList, seriesInfo: seriesInfo, vodInfo: vodInfo,
-    shortEpg: shortEpg, streamUrl: streamUrl, xmltvUrl: xmltvUrl, xmltvFromM3uUrl: xmltvFromM3uUrl,
+    shortEpg: shortEpg, streamUrl: streamUrl, xmltvUrl: xmltvUrl, xmltvFromM3uUrl: xmltvFromM3uUrl, cfgFromM3uUrl: cfgFromM3uUrl,
     oublier: oublier,
     baseUrl: baseUrl, b64decode: b64decode
   };
