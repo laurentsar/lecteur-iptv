@@ -240,13 +240,18 @@
         </div>
       </details>
 
-      <details class="saison" id="cat-lecture" style="display:none">
+      <details class="saison" id="cat-lecture">
         <summary class="saison-titre">▶️ Lecture</summary>
         <div class="accordion-body">
           <div class="card" id="card-lecture" style="display:none">
             <h2>Lecteur vidéo natif</h2>
             <p class="hint">Lecture hors WebView (Media3/ExoPlayer) : décode l'HEVC et l'audio AC3/E-AC3/DTS que le navigateur refuse, et tient mieux la charge sur une télé ou un boîtier. Décoche pour revenir au lecteur web — il reste utilisé automatiquement si le lecteur natif échoue.</p>
             <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optLecteurNatif" checked /> Lire avec le lecteur natif</label>
+          </div>
+          <div class="card">
+            <h2>Au démarrage</h2>
+            <p class="hint">Comme une TV qui se rallume : l'appli rouvre directement la dernière chaîne regardée.</p>
+            <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optReprendreChaine" /> Rouvrir la dernière chaîne</label>
           </div>
         </div>
       </details>
@@ -496,7 +501,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '3.02';
+    window.APP_VERSION = '3.03';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans

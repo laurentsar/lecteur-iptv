@@ -1752,7 +1752,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
         boolean mine;
-        if (canZap() && (isZapUp(code) || isZapDown(code))) {
+        if (canZap() && code == KeyEvent.KEYCODE_LAST_CHANNEL) {
+            mine = true;
+        } else if (canZap() && (isZapUp(code) || isZapDown(code))) {
             mine = true;
         } else if (canZap() && (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN)
                 && playerView != null && !playerView.isControllerFullyVisible()) {
@@ -1770,7 +1772,13 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (event.getAction() != KeyEvent.ACTION_DOWN) {
             return true;
         }
-        if (isDigit(code)) {
+        if (code == KeyEvent.KEYCODE_LAST_CHANNEL) {
+            // Touche « chaîne précédente » des télécommandes Android TV :
+            // aller-retour entre les deux dernières chaînes.
+            if (previousChannelIndex >= 0 && previousChannelIndex < channels.size()) {
+                playChannel(previousChannelIndex);
+            }
+        } else if (isDigit(code)) {
             pushDigit(code - KeyEvent.KEYCODE_0);
         } else if (isMenuKey(code)) {
             showChannelList();
@@ -1779,6 +1787,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         return true;
     }
+
+    private int previousChannelIndex = -1;
 
     private void zap(int delta) {
         int size = channels.size();
@@ -1868,6 +1878,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
         Channel channel = channels.get(index);
+        if (channelIndex >= 0 && channelIndex != index) {
+            previousChannelIndex = channelIndex;
+        }
         channelIndex = index;
         NativePlayerPlugin.channelIndex = index;
         playUrl(channel.url, channel.name);

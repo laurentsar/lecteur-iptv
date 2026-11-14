@@ -685,6 +685,8 @@
     state.searchCache = {};
     state.xtreamAllDirectCache = null;
     state.bouquetsAllCountries = false;
+    state.abonnement = null; state.abonnementFin = null;
+    verifierAbonnement();
     state.groupesM3u = {};
     resetNameCaches();
     updateHeader();
@@ -2895,6 +2897,13 @@
       return;
     }
 
+    // Abonnement qui expire ou identifiants refusés (verifierAbonnement).
+    if (state.abonnement) {
+      var alerte = el('div', 'card warn');
+      alerte.appendChild(el('p', null, (state.abonnement.niveau === 'erreur' ? '⛔ ' : '⚠️ ') + state.abonnement.texte));
+      container.appendChild(alerte);
+    }
+
     // Playlist active : un sélecteur seulement s'il y a un choix à faire.
     if (playlists.length > 1) {
       var card1 = el('div', 'card');
@@ -3428,6 +3437,61 @@
     });
   }
 
+  function setupReprendreChaine() {
+    var box = $id('optReprendreChaine');
+    if (!box) return;
+    box.checked = Store.getReprendreChaine();
+    box.addEventListener('change', function () {
+      Store.setReprendreChaine(box.checked);
+      toast(box.checked ? 'La dernière chaîne s’ouvrira au démarrage' : 'Démarrage sur l’accueil');
+    });
+  }
+
+  // Au démarrage : la dernière chaîne de la playlist active, si l'option est
+  // cochée. Un court délai laisse l'accueil se dessiner (et l'utilisateur
+  // reste libre de faire Retour pour y revenir).
+  function rouvrirDerniereChaine() {
+    if (!Store.getReprendreChaine() || !state.playlist || !window.Player) return;
+    var d = Store.getDerniereChaine(state.playlist.id);
+    if (!d) return;
+    setTimeout(function () {
+      if (Player.isOpen && Player.isOpen()) return;
+      Player.open(d.url, d.name, { live: true, epgKey: d.epgKey || null, logo: d.logo || null });
+    }, 800);
+  }
+
+  /* Abonnement Xtream (compte Xtream, ou playlist M3U « get.php » du même
+   * panel) : date d'expiration lue sur le serveur à l'ouverture de la
+   * playlist. Prévenu à moins de 7 jours, ou si les identifiants sont
+   * refusés — avant que les chaînes cessent de marcher sans explication. */
+  var JOURS_ALERTE = 7;
+  function verifierAbonnement() {
+    var pl = state.playlist;
+    if (!pl || !window.Xtream) return;
+    var cfg = pl.type === 'xtream' ? xtreamCfg(pl) : Xtream.cfgFromM3uUrl(pl.m3uUrl);
+    if (!cfg) { state.abonnement = null; return; }
+    var id = pl.id;
+    Xtream.auth(cfg).then(function (r) {
+      if (!state.playlist || state.playlist.id !== id || !r || !r.user_info) return;
+      var info = r.user_info, a = null;
+      var exp = Number(info.exp_date) * 1000;
+      if (String(info.auth) === '0') {
+        a = { niveau: 'erreur', texte: 'Le fournisseur refuse les identifiants de « ' + pl.nom + ' » : abonnement expiré ou mot de passe changé ?' };
+      } else if (exp) {
+        var jours = Math.ceil((exp - Date.now()) / 86400000);
+        var date = new Date(exp).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+        if (jours <= 0) a = { niveau: 'erreur', texte: 'L’abonnement « ' + pl.nom + ' » a expiré le ' + date + '.' };
+        else if (jours <= JOURS_ALERTE) {
+          a = { niveau: 'alerte', texte: 'L’abonnement « ' + pl.nom + ' » expire le ' + date +
+            (jours === 1 ? ' (demain)' : ' (dans ' + jours + ' jours)') + '.' };
+        }
+        state.abonnementFin = exp;
+      }
+      state.abonnement = a;
+      if (a && isTabActive('accueil')) renderAccueil();
+    }).catch(function () { /* serveur muet ou navigateur bloqué : rien à signaler */ });
+  }
+
   function setupLecteurNatif() {
     var natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() &&
       window.Capacitor.Plugins && window.Capacitor.Plugins.NativePlayer);
@@ -3545,10 +3609,12 @@
     $id('verText').textContent = 'v' + (window.APP_VERSION || '');
     pruneHiddenFavoris();
     setupLecteurNatif();
+    setupReprendreChaine();
     setupGuideFiltre();
     var activeId = Store.getActivePlaylistId();
     if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
     renderAccueil();
+    rouvrirDerniereChaine();
     // Démarrage : voir focusStart(). Le WebView peut placer le curseur
     // dans un champ de recherche après le premier rendu, parfois après le
     // chargement des listes — d'où plusieurs tentatives espacées plutôt

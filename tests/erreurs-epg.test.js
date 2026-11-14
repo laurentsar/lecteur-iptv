@@ -13,7 +13,7 @@ function verifie(nom, cond, detail) {
 
 const dom = new JSDOM('', { runScripts: 'outside-only' });
 const w = dom.window;
-['erreurs.js', 'epg.js'].forEach(f => vm.runInContext(fs.readFileSync(WWW + '/' + f, 'utf8'), dom.getInternalVMContext(), { filename: f }));
+['erreurs.js', 'epg.js', 'xtream.js'].forEach(f => vm.runInContext(fs.readFileSync(WWW + '/' + f, 'utf8'), dom.getInternalVMContext(), { filename: f }));
 const E = w.Erreurs, Epg = w.Epg;
 
 console.log('— Erreurs en clair —');
@@ -68,6 +68,11 @@ verifie('fenêtre légère : J+4 écarté', !leger['tf1.fr'].some(p => p.titre =
 verifie('fenêtre légère : l\'émission en cours reste', leger['tf1.fr'].some(p => p.titre === 'JT'));
 const finLeg = Epg.finLegere(now);
 verifie('fenêtre légère : jusqu\'à demain minuit', finLeg > now + 24 * H && finLeg <= now + 48 * H);
+
+console.log('— Compte Xtream derrière une playlist M3U —');
+const cfg = w.Xtream.cfgFromM3uUrl('https://ultimatiproxy.in:8080/get.php?username=u1&password=p%2B2&type=m3u_plus&output=mpegts');
+verifie('serveur, identifiants extraits', cfg && cfg.serveur === 'https://ultimatiproxy.in:8080' && cfg.utilisateur === 'u1' && cfg.motDePasse === 'p+2', JSON.stringify(cfg));
+verifie('playlist M3U ordinaire : rien', w.Xtream.cfgFromM3uUrl('https://exemple.fr/liste.m3u') === null);
 
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);
