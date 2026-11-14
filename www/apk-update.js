@@ -26,6 +26,29 @@
 
   if (!plugin()) return;
 
+  // Fenêtre d'information, navigable à la télécommande (un seul bouton).
+  function afficher(titre, texte) {
+    var fond = document.createElement('div');
+    fond.className = 'version-picker';
+    var carte = document.createElement('div');
+    carte.className = 'version-picker-card';
+    var h = document.createElement('h3');
+    h.textContent = titre;
+    var p = document.createElement('p');
+    p.className = 'hint';
+    p.style.whiteSpace = 'pre-line';
+    p.textContent = texte;
+    var ok = document.createElement('button');
+    ok.className = 'primary';
+    ok.textContent = 'OK';
+    ok.style.marginTop = '12px';
+    ok.onclick = function () { if (fond.parentNode) fond.parentNode.removeChild(fond); };
+    carte.appendChild(h); carte.appendChild(p); carte.appendChild(ok);
+    fond.appendChild(carte);
+    document.body.appendChild(fond);
+    ok.focus();
+  }
+
   // Signature imposée par update-check.js : (url, bouton, onEchec).
   global.installApkUpdate = function (url, bouton, onEchec) {
     var P = plugin();
@@ -39,13 +62,16 @@
       if (onEchec) onEchec();
       // « Sources inconnues » : Android exige une autorisation explicite,
       // par application, avant de laisser installer une APK. Le message
-      // par défaut du système n'explique pas où aller.
+      // par défaut du système n'explique pas où aller. Pas d'alert() : la
+      // WebView de Capacitor ne l'affiche pas (voir askConfirm dans app.js).
       if (/permission|REQUEST_INSTALL|inconnue/i.test(msg)) {
-        alert('Autorise l’installation d’applications depuis cette source ' +
-              'dans les paramètres Android (Applications → Lecteur IPTV → ' +
-              'Installer des applications inconnues), puis réessaie.');
+        afficher('Autorise l’installation', 'Pour installer la mise à jour, Lecteur IPTV doit avoir le droit ' +
+          'd’installer des applis.\n\nFire TV : Paramètres → Ma Fire TV → Options pour les développeurs → ' +
+          'Installer des applis inconnues → Lecteur IPTV : Activé.\n\nAutre Android : Paramètres → ' +
+          'Applications → Lecteur IPTV → Installer des applications inconnues.\n\nPuis reviens ici : ' +
+          '« Réessayer » sur la bannière.');
       } else {
-        alert('Mise à jour impossible : ' + (msg || 'erreur inconnue'));
+        afficher('Mise à jour impossible', msg || 'erreur inconnue');
       }
     });
   };

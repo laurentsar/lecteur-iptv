@@ -130,6 +130,34 @@ verifie('⌨️ ouvre le clavier pour ce champ', !!doc.getElementById('clavierEc
 appuie('Tout effacer'); appuie('1'); appuie('✔ Valider');
 verifie('valeur écrite', url.value === '1', url.value);
 
+console.log('\n— Fenêtre de confirmation : le focus y entre et y reste —');
+{
+  // jsdom ne fait pas de mise en page : tout élément « visible », 10×10.
+  Object.defineProperty(w.HTMLElement.prototype, 'offsetParent', { configurable: true, get() { return doc.body; } });
+  w.HTMLElement.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 }; };
+  const derriere = doc.getElementById('autre');
+  derriere.focus();
+  const modale = doc.createElement('div');
+  modale.className = 'version-picker';
+  modale.style.display = 'none';
+  modale.innerHTML = '<button id="annuler">Annuler</button><button id="confirmer">Confirmer</button>';
+  doc.body.appendChild(modale);
+  await new Promise(r => setTimeout(r, 10));
+  verifie('fenêtre cachée : focus inchangé', doc.activeElement === derriere);
+  modale.style.display = 'flex';
+  await new Promise(r => setTimeout(r, 10));
+  verifie('fenêtre affichée : focus dedans', modale.contains(doc.activeElement), doc.activeElement && doc.activeElement.id);
+  derriere.focus();
+  doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+  verifie('focus resté derrière : une flèche le ramène dans la fenêtre', modale.contains(doc.activeElement));
+  for (const k of ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp']) {
+    doc.activeElement.dispatchEvent(new w.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+    if (!modale.contains(doc.activeElement)) break;
+  }
+  verifie('les flèches ne sortent pas de la fenêtre', modale.contains(doc.activeElement));
+  modale.remove();
+}
+
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);
 })();
