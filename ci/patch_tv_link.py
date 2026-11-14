@@ -85,6 +85,8 @@ final class TvLink {
         void onPlay(JSONObject media);
 
         void onConfig(String from, String config);
+
+        void onTelecommande(JSONObject ordre);
     }
 
     interface Discovery {
@@ -353,7 +355,8 @@ final class TvLink {
                 return;
             }
             boolean config = path.equals("/config");
-            if (!method.equals("POST") || !(path.equals("/play") || config)) {
+            boolean telecommande = path.equals("/telecommande");
+            if (!method.equals("POST") || !(path.equals("/play") || config || telecommande)) {
                 respond(out, 404, "{\\"error\\":\\"introuvable\\"}");
                 return;
             }
@@ -373,6 +376,14 @@ final class TvLink {
                     break;
                 }
                 read += n;
+            }
+            if (telecommande) {
+                // { touche: "UP"|"OK"|… } ou { texte: "…" } — appliqué à l'écran
+                // affiché sur la TV (voir TvLinkPlugin.telecommandeRecue).
+                JSONObject ordre = new JSONObject(new String(body, 0, read, StandardCharsets.UTF_8));
+                respond(out, 200, "{\\"ok\\":true}");
+                receiver.onTelecommande(ordre);
+                return;
             }
             if (config) {
                 // { from: "Téléphone de …", config: "<JSON de Store.exportConfig>" }
@@ -892,11 +903,17 @@ public class TvLinkPlugin extends Plugin {
 
     @Override
     public void load() {
+        suivreActivites();
         if (TvLink.isTv(getContext())) {
             TvLink.startReceiver(getContext().getApplicationContext(), new TvLink.Receiver() {
                 @Override
                 public void onPlay(JSONObject media) {
                     received(media);
+                }
+
+                @Override
+                public void onTelecommande(JSONObject ordre) {
+                    telecommandeRecue(ordre);
                 }
 
                 @Override
@@ -909,6 +926,134 @@ public class TvLinkPlugin extends Plugin {
                 }
             });
         }
+    }
+
+    // ---------- télécommande depuis le téléphone ----------
+    // Écran au premier plan (accueil ou lecteur natif) : c'est à lui que
+    // vont les touches reçues.
+    private static java.lang.ref.WeakReference<android.app.Activity> premierPlan =
+            new java.lang.ref.WeakReference<>(null);
+
+    private void suivreActivites() {
+        android.app.Activity a = getActivity();
+        if (a == null) {
+            return;
+        }
+        premierPlan = new java.lang.ref.WeakReference<>(a);
+        a.getApplication().registerActivityLifecycleCallbacks(new android.app.Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityResumed(android.app.Activity act) {
+                premierPlan = new java.lang.ref.WeakReference<>(act);
+            }
+            @Override public void onActivityCreated(android.app.Activity act, android.os.Bundle b) {}
+            @Override public void onActivityStarted(android.app.Activity act) {}
+            @Override public void onActivityPaused(android.app.Activity act) {}
+            @Override public void onActivityStopped(android.app.Activity act) {}
+            @Override public void onActivitySaveInstanceState(android.app.Activity act, android.os.Bundle b) {}
+            @Override public void onActivityDestroyed(android.app.Activity act) {}
+        });
+    }
+
+    private static int codeTouche(String t) {
+        switch (t) {
+            case "UP": return android.view.KeyEvent.KEYCODE_DPAD_UP;
+            case "DOWN": return android.view.KeyEvent.KEYCODE_DPAD_DOWN;
+            case "LEFT": return android.view.KeyEvent.KEYCODE_DPAD_LEFT;
+            case "RIGHT": return android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
+            case "OK": return android.view.KeyEvent.KEYCODE_DPAD_CENTER;
+            case "BACK": return android.view.KeyEvent.KEYCODE_BACK;
+            case "PLAYPAUSE": return android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
+            case "CH_UP": return android.view.KeyEvent.KEYCODE_CHANNEL_UP;
+            case "CH_DOWN": return android.view.KeyEvent.KEYCODE_CHANNEL_DOWN;
+            case "MENU": return android.view.KeyEvent.KEYCODE_MENU;
+            default: return -1;
+        }
+    }
+
+    private void telecommandeRecue(final JSONObject ordre) {
+        final android.app.Activity act = premierPlan.get();
+        if (act == null) {
+            return;
+        }
+        act.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                String touche = ordre.optString("touche", "");
+                String texte = ordre.optString("texte", "");
+                if (touche.equals("VOL_UP") || touche.equals("VOL_DOWN")) {
+                    android.media.AudioManager am = (android.media.AudioManager) act.getSystemService(Context.AUDIO_SERVICE);
+                    if (am != null) {
+                        am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC,
+                                touche.equals("VOL_UP") ? android.media.AudioManager.ADJUST_RAISE
+                                        : android.media.AudioManager.ADJUST_LOWER,
+                                android.media.AudioManager.FLAG_SHOW_UI);
+                    }
+                    return;
+                }
+                if (touche.equals("HOME")) {
+                    // Accueil de l'appli (pas celui de la TV) : lecteur natif
+                    // refermé, puis onglet Accueil.
+                    NativePlayerActivity lecteur = NativePlayerActivity.current();
+                    if (lecteur != null) {
+                        lecteur.finish();
+                    }
+                    javascript("window.AppNav && window.AppNav.goHome && window.AppNav.goHome()");
+                    return;
+                }
+                if (!texte.isEmpty()) {
+                    // Texte tapé sur le téléphone : la page l'écrit dans le
+                    // champ ou le clavier à l'écran ouvert (dpad-nav.js).
+                    javascript("window.dispatchEvent(new CustomEvent('tvtexte',{detail:" + JSONObject.quote(texte) + "}))");
+                    return;
+                }
+                int code = codeTouche(touche);
+                if (code < 0) {
+                    return;
+                }
+                long t = android.os.SystemClock.uptimeMillis();
+                act.dispatchKeyEvent(new android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_DOWN, code, 0));
+                act.dispatchKeyEvent(new android.view.KeyEvent(t, t + 50, android.view.KeyEvent.ACTION_UP, code, 0));
+            }
+        });
+    }
+
+    private void javascript(final String js) {
+        if (getBridge() == null || getBridge().getWebView() == null) {
+            return;
+        }
+        getBridge().getWebView().post(new Runnable() {
+            @Override
+            public void run() {
+                getBridge().getWebView().evaluateJavascript(js, null);
+            }
+        });
+    }
+
+    // Côté téléphone : une touche ou un texte pour la TV choisie.
+    @PluginMethod
+    public void telecommande(final PluginCall call) {
+        String host = call.getString("host", "");
+        if (host.isEmpty()) {
+            call.reject("adresse manquante");
+            return;
+        }
+        JSONObject ordre = new JSONObject();
+        try {
+            ordre.put("touche", call.getString("touche", ""));
+            ordre.put("texte", call.getString("texte", ""));
+        } catch (org.json.JSONException e) {
+            call.reject("ordre illisible");
+            return;
+        }
+        TvLink.send(host, call.getInt("port", TvLink.PORT), "/telecommande", ordre, new TvLink.Result() {
+            @Override
+            public void onDone(boolean ok, String message) {
+                if (ok) {
+                    call.resolve();
+                } else {
+                    call.reject(message);
+                }
+            }
+        });
     }
 
     private void received(JSONObject media) {

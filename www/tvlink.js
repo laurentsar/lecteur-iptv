@@ -203,6 +203,82 @@
     return { fermer: fermer };
   }
 
+  // ---------- côté téléphone : télécommande de la TV ----------
+  // Choix de la TV (même fenêtre que l'envoi), puis un pavé : flèches, OK,
+  // Retour, chaînes, volume, et surtout un champ pour écrire sur la TV avec
+  // le clavier du téléphone. Les touches sont rejouées sur l'écran affiché
+  // par la TV (ci/patch_tv_link.py, /telecommande).
+  function telecommande() {
+    var P = plugin();
+    if (!P || !P.telecommande) return;
+    var cible = null;
+    fenetre({
+      titre: '📲 Télécommande : choisis la TV',
+      // Ordre vide : simple vérification que la TV répond.
+      envoi: function (host, port) {
+        cible = { host: host, port: port };
+        return P.telecommande({ host: host, port: port, touche: '' });
+      },
+      onSent: function (nom) { pave(cible, nom); }
+    });
+  }
+
+  function pave(cible, nom) {
+    var P = plugin();
+    var fond = el('div', 'tvlink-fond');
+    var carte = el('div', 'remote-panel-card tvlink-carte pave-carte');
+    carte.setAttribute('role', 'dialog');
+    carte.appendChild(el('div', 'tracks-title', '📲 ' + nom));
+    var statut = el('p', 'hint', '');
+    function envoyer(o) {
+      o.host = cible.host; o.port = cible.port;
+      return P.telecommande(o).then(function () { statut.textContent = ''; }).catch(function (e) {
+        statut.textContent = 'TV injoignable : ' + ((e && e.message) || e);
+      });
+    }
+    function bouton(texte, touche, cls) {
+      var b = el('button', 'pave-touche' + (cls ? ' ' + cls : ''), texte);
+      b.type = 'button';
+      b.addEventListener('click', function () { envoyer({ touche: touche }); });
+      return b;
+    }
+    var grille = el('div', 'pave-grille');
+    [['', ''], ['▲', 'UP'], ['', ''], ['◀', 'LEFT'], ['OK', 'OK'], ['▶', 'RIGHT'], ['', ''], ['▼', 'DOWN'], ['', '']].forEach(function (c) {
+      grille.appendChild(c[1] ? bouton(c[0], c[1], c[1] === 'OK' ? 'pave-ok' : '') : el('span'));
+    });
+    carte.appendChild(grille);
+    var ligne1 = el('div', 'pave-ligne');
+    ligne1.appendChild(bouton('↩ Retour', 'BACK'));
+    ligne1.appendChild(bouton('🏠 Accueil', 'HOME'));
+    ligne1.appendChild(bouton('⏯', 'PLAYPAUSE'));
+    carte.appendChild(ligne1);
+    var ligne2 = el('div', 'pave-ligne');
+    ligne2.appendChild(bouton('CH −', 'CH_DOWN'));
+    ligne2.appendChild(bouton('CH +', 'CH_UP'));
+    ligne2.appendChild(bouton('🔉', 'VOL_DOWN'));
+    ligne2.appendChild(bouton('🔊', 'VOL_UP'));
+    carte.appendChild(ligne2);
+    var ecrire = el('div', 'row tvlink-ip');
+    var champ = el('input');
+    champ.type = 'text';
+    champ.placeholder = 'Écrire sur la TV (champ sélectionné)';
+    champ.setAttribute('autocapitalize', 'off');
+    var btnEcrire = el('button', 'ghost', 'Envoyer');
+    btnEcrire.addEventListener('click', function () {
+      if (!champ.value) return;
+      envoyer({ texte: champ.value }).then(function () { champ.value = ''; });
+    });
+    ecrire.appendChild(champ);
+    ecrire.appendChild(btnEcrire);
+    carte.appendChild(ecrire);
+    carte.appendChild(statut);
+    var fermer = el('button', 'ghost tvlink-annuler', 'Fermer');
+    fermer.addEventListener('click', function () { if (fond.parentNode) fond.parentNode.removeChild(fond); });
+    carte.appendChild(fermer);
+    fond.appendChild(carte);
+    document.body.appendChild(fond);
+  }
+
   // ---------- côté TV : saisie par QR code ----------
   // La TV sert elle-même une page de formulaire (ci/patch_tv_link.py,
   // /saisie) : le téléphone la scanne et l'ouvre dans son navigateur, sans
@@ -294,5 +370,5 @@
   initReception();
 
   global.TvLinkUI = { whenSender: whenSender, choisir: choisir, envoyerConfig: envoyerConfig, onConfig: onConfig,
-    saisieQr: saisieQr, fermerQr: fermerQr, qrOuvert: function () { return !!fenetreQr; }, whenReceiver: whenReceiver, parseAdresse: parseAdresse };
+    telecommande: telecommande, saisieQr: saisieQr, fermerQr: fermerQr, qrOuvert: function () { return !!fenetreQr; }, whenReceiver: whenReceiver, parseAdresse: parseAdresse };
 })(window);

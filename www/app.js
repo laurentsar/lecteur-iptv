@@ -1242,7 +1242,12 @@
     document.addEventListener('click', function (e) {
       if (e.target && e.target.closest && e.target.closest('.btn-qr-saisie')) TvLinkUI.saisieQr();
     });
+    document.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('.btn-telecommande')) TvLinkUI.telecommande();
+    });
     TvLinkUI.whenSender(function () {
+      state.telecommande = true;
+      if (isTabActive('accueil')) renderAccueil();
       $id('envoiTvLigne').style.display = '';
       $id('envoiTvAide').style.display = '';
     });
@@ -3002,6 +3007,14 @@
       c.appendChild(btn);
       container.appendChild(c);
       return;
+    }
+
+    // Téléphone : télécommande de la TV (Lecteur IPTV ouvert sur la TV).
+    if (state.telecommande) {
+      var tc = el('button', 'ghost btn-telecommande', '📲 Télécommande de la TV');
+      tc.style.width = '100%';
+      tc.style.marginBottom = '10px';
+      container.appendChild(tc);
     }
 
     // Abonnement qui expire ou identifiants refusés (verifierAbonnement).

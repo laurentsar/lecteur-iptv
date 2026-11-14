@@ -27,6 +27,7 @@ function page(infoTv, avecPlugin = true) {
           startDiscovery: () => { journal.recherche++; return Promise.resolve(); },
           stopDiscovery: () => { journal.arret++; return Promise.resolve(); },
           openScreenCast: () => { journal.partage = (journal.partage || 0) + 1; return Promise.resolve(); },
+          telecommande: (o) => { journal.ordres = (journal.ordres || []).concat([o]); return Promise.resolve(); },
           saisieUrl: () => Promise.resolve({ url: 'http://192.168.1.30:47800/saisie?c=abcdefgh' }),
           oublierSaisie: () => { journal.oubli = (journal.oubli || 0) + 1; return Promise.resolve(); },
           sendConfig: (o) => { journal.configs = (journal.configs || []).concat([o]); return Promise.resolve(); },
@@ -96,6 +97,24 @@ function page(infoTv, avecPlugin = true) {
     verifie('reçue avant l\'abonnement de l\'appli : transmise ensuite', recue && recue.from === 'Téléphone de L');
     journal.ecouteurs.config({ from: 'B', config: '{}' });
     verifie('reçue après : transmise aussitôt', recue.from === 'B');
+  }
+
+  console.log('Téléphone : télécommande');
+  {
+    const { w, journal } = page({ tv: false });
+    w.TvLinkUI.telecommande();
+    await attendre(10);
+    journal.ecouteurs.device({ name: 'Fire TV du salon', host: '192.168.1.30', port: 47800 });
+    w.document.querySelector('.tvlink-carte .version-item').click();
+    await attendre(10);
+    const pave = w.document.querySelector('.pave-carte');
+    verifie('TV choisie : pavé affiché', !!pave && /Fire TV du salon/.test(pave.textContent));
+    Array.from(pave.querySelectorAll('.pave-touche')).find(b => b.textContent === 'OK').click();
+    pave.querySelector('input').value = 'tf1';
+    Array.from(pave.querySelectorAll('button')).find(b => b.textContent === 'Envoyer').click();
+    await attendre(10);
+    const o = journal.ordres || [];
+    verifie('touche OK et texte envoyés à la bonne TV', o.some(x => x.touche === 'OK' && x.host === '192.168.1.30') && o.some(x => x.texte === 'tf1'));
   }
 
   console.log('TV : saisie par QR code');

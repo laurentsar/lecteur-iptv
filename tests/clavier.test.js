@@ -130,6 +130,18 @@ verifie('⌨️ ouvre le clavier pour ce champ', !!doc.getElementById('clavierEc
 appuie('Tout effacer'); appuie('1'); appuie('✔ Valider');
 verifie('valeur écrite', url.value === '1', url.value);
 
+console.log('\n— Texte reçu de la télécommande du téléphone —');
+{
+  w.DpadNav.focusSansClavier(url);
+  url.value = '';
+  w.dispatchEvent(new w.CustomEvent('tvtexte', { detail: 'http://srv' }));
+  verifie('écrit dans le champ sélectionné', url.value === 'http://srv', url.value);
+  ok_();
+  w.dispatchEvent(new w.CustomEvent('tvtexte', { detail: ':8080' }));
+  appuie('✔ Valider');
+  verifie('ajouté au clavier à l\'écran ouvert', url.value === 'http://srv:8080', url.value);
+}
+
 console.log('\n— Fenêtre de confirmation : le focus y entre et y reste —');
 {
   // jsdom ne fait pas de mise en page : tout élément « visible », 10×10.
