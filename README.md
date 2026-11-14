@@ -297,8 +297,10 @@ que la qualité maximale ou la latence minimale :
   réellement hors service, etc.).
 - Les flux **`.ts` bruts** (mpeg-ts en direct, hors HLS) sont lus via
   [mpegts.js](https://github.com/xqq/mpegts.js) (Apache-2.0).
-- L'**EPG compressé** (`.gz`) n'est pas décompressé : il faut un lien XMLTV
-  non compressé.
+- L'**EPG compressé** (`.gz`) est décompressé par l'appli quand l'appareil
+  le permet (DecompressionStream). Le guide ne garde que les chaînes de la
+  playlist ; sur un appareil à petite mémoire (Fire TV Stick), seulement
+  aujourd'hui et demain.
 - **CORS** : beaucoup de serveurs IPTV bloquent les requêtes venant d'un
   navigateur (ils sont pensés pour des lecteurs natifs comme VLC). Sur
   l'**APK Android**, le chargement des playlists M3U, de l'API Xtream et

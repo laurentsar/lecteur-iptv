@@ -424,7 +424,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             // Le délai de premier chargement est lui aussi une coupure : une
             // chaîne qui ne répond pas maintenant répond souvent trente
             // secondes plus tard. On réessaie au lieu de rester sur un message.
-            scheduleReconnect("Le flux ne répond pas");
+            scheduleReconnect(reseauDisponible()
+                    ? "La chaîne ne démarre pas : le fournisseur ne répond pas (chaîne hors service ?)"
+                    : "Pas de connexion internet sur cet appareil (wifi coupé ?)");
         }
     };
 
@@ -465,7 +467,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (userPaused) {
                 return;
             }
-            scheduleReconnect("Réception interrompue");
+            scheduleReconnect(reseauDisponible()
+                    ? "Réception interrompue (connexion trop lente ?)"
+                    : "Pas de connexion internet sur cet appareil (wifi coupé ?)");
         }
     };
 
@@ -1080,30 +1084,61 @@ public class NativePlayerActivity extends AppCompatActivity {
     // Le serveur IPTV a répondu par un code d'erreur HTTP : on le traduit,
     // au lieu du seul « ERROR_CODE_IO_BAD_HTTP_STATUS » qui ne dit pas quoi
     // faire.
-    private static String causeLisible(PlaybackException error) {
+    // Mêmes phrases que www/erreurs.js (lecteur web), pour que l'utilisateur
+    // lise la même chose quel que soit le lecteur.
+    private String causeLisible(PlaybackException error) {
+        if (!reseauDisponible()) {
+            return "Pas de connexion internet sur cet appareil (wifi coupé ?)";
+        }
         Throwable t = error;
         while (t != null && !(t instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)) {
             t = t.getCause();
         }
         if (t == null) {
-            return "Lecture interrompue (" + error.getErrorCodeName() + ")";
+            switch (error.errorCode) {
+                case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED:
+                    return "Serveur du fournisseur injoignable (chaîne hors service, ou adresse du serveur changée ?)";
+                case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT:
+                    return "Le serveur du fournisseur ne répond pas (trop lent ou surchargé)";
+                case PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED:
+                case PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED:
+                case PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED:
+                case PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED:
+                    return "Le fournisseur n'envoie pas de vidéo pour cette chaîne (lien mort, ou abonnement expiré ?)";
+                case PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED:
+                case PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES:
+                    return "Format trop lourd pour cet appareil (4K/HEVC ?) : essaie une version HD ou SD de la chaîne";
+                default:
+                    return "Lecture interrompue (" + error.getErrorCodeName() + ")";
+            }
         }
         int code = ((androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) t).responseCode;
-        String sens;
         if (code == 401) {
-            sens = "identifiants refusés — abonnement expiré ou mot de passe changé ?";
+            return "Identifiants refusés par le fournisseur : abonnement expiré ou mot de passe changé ?";
         } else if (code == 403 || code == 429 || code == 456 || code == 458 || code == 509) {
-            sens = "accès refusé — trop d'appareils connectés en même temps sur l'abonnement "
-                    + "(ferme la lecture sur le téléphone) ou abonnement expiré";
+            return "Le fournisseur refuse la connexion : l'abonnement est déjà utilisé sur un autre appareil "
+                    + "(arrête la lecture ailleurs) ou il a expiré";
         } else if (code == 404 || code == 410) {
-            sens = "chaîne introuvable sur le serveur — elle a peut-être changé d'adresse "
+            return "Chaîne introuvable chez le fournisseur : elle a changé d'adresse ou n'existe plus "
                     + "(recharge la playlist dans Réglages)";
         } else if (code >= 500) {
-            sens = "serveur du fournisseur en panne ou surchargé";
-        } else {
-            sens = "réponse inattendue du serveur";
+            return "Serveur du fournisseur en panne ou surchargé : réessaie dans quelques minutes";
         }
-        return "Le serveur IPTV refuse la chaîne (erreur " + code + " : " + sens + ")";
+        return "Le fournisseur a répondu par une erreur (" + code + ")";
+    }
+
+    private boolean reseauDisponible() {
+        try {
+            android.net.ConnectivityManager cm =
+                    (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm == null) {
+                return true;
+            }
+            android.net.NetworkInfo ni = cm.getActiveNetworkInfo();
+            return ni != null && ni.isConnected();
+        } catch (Exception e) {
+            return true;   // dans le doute, on ne dit pas « pas de réseau »
+        }
     }
 
     private static String nomCodec(String mime) {
@@ -2864,6 +2899,9 @@ def patch_manifest_permissions():
         ('android.permission.NEARBY_WIFI_DEVICES', ' android:usesPermissionFlags="neverForLocation"'),
         # Verrou wifi pendant la lecture (setWakeMode, voir buildLocalPlayer).
         ('android.permission.WAKE_LOCK', ''),
+        # « Pas de connexion internet » plutôt qu'une erreur serveur quand le
+        # wifi de l'appareil est coupé (reseauDisponible, causeLisible).
+        ('android.permission.ACCESS_NETWORK_STATE', ''),
     ]
     added = False
     for perm, extra in perms:

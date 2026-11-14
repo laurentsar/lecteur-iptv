@@ -842,14 +842,23 @@
     // mégaoctets de XMLTV à chaque lancement — voir Store.epgGet/epgSet. Ça
     // rend aussi le Guide consultable quand la source EPG est momentanément
     // injoignable.
-    Store.epgGet(url).then(function (cached) {
-      if (cached) { Net.note('✔ cache EPG (' + Object.keys(cached).length + ' chaînes)'); return cached; }
-      Net.note('… EPG absent du cache ou périmé : téléchargement');
-      return Epg.fetchXmltv(url).then(function (map) {
-        // écriture en tâche de fond ; un échec est noté dans le journal réseau
-        Store.epgSet(url, map).then(function () { Net.note('✔ EPG enregistré en cache'); },
-          function (e) { Net.note('✖ EPG NON enregistré en cache : ' + ((e && e.message) || e)); });
-        return map;
+    // Guide allégé : seulement les chaînes de la playlist, et sur un appareil
+    // à petite mémoire (Fire TV Stick) seulement aujourd'hui et demain. La
+    // copie locale dépend des deux : sa clé change si la playlist change.
+    var leger = Epg.appareilLeger();
+    chainesPourEpg().then(function (items) {
+      var voulues = Epg.chainesVoulues(items);
+      var cle = url + '#' + (voulues ? voulues.signature : 'tout') + (leger ? '#leger' : '');
+      return Store.epgGet(cle).then(function (cached) {
+        if (cached) { Net.note('✔ cache EPG (' + Object.keys(cached).length + ' chaînes)'); return cached; }
+        Net.note('… EPG absent du cache ou périmé : téléchargement' +
+          (voulues ? ' (filtré sur ' + items.length + ' chaînes)' : '') + (leger ? ', aujourd\'hui et demain' : ''));
+        return Epg.fetchXmltv(url, { voulues: voulues, leger: leger }).then(function (map) {
+          // écriture en tâche de fond ; un échec est noté dans le journal réseau
+          Store.epgSet(cle, map).then(function () { Net.note('✔ EPG enregistré en cache'); },
+            function (e) { Net.note('✖ EPG NON enregistré en cache : ' + ((e && e.message) || e)); });
+          return map;
+        });
       });
     }).then(function (map) {
       if (timedOut) return; // réponse arrivée après coup — l'échec par délai a déjà été traité
@@ -861,7 +870,7 @@
       // précisément (identifiants/noms qui ne concordent pas avec la
       // source EPG) — sans ce chiffre, ce cas est indiscernable d'un
       // guide qui n'a simplement pas encore chargé.
-      state.epgDebug = { url: url, channelCount: Object.keys(map).length };
+      state.epgDebug = { url: url, channelCount: Object.keys(map).length, leger: leger };
       if (isTabActive('direct')) renderKind('direct');
       if (isTabActive('guide')) renderGuide(false);
     }).catch(function (err) {
@@ -873,6 +882,20 @@
       console.warn('EPG', err.message);
       if (isTabActive('guide')) renderGuide(false);
     });
+  }
+
+  // Chaînes en direct de la playlist active ({ epgKey, epgId, name }), pour
+  // ne garder du guide que leurs programmes. [] si la liste n'est pas
+  // disponible : le guide est alors gardé en entier.
+  function chainesPourEpg() {
+    var pl = state.playlist;
+    if (pl && pl.type === 'm3u') {
+      var items = (state.m3uData && state.m3uData.items) || [];
+      return Promise.resolve(items.map(function (it) { return { epgKey: it.tvgId || null, name: it.name }; }));
+    }
+    return ensureAllDirectItems().then(function (list) {
+      return (list || []).map(function (it) { return { epgKey: it.epgKey, epgId: it.epgId, name: it.name }; });
+    }).catch(function () { return []; });
   }
 
   function nowNextFor(item) {
@@ -932,7 +955,8 @@
           var groupLabel = catLabel[s.category_id] || '';
           return { key: 'xt:live:' + pl.id + ':' + s.stream_id, kind: /radio/i.test(groupLabel) ? 'radio' : 'direct', name: s.name,
             logo: s.stream_icon, group: groupLabel, url: Xtream.streamUrl(cfg, 'live', s.stream_id, 'm3u8'),
-            streamId: s.stream_id, epgKey: String(s.stream_id), chno: s.num != null ? String(s.num) : '' };
+            streamId: s.stream_id, epgKey: String(s.stream_id), epgId: s.epg_channel_id || '',
+            chno: s.num != null ? String(s.num) : '' };
         }
         if (kindKey === 'films') {
           return { key: 'xt:vod:' + pl.id + ':' + s.stream_id, kind: 'films', name: s.name,
@@ -2400,6 +2424,10 @@
             'ℹ️ ' + matched + ' chaîne(s) guidée(s) sur ' + totalAvant +
             ' — décoche « Chaînes avec programme » pour afficher les autres.'));
         }
+      }
+      if (state.epgDebug && state.epgDebug.leger && dayStart >= Epg.finLegere(Date.now())) {
+        hintEl.appendChild(el('div', 'hint',
+          'ℹ️ Sur cet appareil, le programme est limité à aujourd’hui et demain pour ne pas saturer sa mémoire.'));
       }
       if (!list.length) {
         hintEl.appendChild(el('div', 'hint', state.epgLoading

@@ -248,7 +248,8 @@
     });
     video.addEventListener('error', function () {
       clearLoadTimeout();
-      var cause = 'Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error);
+      var cause = expliquer('media', video.error && video.error.code) ||
+        'Lecture impossible (' + currentEngine + ') — ' + describeMediaError(video.error);
       if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
       attemptFallbackOrFail(cause);
     });
@@ -270,9 +271,10 @@
       if (userPaused) return;
       stallTimer = setTimeout(function () {
         if (userPaused || !video.paused && video.readyState >= 3) return;
-        var cause = 'Réception interrompue';
+        var cause = (global.navigator && global.navigator.onLine === false)
+          ? expliquer('silence') : 'Réception interrompue';
         if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
-        attemptFallbackOrFail(cause + ' — le flux ne renvoie plus de données.');
+        attemptFallbackOrFail(cause + ' — le flux ne renvoie plus de données (connexion trop lente ?).');
       }, STALL_MS);
     }
     ['waiting', 'stalled'].forEach(function (evt) { video.addEventListener(evt, armStall); });
@@ -1504,6 +1506,14 @@
     castLoad(session, castUrl(currentUrl), currentTitle, null, false);
   }
 
+  // Phrase claire (erreurs.js) pour une erreur de lecteur, ou '' si
+  // erreurs.js n'est pas chargé ou n'a rien de plus précis à dire.
+  function expliquer(sorte) {
+    var E = global.Erreurs;
+    if (!E || !E[sorte]) return '';
+    try { return E[sorte].apply(null, Array.prototype.slice.call(arguments, 1)) || ''; } catch (e) { return ''; }
+  }
+
   function setStatus(msg) { if (statusEl) statusEl.textContent = msg || ''; }
 
   // Le navigateur donne un code d'erreur précis sur l'élément <video> :
@@ -1559,7 +1569,7 @@
         if (gelsRecents.length >= 4) { gelsRecents = []; basculerSource(); }
       },
       erreur: function (type) {
-        var cause = 'Lecture impossible (' + type + ')';
+        var cause = expliquer('avplay', type) || 'Lecture impossible (' + type + ')';
         if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
         setStatus(cause);
       },
@@ -1678,7 +1688,8 @@
   function armLoadTimeout() {
     clearLoadTimeout();
     loadTimeoutId = setTimeout(function () {
-      attemptFallbackOrFail('Le flux ne répond pas (délai dépassé) — probablement hors service ou une entrée de playlist invalide.');
+      attemptFallbackOrFail(expliquer('silence') ||
+        'Le flux ne répond pas (délai dépassé) — probablement hors service ou une entrée de playlist invalide.');
     }, LOAD_TIMEOUT_MS);
   }
 
@@ -2143,7 +2154,8 @@
       hls = new global.Hls(hlsConfig);
       hls.on(global.Hls.Events.ERROR, function (evt, data) {
         if (!data || !data.fatal) return;
-        var cause = 'Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ')';
+        var clair = expliquer('hls', data);
+        var cause = clair || 'Flux HLS interrompu (' + data.type + (data.details ? ' — ' + data.details : '') + ')';
         // hls.js sait se remettre seul de la plupart des pannes, à condition
         // qu'on le lui demande : relancer le chargement après une erreur
         // réseau, reconstruire le tampon après une erreur de média. Sans ces
@@ -2157,7 +2169,7 @@
         } else if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) {
           return;
         }
-        attemptFallbackOrFail(cause + ' — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
+        attemptFallbackOrFail(clair || cause + ' — le serveur bloque peut-être ce flux depuis un navigateur (CORS).');
       });
       hls.on(global.Hls.Events.AUDIO_TRACKS_UPDATED, function () { updateTracksVisibility(); checkHlsAudioCodec(); });
       hls.on(global.Hls.Events.SUBTITLE_TRACKS_UPDATED, updateTracksVisibility);
@@ -2179,12 +2191,13 @@
       currentEngine = 'mpeg-ts';
       setStatus('Connexion au flux (mpeg-ts)…');
       mpegtsPlayer = global.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: urlFlux }, MPEGTS_LOW_BANDWIDTH_CONFIG);
-      mpegtsPlayer.on(global.mpegts.Events.ERROR, function () {
-        var cause = 'Flux mpeg-ts interrompu';
+      mpegtsPlayer.on(global.mpegts.Events.ERROR, function (type, detail, info) {
+        var clair = expliquer('mpegts', type, detail, info);
+        var cause = clair || 'Flux mpeg-ts interrompu';
         // mpegts.js n'a pas de reprise intégrée : on rejoue le flux depuis le
         // début, ce qui pour un direct revient à se rebrancher au bord.
         if (tryRecover(cause, function () { startPlayback(currentUrl, currentTitle); })) return;
-        attemptFallbackOrFail(cause + ' — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
+        attemptFallbackOrFail(clair || cause + ' — le serveur bloque peut-être ce flux depuis un navigateur (CORS), ou le flux est hors service.');
       });
       // mpegts.js ne démultiplexe que l'AAC et le MP3. Une chaîne en MPEG-1
       // Layer 2 (la norme du DVB hertzien) ou en AC-3 passe donc en silence,
