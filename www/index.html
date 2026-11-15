@@ -182,7 +182,10 @@
 
     <!-- ================= MA LISTE (favoris + enregistrements) ================= -->
     <section class="panel" id="tab-maliste">
-      <div class="cat-title">⭐ Favoris</div>
+      <div class="accueil-tete">
+        <div class="cat-title">⭐ Favoris</div>
+        <button id="btnOrdreFavoris" class="lien-action">↕ Réordonner</button>
+      </div>
       <div id="listeFavoris" class="grid-cartes liste"></div>
 
       <div class="cat-title" style="margin-top:22px">📼 Enregistrements</div>
@@ -247,6 +250,11 @@
             <h2>Lecteur vidéo natif</h2>
             <p class="hint">Lecture hors WebView (Media3/ExoPlayer) : décode l'HEVC et l'audio AC3/E-AC3/DTS que le navigateur refuse, et tient mieux la charge sur une télé ou un boîtier. Décoche pour revenir au lecteur web — il reste utilisé automatiquement si le lecteur natif échoue.</p>
             <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optLecteurNatif" checked /> Lire avec le lecteur natif</label>
+          </div>
+          <div class="card" id="card-fond-sonore" style="display:none">
+            <h2>Son en arrière-plan</h2>
+            <p class="hint">Téléphone : écran verrouillé pendant une chaîne en direct, le son continue (comme une radio), l'image revient au déverrouillage.</p>
+            <label style="display:flex; align-items:center; gap:8px; margin-top:8px"><input type="checkbox" id="optFondSonore" /> Continuer le son écran verrouillé</label>
           </div>
           <div class="card">
             <h2>Au démarrage</h2>
@@ -507,7 +515,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = '3.06';
+    window.APP_VERSION = '3.07';
     window.UPDATE_REPO = 'laurentsar/lecteur-iptv';
     // Adresse de la version web, utilisée par la passerelle VR de l'APK :
     // le relief exige WebXR, que seule la PWA obtient (voir setupPontVr dans

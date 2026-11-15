@@ -620,7 +620,7 @@
       // Sauf en mini-fenêtre (PiP demandé par son bouton) : là, continuer
       // à jouer hors de l'appli est justement le but.
       var enPip = !!video && (document.pictureInPictureElement === video || video.webkitPresentationMode === 'picture-in-picture');
-      if (overlay && overlay.classList.contains('show') && !currentIsRadio && video && !isCasting() && !enPip) {
+      if (overlay && overlay.classList.contains('show') && !currentIsRadio && !sonEnFond() && video && !isCasting() && !enPip) {
         if (!state.isActive) {
           // La pause passe pour volontaire (userPaused) : aucune
           // reconnexion automatique tant que l'appli est en arrière-plan.
@@ -634,15 +634,28 @@
         return;
       }
       var rp = radioPlayerPlugin();
-      if (!rp || !overlay || !overlay.classList.contains('show') || !currentIsRadio) return;
-      if (!state.isActive) {
-        video.pause();
-        rp.play({ url: originalUrl, title: originalTitle, logo: currentLogo }).catch(function () {});
-      } else {
-        rp.stop().catch(function () {});
-        video.play().catch(function () {});
-      }
+      if (!rp || !overlay || !overlay.classList.contains('show') || !(currentIsRadio || sonEnFond())) return;
+      relaisSon(rp, state);
     });
+  }
+
+  // Chaîne en direct avec l'option « son en arrière-plan » (téléphone) :
+  // traitée comme une radio quand l'appli passe derrière.
+  function sonEnFond() {
+    return currentIsLive && !!(global.Store && global.Store.getFondSonore && global.Store.getFondSonore());
+  }
+
+  // Le service natif prend le relais du son hors de l'appli, la page le
+  // reprend au retour.
+  function relaisSon(rp, state) {
+    if (!state.isActive) {
+      video.pause();
+      rp.play({ url: originalUrl, title: originalTitle, logo: currentLogo }).catch(function () {});
+    } else {
+      rp.stop().catch(function () {});
+      if (currentIsLive && !currentIsRadio) startPlayback(originalUrl, originalTitle);
+      else video.play().catch(function () {});
+    }
   }
 
   // ---------- Télécommande virtuelle (chaînes en direct uniquement) ----------
@@ -2125,7 +2138,8 @@
       url: url, title: title || '', live: currentIsLive,
       channels: zap.channels, index: zap.index,
       versions: zap.versions, favorites: zap.favorites,
-      positionMs: reprise
+      positionMs: reprise,
+      fondSonore: !!(global.Store && global.Store.getFondSonore && global.Store.getFondSonore())
     }).then(function () {
       close();
       startNativeInfoRefresh(nativePlayer);

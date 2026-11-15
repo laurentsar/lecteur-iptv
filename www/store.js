@@ -193,6 +193,24 @@
     return d && d.url && (!playlistId || d.playlistId === playlistId) ? d : null;
   }
   function setDerniereChaine(d) { return lsSet(K_DERNIERE, d); }
+  // Son en arrière-plan : écran verrouillé pendant un direct (téléphone),
+  // le son continue.
+  var K_FOND_SONORE = 'iptv:fondSonore';
+  function getFondSonore() { return lsGet(K_FOND_SONORE, false) === true; }
+  function setFondSonore(actif) { return lsSet(K_FOND_SONORE, !!actif); }
+
+  // Déplace un favori d'un cran (delta = -1 vers le haut, +1 vers le bas) :
+  // l'ordre sert aussi au zapping dans les favoris.
+  function deplacerFavori(key, delta) {
+    var list = getFavoris();
+    var i = list.findIndex(function (f) { return f.key === key; });
+    var j = i + delta;
+    if (i < 0 || j < 0 || j >= list.length) return false;
+    var x = list[i]; list[i] = list[j]; list[j] = x;
+    setFavoris(list);
+    return true;
+  }
+
   function getReprendreChaine() { return lsGet(K_REPRENDRE, false) === true; }
   function setReprendreChaine(actif) { return lsSet(K_REPRENDRE, !!actif); }
 
@@ -380,6 +398,7 @@
     getLecteurNatif: getLecteurNatif, setLecteurNatif: setLecteurNatif,
     getDerniereChaine: getDerniereChaine, setDerniereChaine: setDerniereChaine,
     getReprendreChaine: getReprendreChaine, setReprendreChaine: setReprendreChaine,
+    getFondSonore: getFondSonore, setFondSonore: setFondSonore, deplacerFavori: deplacerFavori,
     getGuideAvecProgramme: getGuideAvecProgramme, setGuideAvecProgramme: setGuideAvecProgramme,
     getModeTv: getModeTv, setModeTv: setModeTv,
     getFiltreNuit: getFiltreNuit, setFiltreNuit: setFiltreNuit,

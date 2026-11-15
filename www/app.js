@@ -2960,11 +2960,45 @@
   }
 
   // ---------- favoris ----------
+  // Mode « Réordonner » : une ligne par favori avec ▲ ▼, utilisable à la
+  // télécommande comme au doigt (pas de glisser-déposer).
+  var ordreFavoris = false;
+  function renderOrdreFavoris(container, favs) {
+    favs.forEach(function (item, i) {
+      var row = el('div', 'row ordre-favori');
+      row.appendChild(el('span', 'ordre-nom', item.name));
+      [['▲', -1, i === 0], ['▼', 1, i === favs.length - 1]].forEach(function (d) {
+        var b = el('button', 'ghost', d[0]);
+        b.style.flex = '0 0 auto';
+        b.disabled = d[2];
+        b.setAttribute('aria-label', d[1] < 0 ? 'Monter' : 'Descendre');
+        b.addEventListener('click', function () {
+          if (!Store.deplacerFavori(item.key, d[1])) return;
+          renderFavoris();
+          if (window.HaSync) HaSync.sync(true);
+          // Le focus suit le favori déplacé (télécommande).
+          var lignes = $id('listeFavoris').querySelectorAll('.ordre-favori');
+          var cible = lignes[i + d[1]];
+          var btn = cible && cible.querySelectorAll('button')[d[1] < 0 ? 0 : 1];
+          if (btn && !btn.disabled) btn.focus(); else if (cible) cible.querySelector('button:not([disabled])').focus();
+        });
+        row.appendChild(b);
+      });
+      container.appendChild(row);
+    });
+  }
+
   function renderFavoris() {
     var container = $id('listeFavoris');
     var favs = Store.getFavoris().filter(function (item) { return !isHiddenChannel(item.name); });
     container.innerHTML = '';
+    var btnOrdre = $id('btnOrdreFavoris');
+    if (btnOrdre) {
+      btnOrdre.style.display = favs.length > 1 ? '' : 'none';
+      btnOrdre.textContent = ordreFavoris ? '✔ Terminé' : '↕ Réordonner';
+    }
     if (!favs.length) { container.appendChild(el('div', 'hint', 'Aucun favori pour le moment — appui long sur une chaîne, un film ou un épisode (ou touche ☆).')); return; }
+    if (ordreFavoris) { renderOrdreFavoris(container, favs); return; }
     favs.forEach(function (item) {
       var isFilm = item.kind === 'films' || item.kind === 'vod';
       container.appendChild(card(item, isFilm ? { onOpen: openFilm } : {}));
@@ -3588,6 +3622,18 @@
     });
   }
 
+  function setupFondSonore() {
+    var natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    var box = $id('optFondSonore');
+    if (!natif || !box) return;
+    $id('card-fond-sonore').style.display = '';
+    box.checked = Store.getFondSonore();
+    box.addEventListener('change', function () {
+      Store.setFondSonore(box.checked);
+      toast(box.checked ? 'Le son continuera écran verrouillé' : 'Pause quand l’écran se verrouille');
+    });
+  }
+
   function setupReprendreChaine() {
     var box = $id('optReprendreChaine');
     if (!box) return;
@@ -3761,6 +3807,9 @@
     pruneHiddenFavoris();
     setupLecteurNatif();
     setupReprendreChaine();
+    setupFondSonore();
+    var bOrdre = $id('btnOrdreFavoris');
+    if (bOrdre) bOrdre.addEventListener('click', function () { ordreFavoris = !ordreFavoris; renderFavoris(); });
     setupGuideFiltre();
     var activeId = Store.getActivePlaylistId();
     if (activeId) { setActivePlaylist(activeId); refreshOnOpen(); }
