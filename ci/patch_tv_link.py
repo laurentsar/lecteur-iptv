@@ -1028,6 +1028,115 @@ public class TvLinkPlugin extends Plugin {
         });
     }
 
+    // ---------- rangée « Lecteur IPTV » dans l'accueil Android TV ----------
+    // Les favoris (chaînes en direct) apparaissent sur l'écran d'accueil de la
+    // TV : un clic lance la chaîne (lien lecteuriptv://play, géré par la page).
+    // Android TV 8+ seulement : l'accueil de la Fire TV n'accepte pas ces
+    // rangées pour les applis installées hors Appstore — l'appel n'y fait rien.
+    @PluginMethod
+    public void majAccueilTv(PluginCall call) {
+        if (android.os.Build.VERSION.SDK_INT < 26 || !TvLink.isTv(getContext())) {
+            call.resolve();
+            return;
+        }
+        final org.json.JSONArray chaines;
+        try {
+            chaines = call.getArray("chaines", new com.getcapacitor.JSArray());
+        } catch (Exception e) {
+            call.reject("liste illisible");
+            return;
+        }
+        final Context ctx = getContext().getApplicationContext();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    remplirAccueilTv(ctx, chaines);
+                } catch (Exception e) {
+                    // fournisseur absent (Fire TV) ou refus : rien à faire
+                }
+            }
+        }, "AccueilTv").start();
+        call.resolve();
+    }
+
+    private static final int ACCUEIL_MAX = 20;
+
+    @android.annotation.TargetApi(26)
+    private static void remplirAccueilTv(Context ctx, org.json.JSONArray chaines) throws Exception {
+        android.content.ContentResolver cr = ctx.getContentResolver();
+        android.content.SharedPreferences sp = ctx.getSharedPreferences("accueil_tv", Context.MODE_PRIVATE);
+        long canal = sp.getLong("canal", -1);
+        if (canal >= 0) {
+            android.database.Cursor c = cr.query(android.media.tv.TvContract.buildChannelUri(canal),
+                    new String[] { android.media.tv.TvContract.Channels._ID }, null, null, null);
+            boolean existe = c != null && c.getCount() > 0;
+            if (c != null) {
+                c.close();
+            }
+            if (!existe) {
+                canal = -1;
+            }
+        }
+        if (canal < 0) {
+            android.content.ContentValues v = new android.content.ContentValues();
+            v.put(android.media.tv.TvContract.Channels.COLUMN_TYPE, android.media.tv.TvContract.Channels.TYPE_PREVIEW);
+            v.put(android.media.tv.TvContract.Channels.COLUMN_DISPLAY_NAME, "Lecteur IPTV — Favoris");
+            v.put(android.media.tv.TvContract.Channels.COLUMN_APP_LINK_INTENT_URI,
+                    new Intent(ctx, MainActivity.class).toUri(Intent.URI_INTENT_SCHEME));
+            android.net.Uri u = cr.insert(android.media.tv.TvContract.Channels.CONTENT_URI, v);
+            if (u == null) {
+                return;
+            }
+            canal = android.content.ContentUris.parseId(u);
+            sp.edit().putLong("canal", canal).apply();
+            // Logo de la rangée : l'icône de l'appli.
+            try {
+                android.graphics.drawable.Drawable d = ctx.getPackageManager().getApplicationIcon(ctx.getPackageName());
+                android.graphics.Bitmap b = android.graphics.Bitmap.createBitmap(160, 160, android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas toile = new android.graphics.Canvas(b);
+                d.setBounds(0, 0, 160, 160);
+                d.draw(toile);
+                java.io.OutputStream o = cr.openOutputStream(android.media.tv.TvContract.buildChannelLogoUri(canal));
+                if (o != null) {
+                    b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, o);
+                    o.close();
+                }
+            } catch (Exception e) {
+                // sans logo
+            }
+            // Première rangée de l'appli : affichée sans demander (rangée
+            // par défaut) ; les suivantes demanderaient une confirmation.
+            android.media.tv.TvContract.requestChannelBrowsable(ctx, canal);
+        }
+        cr.delete(android.media.tv.TvContract.buildPreviewProgramsUriForChannel(canal), null, null);
+        int n = Math.min(chaines.length(), ACCUEIL_MAX);
+        for (int i = 0; i < n; i++) {
+            org.json.JSONObject ch = chaines.optJSONObject(i);
+            if (ch == null || ch.optString("url", "").isEmpty()) {
+                continue;
+            }
+            String lien = "lecteuriptv://play?url=" + android.net.Uri.encode(ch.optString("url"))
+                    + "&title=" + android.net.Uri.encode(ch.optString("name", ""))
+                    + "&logo=" + android.net.Uri.encode(ch.optString("logo", ""))
+                    + "&epgKey=" + android.net.Uri.encode(ch.optString("epgKey", ""));
+            android.content.ContentValues p = new android.content.ContentValues();
+            p.put(android.media.tv.TvContract.PreviewPrograms.COLUMN_CHANNEL_ID, canal);
+            p.put(android.media.tv.TvContract.PreviewPrograms.COLUMN_TYPE, android.media.tv.TvContract.PreviewPrograms.TYPE_CHANNEL);
+            p.put(android.media.tv.TvContract.PreviewPrograms.COLUMN_TITLE, ch.optString("name", ""));
+            p.put(android.media.tv.TvContract.PreviewPrograms.COLUMN_INTENT_URI, lien);
+            p.put(android.media.tv.TvContract.PreviewPrograms.COLUMN_LIVE, 1);
+            p.put(android.media.tv.TvContract.PreviewPrograms.COLUMN_WEIGHT, n - i);
+            String logo = ch.optString("logo", "");
+            if (logo.startsWith("http")) {
+                p.put(android.media.tv.TvContract.PreviewPrograms.COLUMN_POSTER_ART_URI, logo);
+                p.put(android.media.tv.TvContract.PreviewPrograms.COLUMN_POSTER_ART_ASPECT_RATIO,
+                        android.media.tv.TvContract.PreviewPrograms.ASPECT_RATIO_1_1);
+            }
+            cr.insert(android.media.tv.TvContract.PreviewPrograms.CONTENT_URI, p);
+        }
+    }
+
     // Côté téléphone : une touche ou un texte pour la TV choisie.
     @PluginMethod
     public void telecommande(final PluginCall call) {
@@ -1575,3 +1684,22 @@ write_if_changed(RES_DIR + "/drawable/ic_send_tv.xml", IC_SEND_TV_XML)
 patch_layout()
 patch_activity()
 patch_main_activity()
+
+
+
+def patch_manifest_accueil_tv():
+    """Écriture de la rangée dans l'accueil Android TV (TvContract)."""
+    p = "android/app/src/main/AndroidManifest.xml"
+    s = open(p).read()
+    perm = "com.android.providers.tv.permission.WRITE_EPG_DATA"
+    if perm in s:
+        print("manifeste : WRITE_EPG_DATA déjà présente")
+        return
+    s = replace_once(s, '<uses-permission android:name="android.permission.INTERNET" />',
+                     '<uses-permission android:name="android.permission.INTERNET" />\n'
+                     '    <uses-permission android:name="' + perm + '" />', "manifeste (WRITE_EPG_DATA)")
+    open(p, "w").write(s)
+    print("manifeste : WRITE_EPG_DATA ajoutée")
+
+
+patch_manifest_accueil_tv()

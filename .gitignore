@@ -17,3 +17,4 @@ __pycache__/
 # reparte en ligne sans que rien ne s'y oppose. Une clé publiée permet de
 # signer un APK qu'Android installe par-dessus l'app légitime.
 build-tizen/
+.verif-java/

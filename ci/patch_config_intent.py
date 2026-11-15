@@ -26,6 +26,8 @@ INTENT_FILTER = """
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="lecteuriptv" android:host="config" />
+                <!-- chaîne lancée depuis la rangée de l'accueil Android TV -->
+                <data android:scheme="lecteuriptv" android:host="play" />
             </intent-filter>
 """
 
