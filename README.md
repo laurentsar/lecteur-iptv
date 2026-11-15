@@ -24,6 +24,28 @@ limites de la PWA face à l'APK dans [Limites connues](#limites-connues)).
 | ⭐ **Ma liste** | Favoris (chaînes/films/séries marqués d'un ☆) et enregistrements (programmés et terminés, APK Android) dans un seul onglet. |
 | ⚙️ **Réglages** | Playlists (ajout/test/suppression), export/import chiffré de la config (voir plus bas) et infos (limites connues, réglages TMDB/PIN, confidentialité) — infos présentées en accordéon replié par défaut, pour ne pas encombrer l'écran. |
 
+## Confort à la télécommande et entre appareils
+
+- **Clavier à l'écran** (OK dans un champ, ou bouton ⌨️ à côté) : saisie
+  aux flèches, raccourcis `http://`, `:8080`, `.m3u`…
+- **QR code** (TV) : « 📱 Saisir depuis le téléphone » — la TV sert elle-même
+  un formulaire que n'importe quel téléphone ouvre en scannant le code ;
+  la playlist arrive après confirmation sur la TV.
+- **Télécommande sur le téléphone** (APK) : flèches, OK, Retour, chaînes,
+  volume, et écriture sur la TV avec le clavier du téléphone.
+- **Envoi de la configuration** du téléphone à la TV par le wifi
+  (playlists, favoris, clé TMDB).
+- **Accueil Android TV** : les favoris en rangée « Lecteur IPTV — Favoris ».
+- **Bouquets** : appui long pour masquer ou verrouiller par code PIN.
+- **Favoris** : réordonnables (Ma liste → ↕ Réordonner).
+- **Lecture** : dernière chaîne rouverte au démarrage (option), bandeau
+  « en cours / ensuite », épisode suivant automatique, son qui continue
+  écran verrouillé (option, téléphone), messages d'erreur en clair, alerte
+  avant l'expiration de l'abonnement.
+- **Cinéma VR** : taille d'écran réglable, zapping au joystick.
+- **Quitter** (Retour depuis l'accueil) ferme complètement l'appli ; un
+  enregistrement en cours continue.
+
 ## Diffusion vers une TV
 
 Un bouton dans le lecteur permet d'envoyer le flux en cours sur une TV :
