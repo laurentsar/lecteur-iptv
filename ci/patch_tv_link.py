@@ -1344,9 +1344,9 @@ LAYOUT_ANCHOR = """        <ImageButton
 
 LAYOUT_BUTTON = """        <ImageButton
             android:id="@+id/playerSendBtn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:padding="6dp"
             android:scaleType="fitCenter"
             android:background="@drawable/bg_player_btn"
