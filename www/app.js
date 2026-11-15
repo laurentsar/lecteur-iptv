@@ -331,6 +331,12 @@
     isFrenchBouquet = Catalogue.isFrenchBouquet, isAdultGroup = Catalogue.isAdultGroup,
     matchesSearch = Catalogue.matchesSearch;
 
+  // Cases à cocher des Réglages qui ne touchent qu'au stockage et à
+  // l'affichage : www/options.js.
+  var setupModeTv = Options.setupModeTv, setupFiltreNuit = Options.setupFiltreNuit,
+    setupLecteurNatif = Options.setupLecteurNatif, setupReprendreChaine = Options.setupReprendreChaine,
+    setupFondSonore = Options.setupFondSonore;
+
   // ---------- utilitaires ----------
   function $(sel) { return document.querySelector(sel); }
   function $id(id) { return document.getElementById(id); }
@@ -3317,64 +3323,6 @@
     });
   }
 
-  // ---------- Jeux (émulateur Mega Drive/NES via EmulatorJS) ----------
-  // Identifiants de système attendus par EJS_core (EmulatorJS) : "segaMD"
-  // pour Mega Drive/Genesis (cœur Genesis Plus GX), "nes" pour NES (cœur
-  // FCEUmm). La ROM n'est jamais stockée ni transmise à un serveur : lue en
-  // mémoire depuis le fichier choisi par l'utilisateur, transférée telle
-  // quelle (ArrayBuffer transférable, sans copie) à l'iframe qui héberge le
-  // moteur d'émulation.
-  var SYSTEMES_JEU = {
-    megadrive: { core: 'segaMD', accept: '.md,.gen,.smd,.bin,.zip' },
-    nes: { core: 'nes', accept: '.nes,.zip' }
-  };
-
-  $id('jeu_systeme').addEventListener('change', function () {
-    var s = SYSTEMES_JEU[$id('jeu_systeme').value];
-    $id('jeu_rom').accept = s.accept;
-  });
-  $id('jeu_rom').accept = SYSTEMES_JEU[$id('jeu_systeme').value].accept;
-
-  function lancerJeu(systeme, file) {
-    var s = SYSTEMES_JEU[systeme];
-    var out = $id('jeuResult');
-    out.textContent = 'Chargement…';
-    file.arrayBuffer().then(function (buf) {
-      $id('emuTitre').textContent = file.name;
-      $id('emuOverlay').style.display = '';
-      var frame = $id('emuFrame');
-      // Iframe fraîche à chaque partie (au lieu de réutiliser la précédente)
-      // : évite tout état résiduel d'une session EmulatorJS antérieure
-      // (WASM/contexte audio) qui continuerait à tourner en arrière-plan.
-      var neuve = frame.cloneNode(false);
-      neuve.id = 'emuFrame'; neuve.className = frame.className;
-      frame.parentNode.replaceChild(neuve, frame);
-      neuve.addEventListener('load', function once() {
-        neuve.removeEventListener('load', once);
-        neuve.contentWindow.postMessage({ type: 'lancer-jeu', core: s.core, nom: file.name, rom: buf }, '*', [buf]);
-      });
-      neuve.src = 'emulateur.html';
-      out.textContent = '';
-    }).catch(function (err) { out.textContent = '❌ Fichier illisible : ' + err.message; });
-  }
-
-  $id('btnJouer').addEventListener('click', function () {
-    var file = $id('jeu_rom').files[0];
-    if (!file) { toast('Choisis un fichier ROM.'); return; }
-    lancerJeu($id('jeu_systeme').value, file);
-  });
-
-  $id('btnFermerJeu').addEventListener('click', function () {
-    $id('emuOverlay').style.display = 'none';
-    var frame = $id('emuFrame');
-    // Bascule vers une page vide plutôt que de simplement masquer l'overlay :
-    // sans ça l'émulateur (WASM + audio) continuerait de tourner, invisible,
-    // jusqu'à la prochaine partie.
-    var neuve = frame.cloneNode(false);
-    neuve.id = 'emuFrame'; neuve.className = frame.className;
-    frame.parentNode.replaceChild(neuve, frame);
-    neuve.src = 'about:blank';
-  });
 
   // ---------- réglage TMDB (fiches films) ----------
   $id('tmdbKeyInput').value = Store.getTmdbKey() || '';
@@ -3483,27 +3431,7 @@
     P.majAccueilTv({ chaines: chaines }).catch(function () {});
   }
 
-  function setupFondSonore() {
-    var natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-    var box = $id('optFondSonore');
-    if (!natif || !box) return;
-    $id('card-fond-sonore').style.display = '';
-    box.checked = Store.getFondSonore();
-    box.addEventListener('change', function () {
-      Store.setFondSonore(box.checked);
-      toast(box.checked ? 'Le son continuera écran verrouillé' : 'Pause quand l’écran se verrouille');
-    });
-  }
 
-  function setupReprendreChaine() {
-    var box = $id('optReprendreChaine');
-    if (!box) return;
-    box.checked = Store.getReprendreChaine();
-    box.addEventListener('change', function () {
-      Store.setReprendreChaine(box.checked);
-      toast(box.checked ? 'La dernière chaîne s’ouvrira au démarrage' : 'Démarrage sur l’accueil');
-    });
-  }
 
   // Au démarrage : la dernière chaîne de la playlist active, si l'option est
   // cochée. Un court délai laisse l'accueil se dessiner (et l'utilisateur
@@ -3550,19 +3478,6 @@
     }).catch(function () { /* serveur muet ou navigateur bloqué : rien à signaler */ });
   }
 
-  function setupLecteurNatif() {
-    var natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() &&
-      window.Capacitor.Plugins && window.Capacitor.Plugins.NativePlayer);
-    if (!natif) return;
-    $id('cat-lecture').style.display = '';
-    $id('card-lecture').style.display = '';
-    var box = $id('optLecteurNatif');
-    box.checked = Store.getLecteurNatif();
-    box.addEventListener('change', function () {
-      Store.setLecteurNatif(box.checked);
-      toast(box.checked ? 'Lecteur natif activé' : 'Lecteur web activé');
-    });
-  }
 
   // ---------- Vérification manuelle des mises à jour ----------
   // La vérification automatique (www/update-check.js) tourne déjà à chaque
@@ -3618,43 +3533,6 @@
     return 0;
   }
 
-  // ---------- Affichage TV (grands caractères) ----------
-  // Une interface pensée pour un téléphone tenu à 30 cm devient illisible sur
-  // une télé regardée à trois mètres. Réglage manuel et non détection
-  // automatique : rien ne permet d'identifier de façon fiable un téléviseur
-  // depuis la WebView (l'agent utilisateur d'un boîtier Android TV est celui
-  // d'un téléphone). Voir body.tv dans styles.css.
-  function setupModeTv() {
-    var box = $id('optModeTv');
-    if (!box) return;
-    function appliquer(actif) { document.body.classList.toggle('tv', !!actif); }
-    box.checked = Store.getModeTv();
-    appliquer(box.checked);
-    box.addEventListener('change', function () {
-      Store.setModeTv(box.checked);
-      appliquer(box.checked);
-      toast(box.checked ? '📺 Affichage TV activé' : 'Affichage TV désactivé');
-    });
-  }
-
-  // Filtre lumière bleue : superposition ambre sur toute l'appli, pour le
-  // confort visuel en soirée (l'appli est déjà entièrement en thème sombre —
-  // il n'existe pas de mode clair à remplacer, voir body.filtre-nuit dans
-  // styles.css). Réglage manuel comme le mode TV : aucun moyen fiable de
-  // détecter l'heure du visionnage sans plus d'intrusion que ça n'en vaut
-  // la peine pour un simple confort d'affichage.
-  function setupFiltreNuit() {
-    var box = $id('optFiltreNuit');
-    if (!box) return;
-    function appliquer(actif) { document.body.classList.toggle('filtre-nuit', !!actif); }
-    box.checked = Store.getFiltreNuit();
-    appliquer(box.checked);
-    box.addEventListener('change', function () {
-      Store.setFiltreNuit(box.checked);
-      appliquer(box.checked);
-      toast(box.checked ? '🌙 Filtre lumière bleue activé' : 'Filtre lumière bleue désactivé');
-    });
-  }
 
   function init() {
     startSplash();
