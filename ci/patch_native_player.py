@@ -2019,6 +2019,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         boolean nouveau = !text.equals(dernierProgramme);
         dernierProgramme = text;
+        // Chaîne ouverte depuis la page (pas par zapping) : le nom n'a pas
+        // encore été posé, le bandeau montrait une ligne vide au-dessus du
+        // programme.
+        if (bannerName != null && bannerName.getText().length() == 0 && mediaTitle != null) {
+            bannerName.setText(mediaTitle);
+        }
         progBar.setText(text);
         bannerProg.setText(text);
         // Même émission qu'avant (simple rafraîchissement) : on met le texte à
@@ -2566,17 +2572,17 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
 
         <androidx.mediarouter.app.MediaRouteButton
             android:id="@+id/playerCastBtn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:background="@drawable/bg_player_btn"
             android:contentDescription="Diffuser sur une TV" />
 
         <ImageButton
             android:id="@+id/playerListBtn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:padding="6dp"
             android:scaleType="fitCenter"
             android:background="@drawable/bg_player_btn"
@@ -2586,9 +2592,9 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
 
         <ImageButton
             android:id="@+id/playerRecordBtn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:padding="6dp"
             android:scaleType="fitCenter"
             android:background="@drawable/bg_player_btn"
@@ -2598,9 +2604,9 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
 
         <ImageButton
             android:id="@+id/playerPipBtn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:padding="6dp"
             android:scaleType="fitCenter"
             android:background="@drawable/bg_player_btn"
@@ -2610,9 +2616,9 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
 
         <ImageButton
             android:id="@+id/playerTracksBtn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:padding="6dp"
             android:scaleType="fitCenter"
             android:background="@drawable/bg_player_btn"
@@ -2621,9 +2627,9 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
 
         <ImageButton
             android:id="@+id/playerHomeBtn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:padding="6dp"
             android:scaleType="fitCenter"
             android:background="@drawable/bg_player_btn"
@@ -2632,9 +2638,9 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
 
         <ImageButton
             android:id="@+id/playerCloseBtn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
             android:padding="7dp"
             android:scaleType="fitCenter"
             android:background="@drawable/bg_player_btn"
@@ -2693,7 +2699,7 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
                 android:layout_marginTop="2dp"
                 android:textColor="#92A5BA"
                 android:textSize="12sp"
-                android:maxLines="1"
+                android:maxLines="2"
                 android:ellipsize="end"
                 android:visibility="gone" />
         </LinearLayout>
@@ -2735,7 +2741,7 @@ LAYOUT_XML = """<?xml version="1.0" encoding="utf-8"?>
         android:textColor="#FFFFFF"
         android:textSize="12sp"
         android:textAlignment="center"
-        android:maxLines="1"
+        android:maxLines="2"
         android:ellipsize="end"
         android:visibility="gone" />
 
