@@ -15,10 +15,10 @@
  * (donnée conservée entre deux mises à jour de l'APK) : le shell caché
  * pouvait rester bloqué sur une très vieille version indéfiniment, y
  * compris pour des correctifs déjà « publiés » depuis longtemps. */
-const CACHE = 'iptv-lecteur-v3.13';
+const CACHE = 'iptv-lecteur-v3.14';
 const SHELL = [
   'index.html', 'vr.html', 'emulateur.html', 'styles.css',
-  'net.js', 'serveurs.js', 'hls-native-loader.js', 'stereo-uv.js', 'vr-link.js', 'source-quality.js', 'store.js', 'hasync.js', 'autobackup.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'erreurs.js', 'flux.js', 'catalogue.js', 'player.js', 'recorder.js', 'tvlink.js', 'tizen-tv.js', 'clavier-ecran.js', 'dpad-nav.js', 'youtube.js', 'vr-menus.js', 'jeux.js', 'options.js', 'app.js', 'apk-update.js', 'update-check.js',
+  'net.js', 'serveurs.js', 'hls-native-loader.js', 'stereo-uv.js', 'vr-link.js', 'source-quality.js', 'store.js', 'hasync.js', 'autobackup.js', 'crypto.js', 'm3u.js', 'xtream.js', 'tmdb.js', 'epg.js', 'erreurs.js', 'flux.js', 'catalogue.js', 'player.js', 'recorder.js', 'tvlink.js', 'tizen-tv.js', 'clavier-ecran.js', 'dpad-nav.js', 'youtube.js', 'transfert.js', 'vr-menus.js', 'jeux.js', 'options.js', 'app.js', 'apk-update.js', 'update-check.js',
   'vendor/hls.min.js', 'vendor/mpegts.min.js', 'vendor/qrcode.js',
   'manifest.webmanifest', 'img/icon-192.png', 'img/icon-512.png'
 ];
