@@ -1521,6 +1521,7 @@
         toast(justAdded ? '★ ' + item.name + ' ajouté aux favoris' : '☆ ' + item.name + ' retiré des favoris');
         if (isTabActive('maliste')) renderFavoris();
         if (window.HaSync) HaSync.sync(true);
+        majAccueilTv();
       }
       star.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -2975,6 +2976,7 @@
         b.addEventListener('click', function () {
           if (!Store.deplacerFavori(item.key, d[1])) return;
           renderFavoris();
+          majAccueilTv();
           if (window.HaSync) HaSync.sync(true);
           // Le focus suit le favori déplacé (télécommande).
           var lignes = $id('listeFavoris').querySelectorAll('.ordre-favori');
@@ -3400,8 +3402,24 @@
   // ci/patch_config_intent.py pour l'intent-filter), reçu ici via le plugin
   // Capacitor App. Rien ne transite par le réseau, l'intent est local.
   if (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.Plugins && Capacitor.Plugins.App) {
+    // Chaîne choisie dans la rangée « Lecteur IPTV » de l'accueil Android
+    // TV (lecteuriptv://play?url=…), au lancement comme appli déjà ouverte.
+    var lancerLien = function (lien) {
+      if (!lien || String(lien).indexOf('lecteuriptv://play') !== 0) return false;
+      var q = new URLSearchParams(String(lien).split('?')[1] || '');
+      var u = q.get('url');
+      if (!u) return true;
+      setTimeout(function () {
+        Player.open(u, q.get('title') || '', { live: true, epgKey: q.get('epgKey') || null, logo: q.get('logo') || null });
+      }, 600);
+      return true;
+    };
+    if (Capacitor.Plugins.App.getLaunchUrl) {
+      Capacitor.Plugins.App.getLaunchUrl().then(function (r) { if (r && r.url) lancerLien(r.url); }).catch(function () {});
+    }
     Capacitor.Plugins.App.addListener('appUrlOpen', function (data) {
       try {
+        if (lancerLien(data && data.url)) return;
         var url = new URL(data.url);
         if (url.protocol !== 'lecteuriptv:') return;
         var p = url.searchParams;
@@ -3622,6 +3640,17 @@
     });
   }
 
+  // Accueil Android TV : les chaînes favorites en rangée « Lecteur IPTV »
+  // (ci/patch_tv_link.py, majAccueilTv). Sans effet hors Android TV 8+.
+  function majAccueilTv() {
+    var P = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.TvLink;
+    if (!P || !P.majAccueilTv) return;
+    var chaines = Store.getFavoris().filter(function (f) {
+      return f.url && (f.kind === 'direct' || f.kind === 'live') && !isHiddenChannel(f.name);
+    }).map(function (f) { return { name: f.name, url: f.url, logo: f.logo || '', epgKey: f.epgKey || '' }; });
+    P.majAccueilTv({ chaines: chaines }).catch(function () {});
+  }
+
   function setupFondSonore() {
     var natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
     var box = $id('optFondSonore');
@@ -3808,6 +3837,7 @@
     setupLecteurNatif();
     setupReprendreChaine();
     setupFondSonore();
+    setTimeout(majAccueilTv, 3000);
     var bOrdre = $id('btnOrdreFavoris');
     if (bOrdre) bOrdre.addEventListener('click', function () { ordreFavoris = !ordreFavoris; renderFavoris(); });
     setupGuideFiltre();
