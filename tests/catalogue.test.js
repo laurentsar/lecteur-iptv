@@ -1,4 +1,5 @@
-/* Noms de chaînes et de bouquets (www/catalogue.js). */
+/* Noms de chaînes et de bouquets (www/catalogue.js), formes d'URL de flux
+   et textes du lecteur (www/flux.js). */
 const fs = require('fs');
 const vm = require('vm');
 const { JSDOM } = require('jsdom');
@@ -11,7 +12,7 @@ function verifie(nom, cond, detail) {
 }
 
 const dom = new JSDOM('', { runScripts: 'outside-only' });
-['epg.js', 'source-quality.js', 'catalogue.js'].forEach(f =>
+['epg.js', 'source-quality.js', 'catalogue.js', 'flux.js'].forEach(f =>
   vm.runInContext(fs.readFileSync(WWW + '/' + f, 'utf8'), dom.getInternalVMContext(), { filename: f }));
 const C = dom.window.Catalogue;
 
@@ -30,6 +31,16 @@ verifie('bouquet français reconnu', C.isFrenchBouquet('FR| CINEMA') && C.isFren
 verifie('icône selon le thème', C.iconForBouquet('FR| SPORT') === '⚽' && C.iconForBouquet('Jeunesse') === '🧸');
 verifie('recherche par nom', C.matchesSearch({ name: 'France 2' }, 'france') && !C.matchesSearch({ name: 'TF1' }, 'france'));
 verifie('radios par défaut prêtes à l\'emploi', C.DEFAULT_RADIOS.length > 10 && C.DEFAULT_RADIOS.every(r => r.kind === 'radio' && r.url && r.key));
+
+console.log('— Flux —');
+const F = dom.window.Flux;
+verifie('HLS reconnu, avec paramètres', F.isM3u8('http://s/a.m3u8?t=1') && !F.isM3u8('http://s/live/1.ts'));
+verifie('fichier direct (film, radio mp3)', F.isDirectFile('http://s/f.mkv') && F.isDirectFile('http://r/flux.mp3') && !F.isDirectFile('http://s/live/u/p/1'));
+verifie('variante .m3u8 en gardant la query', F.swapExtToM3u8('http://s/live/1.ts?x=1') === 'http://s/live/1.m3u8?x=1');
+verifie('Chromecast : un .ts part en HLS', F.castUrl('http://s/live/1.ts') === 'http://s/live/1.m3u8' && F.castMimeType('http://s/a.m3u8') === 'application/x-mpegurl');
+verifie('durée lisible', F.formatTime(65) === '1:05' && F.formatTime(3725) === '1:02:05');
+const debut = new Date(2026, 0, 1, 20, 0).getTime(), fin = new Date(2026, 0, 1, 20, 45).getTime();
+verifie('bandeau en cours / ensuite', F.texteMaintenantEnsuite({ now: { titre: 'JT', start: debut, stop: fin }, next: { titre: 'Météo', start: fin } }) === '▶ JT (20:00–20:45)\nEnsuite 20:45 Météo');
 
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);
