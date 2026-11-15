@@ -12,7 +12,7 @@ function verifie(nom, cond, detail) {
 }
 
 const dom = new JSDOM('', { runScripts: 'outside-only' });
-['epg.js', 'source-quality.js', 'catalogue.js', 'flux.js'].forEach(f =>
+['epg.js', 'source-quality.js', 'catalogue.js', 'flux.js', 'natif-pont.js'].forEach(f =>
   vm.runInContext(fs.readFileSync(WWW + '/' + f, 'utf8'), dom.getInternalVMContext(), { filename: f }));
 const C = dom.window.Catalogue;
 
@@ -41,6 +41,20 @@ verifie('Chromecast : un .ts part en HLS', F.castUrl('http://s/live/1.ts') === '
 verifie('durée lisible', F.formatTime(65) === '1:05' && F.formatTime(3725) === '1:02:05');
 const debut = new Date(2026, 0, 1, 20, 0).getTime(), fin = new Date(2026, 0, 1, 20, 45).getTime();
 verifie('bandeau en cours / ensuite', F.texteMaintenantEnsuite({ now: { titre: 'JT', start: debut, stop: fin }, next: { titre: 'Météo', start: fin } }) === '▶ JT (20:00–20:45)\nEnsuite 20:45 Météo');
+
+console.log('— Pont avec le lecteur natif —');
+const N = dom.window.NatifPont;
+dom.window.AppZap = { list: () => [{ name: 'TF1', url: 'u1', chno: 1 }, { name: 'M6', url: 'u2' }], favoris: () => [{ name: 'M6', url: 'u2' }] };
+const pl = N.payload('u2', { live: true, versions: [{ name: 'M6 HD', url: 'v1' }, { name: 'M6 SD', url: 'v2' }] });
+verifie('direct : chaînes, position, sources, favoris', pl.channels.length === 2 && pl.index === 1 && pl.channels[0].chno === '1' && pl.versions.length === 2 && pl.favorites.length === 1);
+const pe = N.payload('e2', { live: false, episodes: [{ title: 'S1E1', url: 'e1' }, { title: 'S1E2', url: 'e2' }] });
+verifie('série : les épisodes tiennent lieu de liste', pe.channels.length === 2 && pe.index === 1 && pe.channels[1].name === 'S1E2');
+const jour = {};
+dom.window.Store = { setProgress: (u, d) => { jour[u] = d; }, clearProgress: u => { jour[u] = 'effacé'; } };
+const r = { min: 0.03, max: 0.95, dureeMin: 60 };
+N.progression({ url: 'f', positionMs: 600000, durationMs: 6000000 }, 'Film', r);
+N.progression({ url: 'g', positionMs: 5900000, durationMs: 6000000 }, 'Fini', r);
+verifie('position mémorisée, film terminé effacé', jour.f && jour.f.position === 600 && jour.f.title === 'Film' && jour.g === 'effacé');
 
 console.log(`\n=== ${ok} réussis, ${ko} échoués ===`);
 process.exit(ko ? 1 : 0);

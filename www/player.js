@@ -1863,43 +1863,10 @@
     return (cap.Plugins && cap.Plugins.UpdatePlugin) || null;
   }
 
-  // Le lecteur natif occupe tout l'écran : cette page passe derrière, donc
-  // tout ce que la télécommande y pilotait (chaîne +/−, numéro de chaîne,
-  // liste des chaînes) doit être rejoué côté natif — ce qui suppose de lui
-  // transmettre le bouquet en cours. Voir ci/patch_native_player.py.
+  // Liste de chaînes (ou d'épisodes), sources et favoris transmis au lecteur
+  // natif : www/natif-pont.js.
   function nativeZapPayload(url) {
-    // Série : la liste des épisodes tient lieu de liste de chaînes — le
-    // lecteur natif enchaîne alors l'épisode suivant à la fin (il ne zappe
-    // jamais hors direct).
-    var list = currentIsLive ? ((global.AppZap && global.AppZap.list()) || [])
-      : (currentEpisodes || []).map(function (e) { return { name: e.title, url: e.url }; });
-    var channels = [], index = -1;
-    for (var i = 0; i < list.length; i++) {
-      var item = list[i];
-      if (!item || !item.url) continue;
-      var lien = vivante(item.url);
-      if (lien === url) index = channels.length;
-      channels.push({
-        name: item.name || '',
-        url: lien,
-        chno: item.chno == null ? '' : String(item.chno),
-        epgKey: item.epgKey || '',
-        logo: item.logo || ''
-      });
-    }
-    var versions = [];
-    if (currentVersions && currentVersions.length > 1) {
-      for (var v = 0; v < currentVersions.length; v++) {
-        if (currentVersions[v] && currentVersions[v].url) {
-          versions.push({ name: currentVersions[v].name || '', url: vivante(currentVersions[v].url), chno: '', epgKey: '', logo: currentVersions[v].logo || '' });
-        }
-      }
-    }
-    var favoris = [], brut = (global.AppZap && global.AppZap.favoris()) || [];
-    for (var f = 0; f < brut.length; f++) {
-      if (brut[f] && brut[f].url) favoris.push({ name: brut[f].name || '', url: vivante(brut[f].url), chno: '', epgKey: '', logo: brut[f].logo || '' });
-    }
-    return { channels: channels, index: index, versions: versions, favorites: favoris };
+    return NatifPont.payload(url, { live: currentIsLive, episodes: currentEpisodes, versions: currentVersions, vivante: vivante });
   }
 
   // Un zapping fait dans l'écran natif ne passe pas par open() : on remet ici
@@ -2001,16 +1968,7 @@
     // Position de lecture renvoyée par le lecteur natif : mêmes règles que
     // saveProgress() côté web (rien au tout début ni à la toute fin).
     plugin.addListener('progress', function (info) {
-      if (!info || !info.url || !global.Store) return;
-      var position = (info.positionMs || 0) / 1000;
-      var duree = (info.durationMs || 0) / 1000;
-      if (!duree || duree < RESUME_MIN_DURATION) return;
-      var ratio = position / duree;
-      if (ratio < RESUME_MIN_RATIO || ratio > RESUME_MAX_RATIO) {
-        Store.clearProgress(info.url);
-        return;
-      }
-      Store.setProgress(info.url, { position: position, duration: duree, title: originalTitle });
+      NatifPont.progression(info, originalTitle, { min: RESUME_MIN_RATIO, max: RESUME_MAX_RATIO, dureeMin: RESUME_MIN_DURATION });
     });
     // Bouton Accueil de la barre native : l'écran natif s'est déjà refermé,
     // la page n'a plus qu'à revenir à l'accueil.
