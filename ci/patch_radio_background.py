@@ -190,6 +190,10 @@ public class RadioPlaybackService extends Service {
                 }
             });
         }
+        // Son seul : une chaîne TV relayée ici (écran verrouillé, voir
+        // NativePlayerActivity.onStop) ne doit pas décoder l'image pour rien.
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_VIDEO, true).build());
         player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
         player.prepare();
         player.setPlayWhenReady(true);

@@ -125,6 +125,7 @@ public class NativePlayerPlugin extends Plugin {
         // (Store.getProgress), le lecteur natif la reçoit à l'ouverture et
         // la renvoie régulièrement pour qu'elle continue d'être suivie.
         intent.putExtra("positionMs", call.getLong("positionMs", 0L));
+        intent.putExtra("fondSonore", call.getBoolean("fondSonore", false));
         getActivity().startActivity(intent);
         call.resolve();
     }
@@ -412,6 +413,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     // périodique envoyé par la page ne refait pas apparaître le bandeau.
     private String dernierProgramme = "";
     private String mediaUrl;
+    // Son en arrière-plan (option Réglages → Lecture, téléphone) : écran
+    // verrouillé pendant un direct, le son continue via le service radio
+    // (RadioPlaybackService, vidéo désactivée), et l'image revient au retour.
+    private boolean fondSonore = false;
+    private boolean fondSonoreActif = false;
     private String mediaTitle;
     private long startPositionMs;
     private boolean isLive; // Picture-in-Picture : proposé et auto-activé au
@@ -1304,6 +1310,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         mediaTitle = title == null ? "" : title;
         isLive = getIntent().getBooleanExtra("live", false);
         startPositionMs = getIntent().getLongExtra("positionMs", 0L);
+        fondSonore = getIntent().getBooleanExtra("fondSonore", false);
 
         // Liste de zapping déposée par le plugin (même processus).
         channels = NativePlayerPlugin.channels;
@@ -2411,12 +2418,44 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (p != null && p == localPlayer && p.getPlayWhenReady() && !userPaused) {
             p.setPlayWhenReady(false);
             pausedByBackground = true;
+            if (fondSonore && isLive && !surTelevision() && mediaUrl != null) {
+                try {
+                    Intent son = new Intent(this, RadioPlaybackService.class);
+                    son.setAction(RadioPlaybackService.ACTION_PLAY);
+                    son.putExtra("url", mediaUrl);
+                    son.putExtra("title", mediaTitle == null ? "" : mediaTitle);
+                    son.putExtra("logo", "");
+                    if (android.os.Build.VERSION.SDK_INT >= 26) {
+                        startForegroundService(son);
+                    } else {
+                        startService(son);
+                    }
+                    fondSonoreActif = true;
+                } catch (Exception e) {
+                    // service refusé (restrictions du système) : simple pause
+                }
+            }
         }
+    }
+
+    private boolean surTelevision() {
+        UiModeManager ui = (UiModeManager) getSystemService(UI_MODE_SERVICE);
+        return ui != null && ui.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
     }
 
     @Override
     protected void onStart() {
         super.onStart();
+        if (fondSonoreActif) {
+            fondSonoreActif = false;
+            try {
+                Intent stop = new Intent(this, RadioPlaybackService.class);
+                stop.setAction(RadioPlaybackService.ACTION_STOP);
+                startService(stop);
+            } catch (Exception e) {
+                // déjà arrêté
+            }
+        }
         if (pausedByBackground) {
             pausedByBackground = false;
             Player p = playerView == null ? null : playerView.getPlayer();

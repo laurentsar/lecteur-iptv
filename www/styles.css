@@ -910,3 +910,7 @@ html.telecommande .clav-ouvrir:focus { outline: none; border-color: var(--accent
 .pave-ok { background: var(--accent-dim); color: #fff; font-weight: 700; }
 .pave-ligne { display: flex; gap: 8px; margin-top: 8px; }
 .pave-ligne .pave-touche { flex: 1; font-size: 15px; }
+
+/* Favoris en mode « Réordonner » (Ma liste). */
+.ordre-favori { align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); flex-wrap: nowrap; }
+.ordre-nom { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
