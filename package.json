@@ -1,6 +1,6 @@
 {
   "name": "iptv-lecteur",
-  "version": "1.1",
+  "version": "3.16",
   "private": true,
   "description": "Lecteur IPTV : playlists M3U et comptes Xtream Codes, direct / films / séries, favoris (PWA + APK)",
   "scripts": {
