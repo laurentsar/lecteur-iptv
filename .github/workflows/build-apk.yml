@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '22'
       # npm ci, pas npm install : installe exactement ce que package-lock.json
       # décrit, et échoue si le verrou et package.json divergent — sur un dépôt
       # public, c'est aussi ce qui empêche une dépendance de changer sous nos
@@ -49,6 +49,8 @@ jobs:
     uses: laurentsar/app-kit/.github/workflows/build-apk.yml@57a5df8c62ecbd78c1ae89849c4398c0b7a2b408
     with:
       apk_name: lecteur-iptv
+      node_version: "22"
+      java_version: "21"
       release_name: Lecteur IPTV
       regen_android: true
       ndk: true
