@@ -55,6 +55,17 @@ verifie('« beIN Sports » → beIN Sports 1', urls('beIN Sports') === 'b1', url
 verifie('« France 3 Occitanie » → France 3 à défaut', urls('France 3 Occitanie') === 'f3', urls('France 3 Occitanie'));
 verifie('« TF1 / La Chaîne L’Équipe » → TF1', urls('TF1 / La Chaîne L’Équipe') === 'tf1', urls('TF1 / La Chaîne L’Équipe'));
 verifie('« L\'Équipe » trouvée malgré accent et apostrophe', urls('L\'Équipe') === 'eq', urls('L\'Équipe'));
+const plId = [
+  { name: 'SPORT 1', url: 'x1', tvgId: 'beIN.SPORTS.1.fr' },
+  { name: 'SPORT 3', url: 'x3', tvgId: 'beIN.SPORTS.3.fr' },
+  { name: 'FR| CANAL+ SPORT', url: 'xcs', epgId: 'CanalPlusSport.fr' },
+  { name: 'FR| BEIN SPORTS 1', url: 'nb1' }
+];
+const urlsId = (n, id) => C.trouverChaine(plId, n, id).map(x => x.url).join(',');
+verifie('identifiant EPG prioritaire sur le nom', urlsId('beIN Sports 3', 'beIN.SPORTS.3.fr') === 'x3', urlsId('beIN Sports 3', 'beIN.SPORTS.3.fr'));
+verifie('identifiant reconnu malgré casse et « + »', urlsId('Canal+ Sport', 'CANAL+SPORT.fr,Canal+.Sport.fr') === 'xcs', urlsId('Canal+ Sport', 'CANAL+SPORT.fr'));
+verifie('« beIN Sports 3 » absent : jamais beIN Sports 1 à la place', urlsId('beIN Sports 3', '') === '', urlsId('beIN Sports 3', ''));
+verifie('identifiant inconnu : repli sur le nom exact', urlsId('beIN Sports 1', 'inconnu.fr') === 'x1,nb1' || urlsId('beIN Sports 1', 'inconnu.fr') === 'nb1', urlsId('beIN Sports 1', 'inconnu.fr'));
 verifie('chaîne absente : rien', urls('NHK World Premium') === '', urls('NHK World Premium'));
 
 console.log('— Flux —');

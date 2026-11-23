@@ -2956,7 +2956,7 @@
     var lancerLien = function (lien) {
       if (lien && String(lien).indexOf('lecteuriptv://chaine') === 0) {
         var qc = new URLSearchParams(String(lien).split('?')[1] || '');
-        setTimeout(function () { ouvrirChaineParNom(qc.get('nom') || '', qc.get('q') || ''); }, 600);
+        setTimeout(function () { ouvrirChaineParNom(qc.get('nom') || '', qc.get('q') || '', qc.get('id') || ''); }, 600);
         return true;
       }
       if (!lien || String(lien).indexOf('lecteuriptv://play') !== 0) return false;
@@ -3136,19 +3136,20 @@
     });
   }
 
-  // Chaîne demandée par son nom depuis Flux RSS (badge « 📺 Canal+ Sport ▶ »
-  // de l'agenda TV) : lecteuriptv://chaine?nom=…&q=<titre de l'émission>.
+  // Chaîne demandée depuis Flux RSS (badge « 📺 Canal+ Sport ▶ » de l'agenda
+  // TV) : lecteuriptv://chaine?nom=…&id=<identifiants EPG>&q=<émission>.
   // On la cherche parmi les chaînes en direct de la playlist active
-  // (Catalogue.trouverChaine) et on lance la meilleure source, les autres
+  // (Catalogue.trouverChaine : par identifiant EPG d'abord, puis par nom)
+  // et on lance directement la meilleure source, les autres
   // restant disponibles en secours. Introuvable : la recherche de l'accueil
   // est préremplie avec le nom, pour choisir à la main.
-  function ouvrirChaineParNom(nom, titre) {
+  function ouvrirChaineParNom(nom, titre, ids) {
     nom = String(nom || '').trim();
     if (!nom) return;
     if (!state.playlist) { toast('Aucune playlist active : impossible de trouver « ' + nom + ' ».'); return; }
     toast('Recherche de « ' + nom + ' »…');
     directChannels().then(function (items) {
-      var sources = Catalogue.trouverChaine(items, nom);
+      var sources = Catalogue.trouverChaine(items, nom, ids);
       if (!sources.length) {
         toast('« ' + nom + ' » introuvable dans la playlist.');
         goTab('accueil');

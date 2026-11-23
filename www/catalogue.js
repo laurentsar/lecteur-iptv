@@ -143,6 +143,9 @@
     morceaux.forEach(function (m) {
       var mots = m.trim().split(/\s+/);
       for (var n = mots.length - 1; n >= 1; n--) {
+        // Jamais en retirant un numéro : « beIN Sports 3 » ou « Canal+ Live 5 »
+        // ne doivent pas retomber sur une autre chaîne de la même famille.
+        if (/\d/.test(mots.slice(n).join(' '))) break;
         var k = cleNomChaine(mots.slice(0, n).join(' '));
         if (k.length < 2) break;
         ajoute(k);
@@ -156,7 +159,16 @@
   // l'ordre) ; à défaut, un nom qui COMMENCE par une clé (« beIN Sports » →
   // « beIN Sports MAX »), jamais suivi d'un chiffre (« France 2 » ne doit pas
   // donner « France 24 »). Une source d'un bouquet français passe devant.
-  function trouverChaine(items, nom) {
+  // Identifiant EPG comparé sans casse ni ponctuation : « CANAL+SPORT.fr »,
+  // « Canal+.Sport.fr » et « CanalPlusSport.fr » désignent la même chaîne.
+  function cleIdEpg(id) {
+    return String(id || '').toLowerCase().replace(/\+/g, 'plus').replace(/[^a-z0-9]+/g, '');
+  }
+  // `ids` (facultatif) : identifiants EPG envoyés par Flux RSS, les mêmes
+  // que le tvg-id (M3U) ou l'epg_channel_id (Xtream) des playlists qui
+  // suivent la convention XMLTV courante. Correspondance EXACTE : c'est la
+  // voie la plus sûre, essayée avant toute comparaison de noms.
+  function trouverChaine(items, nom, ids) {
     var cles = clesRecherchees(nom);
     var liste = (items || []).filter(function (it) { return it && it.url; })
       .map(function (it) { return { it: it, k: cleNomChaine(it.name) }; });
@@ -165,6 +177,14 @@
       var fr = trouves.filter(francais);
       return SourceQuality.ordonner(fr.length ? fr : trouves);
     };
+    var voulus = (Array.isArray(ids) ? ids : String(ids || '').split(','))
+      .map(cleIdEpg).filter(function (c) { return c.length >= 3; });
+    if (voulus.length) {
+      var parId = liste.filter(function (x) {
+        return [x.it.tvgId, x.it.epgId, x.it.epgKey].some(function (v) { return v && voulus.indexOf(cleIdEpg(v)) !== -1; });
+      }).map(function (x) { return x.it; });
+      if (parId.length) return garde(parId);
+    }
     var i, trouves;
     for (i = 0; i < cles.length; i++) {
       trouves = liste.filter(function (x) { return x.k === cles[i]; });
@@ -273,7 +293,7 @@
     excludeRadio: excludeRadio, excludeHidden: excludeHidden, groupChannels: groupChannels,
     iconFor: iconFor, iconForBouquet: iconForBouquet, isFrenchBouquet: isFrenchBouquet,
     isAdultGroup: isAdultGroup, matchesSearch: matchesSearch,
-    cleNomChaine: cleNomChaine, trouverChaine: trouverChaine, DEFAULT_RADIOS: DEFAULT_RADIOS
+    cleNomChaine: cleNomChaine, cleIdEpg: cleIdEpg, trouverChaine: trouverChaine, DEFAULT_RADIOS: DEFAULT_RADIOS
   };
   global.Catalogue = Catalogue;
   if (typeof module !== 'undefined' && module.exports) module.exports = Catalogue;
