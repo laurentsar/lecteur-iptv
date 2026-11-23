@@ -28,6 +28,8 @@ INTENT_FILTER = """
                 <data android:scheme="lecteuriptv" android:host="config" />
                 <!-- chaîne lancée depuis la rangée de l'accueil Android TV -->
                 <data android:scheme="lecteuriptv" android:host="play" />
+                <!-- chaîne demandée par son nom (badges TV de Flux RSS) -->
+                <data android:scheme="lecteuriptv" android:host="chaine" />
             </intent-filter>
 """
 

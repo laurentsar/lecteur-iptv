@@ -32,6 +32,31 @@ verifie('icône selon le thème', C.iconForBouquet('FR| SPORT') === '⚽' && C.i
 verifie('recherche par nom', C.matchesSearch({ name: 'France 2' }, 'france') && !C.matchesSearch({ name: 'TF1' }, 'france'));
 verifie('radios par défaut prêtes à l\'emploi', C.DEFAULT_RADIOS.length > 10 && C.DEFAULT_RADIOS.every(r => r.kind === 'radio' && r.url && r.key));
 
+console.log('— Chaîne demandée par son nom (Flux RSS) —');
+const plRss = [
+  { name: 'FR| FRANCE 2 HD', url: 'f2', group: 'FR| GENERALISTES' },
+  { name: 'FR| FRANCE 24', url: 'f24', group: 'FR| INFO' },
+  { name: 'FR| CANAL+ FHD', url: 'c1', group: 'FR| CANAL+' },
+  { name: 'FR| CANAL+ SD', url: 'c2', group: 'FR| CANAL+' },
+  { name: 'FR: CANAL+ SPORT', url: 'cs', group: 'FR| CANAL+' },
+  { name: 'FR| CANAL+ SPORT 360', url: 'cs360', group: 'FR| CANAL+' },
+  { name: 'UK| CANAL+ SPORT', url: 'csuk', group: 'UK| SPORT' },
+  { name: 'FR| BEIN SPORTS 1 HD', url: 'b1', group: 'FR| SPORT' },
+  { name: 'FR| BEIN SPORTS 2', url: 'b2', group: 'FR| SPORT' },
+  { name: 'FR| FRANCE 3', url: 'f3', group: 'FR| GENERALISTES' },
+  { name: '[FR] L\'EQUIPE', url: 'eq', group: 'FR| SPORT' },
+  { name: 'FR| TF1', url: 'tf1', group: 'FR| GENERALISTES' }
+];
+const urls = n => C.trouverChaine(plRss, n).map(x => x.url).join(',');
+verifie('« Canal+ » : les deux sources, la FHD d\'abord', urls('Canal+') === 'c1,c2', urls('Canal+'));
+verifie('« Canal+ Sport » : la française, pas la 360', urls('Canal+ Sport') === 'cs', urls('Canal+ Sport'));
+verifie('« France TV » → France 2, jamais France 24', urls('France TV') === 'f2', urls('France TV'));
+verifie('« beIN Sports » → beIN Sports 1', urls('beIN Sports') === 'b1', urls('beIN Sports'));
+verifie('« France 3 Occitanie » → France 3 à défaut', urls('France 3 Occitanie') === 'f3', urls('France 3 Occitanie'));
+verifie('« TF1 / La Chaîne L’Équipe » → TF1', urls('TF1 / La Chaîne L’Équipe') === 'tf1', urls('TF1 / La Chaîne L’Équipe'));
+verifie('« L\'Équipe » trouvée malgré accent et apostrophe', urls('L\'Équipe') === 'eq', urls('L\'Équipe'));
+verifie('chaîne absente : rien', urls('NHK World Premium') === '', urls('NHK World Premium'));
+
 console.log('— Flux —');
 const F = dom.window.Flux;
 verifie('HLS reconnu, avec paramètres', F.isM3u8('http://s/a.m3u8?t=1') && !F.isM3u8('http://s/live/1.ts'));
