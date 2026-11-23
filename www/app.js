@@ -2954,6 +2954,11 @@
     // Chaîne choisie dans la rangée « Lecteur IPTV » de l'accueil Android
     // TV (lecteuriptv://play?url=…), au lancement comme appli déjà ouverte.
     var lancerLien = function (lien) {
+      if (lien && String(lien).indexOf('lecteuriptv://chaine') === 0) {
+        var qc = new URLSearchParams(String(lien).split('?')[1] || '');
+        setTimeout(function () { ouvrirChaineParNom(qc.get('nom') || '', qc.get('q') || '', qc.get('id') || ''); }, 600);
+        return true;
+      }
       if (!lien || String(lien).indexOf('lecteuriptv://play') !== 0) return false;
       var q = new URLSearchParams(String(lien).split('?')[1] || '');
       var u = q.get('url');
@@ -3129,6 +3134,34 @@
       row.appendChild(b);
       box.appendChild(row);
     });
+  }
+
+  // Chaîne demandée depuis Flux RSS (badge « 📺 Canal+ Sport ▶ » de l'agenda
+  // TV) : lecteuriptv://chaine?nom=…&id=<identifiants EPG>&q=<émission>.
+  // On la cherche parmi les chaînes en direct de la playlist active
+  // (Catalogue.trouverChaine : par identifiant EPG d'abord, puis par nom)
+  // et on lance directement la meilleure source, les autres
+  // restant disponibles en secours. Introuvable : la recherche de l'accueil
+  // est préremplie avec le nom, pour choisir à la main.
+  function ouvrirChaineParNom(nom, titre, ids) {
+    nom = String(nom || '').trim();
+    if (!nom) return;
+    if (!state.playlist) { toast('Aucune playlist active : impossible de trouver « ' + nom + ' ».'); return; }
+    toast('Recherche de « ' + nom + ' »…');
+    directChannels().then(function (items) {
+      var sources = Catalogue.trouverChaine(items, nom, ids);
+      if (!sources.length) {
+        toast('« ' + nom + ' » introuvable dans la playlist.');
+        goTab('accueil');
+        var input = $id('rechUniverselle');
+        if (input) { input.value = nom.split(/\s*\/\s*/)[0]; renderUniversalSearch(); }
+        return;
+      }
+      var c = sources[0];
+      var logo = sources.map(function (v) { return v.logo; }).filter(Boolean)[0] || null;
+      Player.open(c.url, c.name, { live: true, epgKey: c.epgKey || null, logo: logo, versions: sources.length > 1 ? sources : null });
+      if (titre) toast(c.name + ' — ' + titre);
+    }).catch(function (err) { toast('Chaîne introuvable : ' + (err && err.message || err)); });
   }
 
   // Accueil Android TV : les chaînes favorites en rangée « Lecteur IPTV »

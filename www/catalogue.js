@@ -107,6 +107,100 @@
     return (item.name || '').toLowerCase().indexOf(q) !== -1;
   }
 
+  // Chaîne demandée PAR SON NOM depuis une autre appli (Flux RSS :
+  // lecteuriptv://chaine?nom=Canal%2B%20Sport), à retrouver dans la
+  // playlist, où elle s'appelle plutôt « FR| CANAL+ SPORT FHD ».
+  // Les diffuseurs cités par l'agenda ne sont pas toujours une chaîne
+  // (« France TV », « beIN Sports ») : on essaie alors la chaîne principale.
+  var ALIAS_CHAINE = {
+    francetv: ['france2'], francetelevisions: ['france2'], francetelevision: ['france2'],
+    beinsports: ['beinsports1', 'beinsport1'], beinsport: ['beinsports1', 'beinsport1'],
+    lequipe: ['lachainelequipe', 'lequipetv'], lachainelequipe: ['lequipe', 'lequipetv'],
+    canalplus: ['canal'], canalplussport: ['canalsport', 'canalsports'],
+    rmcsport: ['rmcsport1'], eurosport: ['eurosport1'],
+    ligue1plus: ['ligue1', 'dazn1'], dazn: ['dazn1']
+  };
+  // Préfixe pays des fournisseurs : « FR| », « [FR] », « FR: », « FR - »…
+  var PREFIXE_PAYS = /^\s*[[(|]?\s*[a-z]{2,3}\s*(?:[\])|:]+|\s-)\s*/i;
+  // « Canal+ » donne « canalplus » : la playlist écrit aussi « Canal + » ou
+  // « CANAL PLUS » ; « Canal » tout court est couvert par l'alias.
+  function cleNomChaine(nom) {
+    var n = String(nom || '').replace(/\+/g, ' plus ').replace(PREFIXE_PAYS, '');
+    return Epg.normalizeChanName(n.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+      .replace(CHANNEL_QUALITY_TAGS, ' '));
+  }
+  // Clés à essayer, dans l'ordre : chaque diffuseur cité (« TF1 / La Chaîne
+  // L'Équipe »), ses alias, puis le nom raccourci mot à mot (« France 3
+  // Occitanie » → « France 3 »), au cas où la variante n'existe pas.
+  function clesRecherchees(nom) {
+    var cles = [], ajoute = function (c) { if (c && cles.indexOf(c) === -1) cles.push(c); };
+    var morceaux = String(nom || '').split(/\s*[\/,]\s*|\s+et\s+/i).filter(function (m) { return m.trim(); });
+    morceaux.forEach(function (m) {
+      var k = cleNomChaine(m);
+      ajoute(k);
+      (ALIAS_CHAINE[k] || []).forEach(ajoute);
+    });
+    morceaux.forEach(function (m) {
+      var mots = m.trim().split(/\s+/);
+      for (var n = mots.length - 1; n >= 1; n--) {
+        // Jamais en retirant un numéro : « beIN Sports 3 » ou « Canal+ Live 5 »
+        // ne doivent pas retomber sur une autre chaîne de la même famille.
+        if (/\d/.test(mots.slice(n).join(' '))) break;
+        var k = cleNomChaine(mots.slice(0, n).join(' '));
+        if (k.length < 2) break;
+        ajoute(k);
+        (ALIAS_CHAINE[k] || []).forEach(ajoute);
+      }
+    });
+    return cles;
+  }
+  // Toutes les sources de la chaîne demandée, la meilleure d'abord ; tableau
+  // vide si rien ne correspond. Nom identique d'abord (pour chaque clé, dans
+  // l'ordre) ; à défaut, un nom qui COMMENCE par une clé (« beIN Sports » →
+  // « beIN Sports MAX »), jamais suivi d'un chiffre (« France 2 » ne doit pas
+  // donner « France 24 »). Une source d'un bouquet français passe devant.
+  // Identifiant EPG comparé sans casse ni ponctuation : « CANAL+SPORT.fr »,
+  // « Canal+.Sport.fr » et « CanalPlusSport.fr » désignent la même chaîne.
+  function cleIdEpg(id) {
+    return String(id || '').toLowerCase().replace(/\+/g, 'plus').replace(/[^a-z0-9]+/g, '');
+  }
+  // `ids` (facultatif) : identifiants EPG envoyés par Flux RSS, les mêmes
+  // que le tvg-id (M3U) ou l'epg_channel_id (Xtream) des playlists qui
+  // suivent la convention XMLTV courante. Correspondance EXACTE : c'est la
+  // voie la plus sûre, essayée avant toute comparaison de noms.
+  function trouverChaine(items, nom, ids) {
+    var cles = clesRecherchees(nom);
+    var liste = (items || []).filter(function (it) { return it && it.url; })
+      .map(function (it) { return { it: it, k: cleNomChaine(it.name) }; });
+    var francais = function (it) { return isFrenchBouquet(it.group || it.groupTitle) || /^\s*[[(|]?\s*fr\b/i.test(it.name || ''); };
+    var garde = function (trouves) {
+      var fr = trouves.filter(francais);
+      return SourceQuality.ordonner(fr.length ? fr : trouves);
+    };
+    var voulus = (Array.isArray(ids) ? ids : String(ids || '').split(','))
+      .map(cleIdEpg).filter(function (c) { return c.length >= 3; });
+    if (voulus.length) {
+      var parId = liste.filter(function (x) {
+        return [x.it.tvgId, x.it.epgId, x.it.epgKey].some(function (v) { return v && voulus.indexOf(cleIdEpg(v)) !== -1; });
+      }).map(function (x) { return x.it; });
+      if (parId.length) return garde(parId);
+    }
+    var i, trouves;
+    for (i = 0; i < cles.length; i++) {
+      trouves = liste.filter(function (x) { return x.k === cles[i]; });
+      if (trouves.length) return garde(trouves.map(function (x) { return x.it; }));
+    }
+    for (i = 0; i < cles.length; i++) {
+      var cle = cles[i];
+      trouves = liste.filter(function (x) { return x.k.length > cle.length && x.k.indexOf(cle) === 0 && !/^\d/.test(x.k.slice(cle.length)); });
+      if (!trouves.length) continue;
+      // Parmi les noms plus longs, la famille la plus courte seulement.
+      var court = Math.min.apply(null, trouves.map(function (x) { return x.k.length; }));
+      return garde(trouves.filter(function (x) { return x.k.length === court; }).map(function (x) { return x.it; }));
+    }
+    return [];
+  }
+
   // Code PIN des bouquets : catégories « adulte » détectées par leur nom.
   var ADULT_GROUP_RE = /adult|adulte|xxx|18\+|porn/i;
   function isAdultGroup(name) { return ADULT_GROUP_RE.test(name || ''); }
@@ -198,7 +292,8 @@
     isHiddenChannel: isHiddenChannel, resetNameCaches: resetNameCaches, channelFamilyKey: channelFamilyKey,
     excludeRadio: excludeRadio, excludeHidden: excludeHidden, groupChannels: groupChannels,
     iconFor: iconFor, iconForBouquet: iconForBouquet, isFrenchBouquet: isFrenchBouquet,
-    isAdultGroup: isAdultGroup, matchesSearch: matchesSearch, DEFAULT_RADIOS: DEFAULT_RADIOS
+    isAdultGroup: isAdultGroup, matchesSearch: matchesSearch,
+    cleNomChaine: cleNomChaine, cleIdEpg: cleIdEpg, trouverChaine: trouverChaine, DEFAULT_RADIOS: DEFAULT_RADIOS
   };
   global.Catalogue = Catalogue;
   if (typeof module !== 'undefined' && module.exports) module.exports = Catalogue;
